@@ -1,25 +1,27 @@
 import type { Metadata } from "next";
 
 export const siteConfig = {
-  name: "Your Site Name",
+  name: "Pulsewave",
   description:
-    "A modern, accessible landing page template built with Next.js, Tailwind CSS, and TypeScript.",
-  url: "https://example.com",
+    "We craft exceptional digital experiences that captivate audiences and drive results. From strategy to execution, we bring your vision to life.",
+  url: "https://pulsewave.studio",
   ogImage: "/og-image.png",
-  creator: "@yourhandle",
+  creator: "@pulsewave",
   authors: [
     {
-      name: "Your Name",
-      url: "https://example.com",
+      name: "Pulsewave Studio",
+      url: "https://pulsewave.studio",
     },
   ],
   keywords: [
-    "landing page",
-    "template",
+    "creative agency",
+    "digital agency",
+    "web design",
+    "brand identity",
+    "product design",
     "Next.js",
     "React",
     "Tailwind CSS",
-    "TypeScript",
   ],
 } as const;
 

@@ -1,10 +1,18 @@
-import { ThemeToggle } from "@/components/theme-toggle";
+import { About } from "@/components/about";
+import { Faq } from "@/components/faq";
+import { Footer } from "@/components/footer";
+import { Header } from "@/components/header";
+import { Hero } from "@/components/hero";
+import { Projects } from "@/components/projects";
+import { Services } from "@/components/services";
+import { SocialProof } from "@/components/social-proof";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { createMetadata, siteConfig } from "@/lib/metadata";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = createMetadata({
-  title: "Home",
+  title: `${siteConfig.name} - Creative Digital Agency`,
   description: `Welcome to ${siteConfig.name}. ${siteConfig.description}`,
   path: "/",
 });
@@ -12,15 +20,17 @@ export const metadata: Metadata = createMetadata({
 export default function HomePage(): ReactNode {
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center gap-4">
-            <ThemeToggle />
-          </nav>
-        </div>
-      </header>
-
-      <main id="main-content" className="flex-1" />
+      <Header />
+      <ThemeSwitch />
+      <main id="main-content" className="lg:relative lg:z-10 flex-1 bg-background">
+        <Hero />
+        <Projects />
+        <Services />
+        <About />
+        <SocialProof />
+        <Faq />
+      </main>
+      <Footer />
     </>
   );
 }

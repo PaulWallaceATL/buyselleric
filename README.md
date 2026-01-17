@@ -1,17 +1,30 @@
-# Template Baseline
+# Agency Landing Page Template
 
-A production-ready Next.js 16+ landing page template with SEO defaults, theming, motion, accessibility, and Tailwind CSS v4.
+A premium Next.js 16+ landing page template designed for creative agencies and design studios. Features stunning WebGL effects, smooth scroll animations, and a conversion-focused layout.
 
 ## Features
 
 - ✅ **Next.js 16+** with App Router
-- ✅ **TypeScript** (strict mode)
-- ✅ **Tailwind CSS v4** with design tokens
-- ✅ **Dark Mode** via next-themes
+- ✅ **TypeScript** (strict mode with noUncheckedIndexedAccess)
+- ✅ **Tailwind CSS v4** with custom design tokens
+- ✅ **Dark Mode** via next-themes with smooth transitions
+- ✅ **WebGL Effects** - Wave shader hero, water ripple project cards
 - ✅ **Motion** via motion/react with reduced-motion support
+- ✅ **GSAP Animations** - Scroll-triggered reveals, pinned sections
+- ✅ **Lenis Smooth Scroll** - Butter-smooth scrolling experience
 - ✅ **SEO Ready** - metadata, Open Graph, Twitter cards
 - ✅ **Accessibility** - skip links, focus rings, ARIA labels
 - ✅ **Edge Compatible** - no Node-only APIs
+
+## Sections
+
+- **Hero** - Full-screen animated wave shader with headline
+- **Projects** - Interactive project cards with water ripple WebGL effect
+- **Services** - Animated text reveal with flowing menu hover effects
+- **About** - Image + text layout with scroll animations
+- **Social Proof** - Bento grid with testimonials and stats
+- **FAQ** - Accordion with smooth expand/collapse
+- **Footer** - Sticky reveal effect, CTA, navigation columns
 
 ## Getting Started
 
@@ -48,20 +61,60 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ├── app/
 │   ├── globals.css        # Design tokens & base styles
 │   ├── layout.tsx         # Root layout with providers
-│   ├── page.tsx           # Home page example
+│   ├── page.tsx           # Landing page
 │   ├── robots.ts          # Dynamic robots.txt
 │   ├── sitemap.ts         # Dynamic sitemap
-│   ├── icon.svg           # Favicon
-│   └── apple-icon.svg     # Apple touch icon
+│   └── icon.svg           # Favicon
 ├── components/
+│   ├── about.tsx          # About section with scroll animations
+│   ├── faq.tsx            # FAQ accordion section
+│   ├── footer.tsx         # Sticky reveal footer
+│   ├── header.tsx         # Animated navigation header
+│   ├── hero.tsx           # WebGL wave shader hero
+│   ├── projects.tsx       # Project cards with water ripple
 │   ├── providers.tsx      # Theme & motion providers
-│   ├── theme-toggle.tsx   # Accessible theme switcher
-│   └── skip-to-content.tsx # Skip link for a11y
+│   ├── services.tsx       # Services with flowing menu
+│   ├── skip-to-content.tsx # Skip link for a11y
+│   ├── smooth-scroll.tsx  # Lenis smooth scrolling
+│   ├── social-proof.tsx   # Testimonials bento grid
+│   ├── theme-switch.tsx   # Floating theme toggle
+│   ├── theme-toggle.tsx   # Button theme toggle
+│   └── water-ripple.tsx   # WebGL water ripple effect
 ├── lib/
+│   ├── config.ts          # Site configuration & feature flags
 │   ├── metadata.ts        # SEO metadata utilities
-│   └── motion.tsx         # Motion components & hooks
+│   ├── motion.tsx         # Motion components & hooks
+│   └── overlay-context.tsx # Project overlay state
 └── public/
+    ├── img/               # Image assets
     └── site.webmanifest   # PWA manifest
+```
+
+## Configuration
+
+### Feature Flags
+
+Edit `lib/config.ts` to toggle features:
+
+```typescript
+export const features = {
+  smoothScroll: true,  // Enable/disable Lenis smooth scroll
+  darkMode: true,      // Enable/disable dark mode toggle
+} as const;
+```
+
+### Site Configuration
+
+Update branding in `lib/config.ts`:
+
+```typescript
+export const siteConfig = {
+  name: "Pulsewave",
+  tagline: "Built to evolve ideas.",
+  description: "Your agency description...",
+  url: "https://yoursite.com",
+  twitter: "@yourhandle",
+} as const;
 ```
 
 ## Customization
@@ -102,7 +155,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = createMetadata({
   title: "About Us",
-  description: "Learn more about our company.",
+  description: "Learn more about our agency.",
   path: "/about",
 });
 
@@ -148,4 +201,8 @@ All code is Edge-compatible. No Node.js-only APIs are used in runtime code. The 
 
 ## License
 
-MIT
+This template is licensed for use in commercial projects. You may not resell or redistribute the template itself.
+
+---
+
+Built with ❤️ using Next.js, Tailwind CSS, GSAP, and React Three Fiber

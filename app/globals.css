@@ -29,6 +29,7 @@
   --color-ring: var(--ring);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --breakpoint-3xl: 120rem;
 }
 
 html {
