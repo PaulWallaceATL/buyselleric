@@ -12,7 +12,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = createMetadata({
-  title: `${siteConfig.name} - Creative Digital Agency`,
+  title: `${siteConfig.name} - Agency Template`,
   description: `Welcome to ${siteConfig.name}. ${siteConfig.description}`,
   path: "/",
 });

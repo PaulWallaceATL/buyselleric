@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 
 export const siteConfig = {
-  name: "Pulsewave",
+  name: "React Bits Pro",
   description:
     "We craft exceptional digital experiences that captivate audiences and drive results. From strategy to execution, we bring your vision to life.",
-  url: "https://pulsewave.studio",
+  url: "https://pulsewave.design",
   ogImage: "/og-image.png",
   creator: "@pulsewave",
   authors: [
     {
       name: "Pulsewave Studio",
-      url: "https://pulsewave.studio",
+      url: "https://pulsewave.design",
     },
   ],
   keywords: [
