@@ -5,6 +5,8 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { siteConfig } from "@/lib/config";
+import { siteImages } from "@/lib/site-images";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -45,7 +47,6 @@ export function SocialProof() {
     if (!sectionRef.current) return;
 
     const ctx = gsap.context(() => {
-      // Header animation
       gsap.fromTo(
         headerRef.current,
         { y: 40, opacity: 0 },
@@ -94,32 +95,37 @@ export function SocialProof() {
       <div className="px-6 sm:px-12 lg:px-24 max-w-360 2xl:max-w-450 3xl:max-w-550 mx-auto">
         <div ref={headerRef} className="flex items-center justify-between mb-12 lg:mb-16">
           <h2 className="text-3xl lg:text-4xl font-medium tracking-tight text-foreground">
-            Trusted by industry leaders
+            Clients who made a move
           </h2>
           <Link
-            href="#contact"
+            href="/listings"
             className="hidden sm:inline-flex items-center justify-center px-6 py-3 rounded-full bg-foreground text-background text-sm font-medium transition-opacity hover:opacity-80"
           >
-            Work with us
+            See homes
           </Link>
         </div>
 
-        <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:grid-rows-[minmax(220px,auto)_minmax(220px,auto)_minmax(180px,auto)]">
+        <div
+          ref={gridRef}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:grid-rows-[minmax(220px,auto)_minmax(220px,auto)_minmax(180px,auto)]"
+        >
           <div className="row-span-2 flex flex-col gap-4">
             <div className="relative flex-1 w-full overflow-hidden rounded-2xl">
               <Image
-                src="/img/mock-project1.webp"
-                alt="Team member"
+                src={siteImages.testimonialLiving}
+                alt="Bright open-plan living and dining area"
                 fill
                 className="object-cover"
+                sizes="(max-width: 768px) 100vw, 25vw"
               />
             </div>
             <div className="relative flex-1 w-full overflow-hidden rounded-full">
               <Image
-                src="/img/mock-project2.webp"
-                alt="Team member"
+                src={siteImages.testimonialExterior}
+                alt="Contemporary home with pool at dusk"
                 fill
                 className="object-cover"
+                sizes="(max-width: 768px) 100vw, 25vw"
               />
             </div>
           </div>
@@ -128,17 +134,18 @@ export function SocialProof() {
             <div>
               <QuoteIcon className="w-10 h-10 text-foreground/20 mb-6" />
               <blockquote className="text-2xl lg:text-3xl font-medium leading-snug text-foreground">
-                Pulsewave&apos;s design work output is superb, they could transform our input into dev-ready designs.
+                Eric helped us win in a multiple-offer situation without overpaying—and kept us
+                sane through inspection surprises.
               </blockquote>
               <div className="mt-6">
-                <p className="font-semibold text-foreground">Alex Chen</p>
-                <p className="text-sm text-foreground/60">CTO, Nextura</p>
+                <p className="font-semibold text-foreground">Jordan &amp; Sam Rivera</p>
+                <p className="text-sm text-foreground/60">First-time buyers</p>
               </div>
             </div>
             <div className="flex items-center justify-between mt-auto pt-8">
-              <span className="text-xl font-semibold text-foreground">nextura</span>
+              <span className="text-xl font-semibold text-foreground">{siteConfig.primaryMarket}</span>
               <Link
-                href="#"
+                href="/listings"
                 className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-4 h-4" />
@@ -148,13 +155,13 @@ export function SocialProof() {
 
           <div className="bg-muted/50 rounded-2xl p-6 flex flex-col">
             <div className="flex-1">
-              <p className="text-3xl font-semibold text-foreground">3x Faster</p>
-              <p className="text-sm text-foreground/60 mt-1">Time to Market Launch</p>
+              <p className="text-3xl font-semibold text-foreground">18 days</p>
+              <p className="text-sm text-foreground/60 mt-1">Average time to accepted offer (sample)</p>
             </div>
             <div className="flex items-center justify-between mt-auto pt-4">
-              <span className="text-sm font-medium text-foreground">novahq</span>
+              <span className="text-sm font-medium text-foreground">Seller story</span>
               <Link
-                href="#"
+                href="/sell"
                 className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-4 h-4" />
@@ -164,13 +171,13 @@ export function SocialProof() {
 
           <div className="bg-muted/50 rounded-2xl p-6 flex flex-col">
             <div className="flex-1">
-              <p className="text-3xl font-semibold text-foreground">+280%</p>
-              <p className="text-sm text-foreground/60 mt-1">Increase in Engagement</p>
+              <p className="text-3xl font-semibold text-foreground">100%</p>
+              <p className="text-sm text-foreground/60 mt-1">Paperwork explained before you sign</p>
             </div>
             <div className="flex items-center justify-between mt-auto pt-4">
-              <span className="text-sm font-medium text-foreground">arclight</span>
+              <span className="text-sm font-medium text-foreground">Clarity</span>
               <Link
-                href="#"
+                href="/#contact"
                 className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-4 h-4" />
@@ -180,24 +187,27 @@ export function SocialProof() {
 
           <div className="bg-muted/50 rounded-2xl p-8 flex flex-col">
             <div className="flex-1">
-              <p className="text-3xl lg:text-4xl font-semibold text-foreground">Top 1%</p>
+              <p className="text-3xl lg:text-4xl font-semibold text-foreground">5-star care</p>
               <p className="text-foreground/60 mt-2">
-                Digital Experience<br />& Product Studios
+                Communication that
+                <br />
+                matches your pace
               </p>
             </div>
             <div className="mt-auto pt-6">
-              <p className="text-sm font-medium text-foreground">5.0 Rated On Trustpilot</p>
+              <p className="text-sm font-medium text-foreground">Referrals welcome</p>
             </div>
           </div>
 
           <div className="lg:col-span-3 bg-muted/50 rounded-2xl p-8 flex flex-col">
             <p className="text-xl lg:text-2xl font-medium leading-relaxed text-foreground max-w-3xl flex-1">
-              We helped Meridian rebrand and launch their new platform, resulting in 12M+ users within the first quarter.
+              We sold above asking after Eric&apos;s staging checklist and pricing strategy. The
+              whole team felt informed at every step.
             </p>
             <div className="flex items-center justify-between mt-auto pt-6">
-              <span className="text-xl font-semibold text-foreground">Meridian</span>
+              <span className="text-xl font-semibold text-foreground">The Okonkwo family</span>
               <Link
-                href="#"
+                href="/sell"
                 className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-4 h-4" />

@@ -28,13 +28,13 @@ function SplitText({ children }: { children: string }) {
 }
 
 const services = [
-  { id: 1, title: "Digital Experiences" },
-  { id: 2, title: "Brand Identity" },
-  { id: 3, title: "Creative Direction" },
-  { id: 4, title: "Product Design" },
+  { id: 1, title: "Buyer representation", href: "/listings" },
+  { id: 2, title: "Seller marketing & prep", href: "/sell" },
+  { id: 3, title: "Pricing & negotiation", href: "/#contact" },
+  { id: 4, title: "Closing coordination", href: "/#contact" },
 ];
 
-function ServiceItem({ title, index }: { title: string; index: number }) {
+function ServiceItem({ title, href, index }: { title: string; href: string; index: number }) {
   const itemRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayInnerRef = useRef<HTMLDivElement>(null);
@@ -157,7 +157,7 @@ function ServiceItem({ title, index }: { title: string; index: number }) {
       className="relative overflow-hidden border-t border-foreground/10"
     >
       <a
-        href="#"
+        href={href}
         className="flex items-center justify-between cursor-pointer px-6 py-8 sm:px-12 md:py-10 lg:px-24"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -254,14 +254,19 @@ export function Services() {
           ref={titleRef}
           className="text-center text-[clamp(2.5rem,7vw,7rem)] font-medium leading-[1.1] tracking-tight text-foreground max-w-350"
         >
-          <SplitText>We craft experiences that captivate. Brands that endure.</SplitText>
+          <SplitText>Guidance for buyers. Strategy for sellers. Calm at every step.</SplitText>
         </h2>
       </div>
 
       <div id="services-menu" className="w-full pb-24">
         <div className="w-full">
           {services.map((service, index) => (
-            <ServiceItem key={service.id} title={service.title} index={index} />
+            <ServiceItem
+              key={service.id}
+              title={service.title}
+              href={service.href}
+              index={index}
+            />
           ))}
           <div className="border-t border-foreground/10" />
         </div>

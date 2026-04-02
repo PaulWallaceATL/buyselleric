@@ -3,6 +3,7 @@
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useEffect, useRef, useState } from "react";
+import { siteConfig } from "@/lib/config";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -10,24 +11,29 @@ if (typeof window !== "undefined") {
 
 const faqs = [
   {
-    question: "What makes Pulsewave different from other agencies?",
-    answer: "We blend strategic thinking with bold creativity. Unlike traditional agencies, we're a tight-knit team of designers and developers who obsess over every pixel. We don't just deliver projects—we partner with you to create digital experiences that truly move the needle.",
+    question: "How does the buying process work with Eric?",
+    answer:
+      "You will start with a short conversation about budget, neighborhoods, and timing. From there, Eric helps you prioritize homes, craft competitive offers when it matters, and stay ahead of deadlines through inspection, appraisal, and closing.",
   },
   {
-    question: "How long does a typical project take?",
-    answer: "Most projects range from 6-12 weeks depending on scope. A brand identity might take 4-6 weeks, while a full website redesign with development typically runs 8-12 weeks. We'll provide a detailed timeline during our initial consultation.",
+    question: "What should I do before listing my home?",
+    answer:
+      "Small repairs, decluttering, and professional photography often deliver the best return. Eric will walk your property, suggest a pricing range backed by comps, and outline a marketing plan—so you know what to tackle first.",
   },
   {
-    question: "Do you work with startups or only established brands?",
-    answer: "We love working with both. Startups bring fresh energy and the chance to build something from scratch. Established brands offer the challenge of evolving while honoring legacy. Whether you're pre-seed or Series C, we adapt our process to fit your stage and budget.",
+    question: "Do you work with out-of-area buyers or sellers?",
+    answer:
+      "Yes. Many clients relocate for work or family. Eric can coordinate virtual tours, digital signings where allowed, and introductions to trusted local vendors so distance does not slow you down.",
   },
   {
-    question: "Can you help with ongoing design and development needs?",
-    answer: "Absolutely. Many clients start with a project and transition to a retainer model. Our monthly partnerships include dedicated hours for design updates, new features, A/B testing, and strategic consultation. It's like having an in-house creative team on call.",
+    question: "How are commissions structured?",
+    answer:
+      "Compensation is discussed upfront and documented in your representation agreement. Eric is transparent about how buyer and seller fees work in your market so there are no surprises at the closing table.",
   },
   {
-    question: "What's your design and development process like?",
-    answer: "We follow a proven four-phase approach: Discovery (research & strategy), Design (wireframes to high-fidelity), Development (clean, scalable code), and Launch (testing & optimization). You're involved at every milestone with clear deliverables and feedback loops.",
+    question: "How quickly can I see new listings?",
+    answer:
+      "Published homes on this site update as soon as they are added in the admin panel. For off-market or coming-soon opportunities, reach out directly—Eric often knows what is coming before it hits the broader market.",
   },
 ];
 
@@ -66,6 +72,7 @@ function FaqItem({ question, answer, index }: { question: string; answer: string
       className="border border-foreground/10 rounded-2xl overflow-hidden"
     >
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-6 text-left cursor-pointer"
       >
@@ -122,20 +129,27 @@ export function Faq() {
   return (
     <section ref={sectionRef} className="bg-background py-24 lg:py-32">
       <div className="px-6 sm:px-12 lg:px-24 max-w-4xl mx-auto">
-        {/* Title */}
         <h2
           ref={titleRef}
-          className="text-4xl lg:text-5xl font-medium tracking-tight text-foreground text-center mb-12 lg:mb-16"
+          className="text-4xl lg:text-5xl font-medium tracking-tight text-foreground text-center mb-4 lg:mb-6"
         >
-          Frequently Asked
-          <br />
           Questions
+          <br />
+          buyers & sellers ask
         </h2>
+        <p className="text-center text-muted-foreground mb-12 lg:mb-16 max-w-xl mx-auto">
+          Straight answers from {siteConfig.agentName}. Reach out anytime if you do not see yours
+          here.
+        </p>
 
-        {/* FAQ Items */}
         <div className="flex flex-col gap-4">
-          {faqs.map((faq, index) => (
-            <FaqItem key={index} question={faq.question} answer={faq.answer} index={index} />
+          {faqs.map((faqItem, index) => (
+            <FaqItem
+              key={index}
+              question={faqItem.question}
+              answer={faqItem.answer}
+              index={index}
+            />
           ))}
         </div>
       </div>

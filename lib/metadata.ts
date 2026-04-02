@@ -1,40 +1,29 @@
 import type { Metadata } from "next";
+import { siteConfig } from "@/lib/config";
 
-export const siteConfig = {
-  name: "React Bits Pro - Agency Template",
-  description:
-    "We craft exceptional digital experiences that captivate audiences and drive results. From strategy to execution, we bring your vision to life.",
-  url: "https://pulsewave.design",
-  ogImage: "/og-image.png",
-  creator: "@pulsewave",
-  authors: [
-    {
-      name: "Pulsewave Studio",
-      url: "https://pulsewave.design",
-    },
-  ],
-  keywords: [
-    "creative agency",
-    "digital agency",
-    "web design",
-    "brand identity",
-    "product design",
-    "Next.js",
-    "React",
-    "Tailwind CSS",
-  ],
-} as const;
+export { siteConfig };
+
+export const seoKeywords = [
+  "real estate",
+  "homes for sale",
+  "realtor",
+  "buy a home",
+  "sell a home",
+  siteConfig.agentName,
+  siteConfig.brandSlug,
+  "Eric Adams real estate",
+] as const;
 
 export const baseMetadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: siteConfig.name,
+    default: `${siteConfig.name} · ${siteConfig.agentName}`,
     template: `%s | ${siteConfig.name}`,
   },
   description: siteConfig.description,
-  keywords: [...siteConfig.keywords],
-  authors: [...siteConfig.authors],
-  creator: siteConfig.creator,
+  keywords: [...seoKeywords],
+  authors: [{ name: siteConfig.agentName, url: siteConfig.url }],
+  creator: siteConfig.agentName,
   publisher: siteConfig.name,
   robots: {
     index: true,
@@ -54,12 +43,12 @@ export const baseMetadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: siteConfig.url,
-    title: siteConfig.name,
+    title: `${siteConfig.name} · ${siteConfig.agentName}`,
     description: siteConfig.description,
     siteName: siteConfig.name,
     images: [
       {
-        url: siteConfig.ogImage,
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: siteConfig.name,
@@ -68,10 +57,9 @@ export const baseMetadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: siteConfig.name,
+    title: `${siteConfig.name} · ${siteConfig.agentName}`,
     description: siteConfig.description,
-    images: [siteConfig.ogImage],
-    creator: siteConfig.creator,
+    images: ["/og-image.png"],
   },
   icons: {
     icon: "/favicon.ico",
@@ -95,7 +83,7 @@ export function createMetadata({
   noIndex?: boolean;
 }): Metadata {
   const url = `${siteConfig.url}${path}`;
-  const ogImage = image ?? siteConfig.ogImage;
+  const ogImage = image ?? "/og-image.png";
 
   return {
     title,

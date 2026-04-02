@@ -2,7 +2,9 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { motion } from "motion/react";
+import Link from "next/link";
 import { useTheme } from "next-themes";
+import { siteConfig } from "@/lib/config";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
@@ -131,8 +133,8 @@ interface ShaderPlaneProps {
 function ShaderPlane({ isDark, startColors, endColors }: ShaderPlaneProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const { size, gl } = useThree();
-  const defaultStart = { color1: "#FF66B2", color2: "#994DE6", color3: "#4D80FF" };
-  const defaultEnd = { color1: "#FF8026", color2: "#FF4059", color3: "#FF73A6" };
+  const defaultStart = { color1: "#a8c9d8", color2: "#7aab9a", color3: "#6b8cae" };
+  const defaultEnd = { color1: "#4a6b8a", color2: "#3d5c4f", color3: "#5a8a9e" };
 
   const uniforms = useMemo(
     () => ({
@@ -252,15 +254,15 @@ export interface HeroProps {
 }
 
 const defaultStartColors = {
-  color1: "#FF66B2",
-  color2: "#994DE6",
-  color3: "#4D80FF",
+  color1: "#b8d4e6",
+  color2: "#88b8a8",
+  color3: "#7a9ab8",
 };
 
 const defaultEndColors = {
-  color1: "#4D80FF",
-  color2: "#994DE6",
-  color3: "#FF66B2",
+  color1: "#3d5a78",
+  color2: "#4a6b55",
+  color3: "#5a8fa0",
 };
 
 export function Hero({ startColors, endColors }: HeroProps = {}) {
@@ -311,7 +313,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
               transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
-              Crafting digital
+              Find the home
             </motion.span>
           </span>
           <span className="block overflow-hidden pb-[0.1em]">
@@ -322,7 +324,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
               transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1], delay: 0.5 }}
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
-              experiences that
+              that fits your life—
             </motion.span>
           </span>
           <span className="block overflow-hidden pb-[0.1em]">
@@ -333,7 +335,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
               transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1], delay: 0.7 }}
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
-              <em className="font-serif">inspire & convert.</em>
+              <em className="font-serif">or sell with a plan.</em>
             </motion.span>
           </span>
         </h1>
@@ -344,9 +346,36 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 1, ease: [0.25, 1, 0.5, 1], delay: 1.2 }}
         >
-          A creative agency specializing in brand strategy, web design, and
-          development — building truly memorable products that convert.
+          Eric Adams is your partner for buying and selling real estate—local insight, honest
+          pricing conversations, and hands-on support from tour to keys.
         </motion.p>
+        <motion.div
+          className="mt-10 flex flex-wrap gap-3"
+          initial={{ y: 16, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.8, ease: [0.25, 1, 0.5, 1], delay: 1.35 }}
+        >
+          <Link
+            href="/listings"
+            className="inline-flex items-center justify-center rounded-full bg-foreground px-6 py-3 text-sm font-medium text-background hover:opacity-90 transition-opacity"
+          >
+            View listings
+          </Link>
+          <Link
+            href="/sell"
+            className="inline-flex items-center justify-center rounded-full border border-foreground/20 px-6 py-3 text-sm font-medium text-foreground hover:bg-foreground/5 transition-colors"
+          >
+            Sell your home
+          </Link>
+          <a
+            href={siteConfig.mortgageApplicationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-ring/60 bg-background/50 px-6 py-3 text-sm font-medium text-foreground backdrop-blur-sm hover:border-ring hover:bg-muted/40 transition-colors"
+          >
+            Apply now
+          </a>
+        </motion.div>
       </div>
 
       <motion.div

@@ -5,6 +5,8 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { siteConfig } from "@/lib/config";
+import { siteImages } from "@/lib/site-images";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -80,23 +82,30 @@ export function About() {
       <div className="px-6 sm:px-12 lg:px-24 flex flex-col items-center max-w-360 2xl:max-w-450 3xl:max-w-550 mx-auto">
         <div ref={imageRef} className="relative aspect-21/9 lg:aspect-3/1 w-full overflow-hidden rounded-full mb-16">
           <Image
-            src="/img/mock-project2.webp"
-            alt="Design studio workspace"
+            src={siteImages.aboutHero}
+            alt="Modern home exterior with landscaping"
             fill
             className="object-cover"
+            sizes="(max-width: 1024px) 100vw, 1200px"
+            priority
           />
         </div>
 
-        <h2 ref={headingRef} className="text-[clamp(1.75rem,4vw,3rem)] font-medium leading-[1.2] tracking-tight text-center mx-auto text-foreground max-w-4xl">
-          At Pulsewave, we transform bold ideas into immersive digital experiences through good design and relentless creativity.
+        <h2
+          ref={headingRef}
+          className="text-[clamp(1.75rem,4vw,3rem)] font-medium leading-[1.2] tracking-tight text-center mx-auto text-foreground max-w-4xl"
+        >
+          {siteConfig.agentName} combines market data with street-level context—so you can move
+          forward with confidence whether you are buying your first place or selling a long-time
+          family home.
         </h2>
 
         <Link
           ref={ctaRef}
-          href="#contact"
+          href="/sell"
           className="inline-flex items-center justify-center mt-8 px-6 py-3 rounded-full bg-foreground text-background text-lg tracking-tight font-medium transition-opacity hover:opacity-80"
         >
-          More about us
+          Talk about your timeline
         </Link>
       </div>
     </section>

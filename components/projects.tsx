@@ -14,6 +14,7 @@ import {
   useAnimationFrame,
   AnimatePresence,
 } from "motion/react";
+import { siteImages } from "@/lib/site-images";
 import { WaterRipple } from "./water-ripple";
 
 if (typeof window !== "undefined") {
@@ -143,9 +144,30 @@ interface Project {
 }
 
 const projects: Project[] = [
-  { id: "1", titleUp: "Brand", titleDown: "Vision", image: "/img/mock-project1.webp", description: "A complete brand identity transformation that redefined how audiences connect with innovation." },
-  { id: "2", titleUp: "Digital", titleDown: "Canvas", image: "/img/mock-project2.webp", description: "An immersive digital experience that pushes the boundaries of web interaction and storytelling." },
-  { id: "3", titleUp: "Future", titleDown: "Forward", image: "/img/mock-project3.webp", description: "Crafting tomorrow's digital landscape through bold design choices and seamless experiences." },
+  {
+    id: "1",
+    titleUp: "Curated",
+    titleDown: "listings",
+    image: siteImages.showcaseModern,
+    description:
+      "Architectural new builds and timeless resale homes—presented with photography and copy that help buyers picture life in the space.",
+  },
+  {
+    id: "2",
+    titleUp: "Staging",
+    titleDown: "& light",
+    image: siteImages.showcaseLiving,
+    description:
+      "Thoughtful prep and lighting that show square footage and flow, so every showing feels inviting and high-value.",
+  },
+  {
+    id: "3",
+    titleUp: "From tour",
+    titleDown: "to close",
+    image: siteImages.showcaseTwilight,
+    description:
+      "Offers, inspections, and paperwork handled with clarity—so you always know the next step toward keys.",
+  },
 ];
 
 function ProjectOverlay({ project, onClose }: { project: Project | null; onClose: () => void }) {
@@ -173,7 +195,7 @@ function ProjectOverlay({ project, onClose }: { project: Project | null; onClose
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={project.image} alt={`${project.titleUp} ${project.titleDown}`} className="h-full w-full object-cover" />
-            <div className="absolute inset-0 bg-black/40" />
+            <div className="absolute inset-0 bg-foreground/45" />
           </motion.div>
           <motion.div
             className="absolute left-4 top-4 z-10 sm:left-6 sm:top-6 md:left-12 md:top-12 lg:left-16 lg:top-16"
@@ -182,7 +204,7 @@ function ProjectOverlay({ project, onClose }: { project: Project | null; onClose
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.4, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
           >
-            <h2 className="text-[clamp(2rem,8vw,6rem)] font-medium leading-[0.95] tracking-tight text-white">
+            <h2 className="text-[clamp(2rem,8vw,6rem)] font-medium leading-[0.95] tracking-tight text-background">
               <span className="block">{project.titleUp}</span>
               <span className="block font-serif italic">{project.titleDown}</span>
             </h2>
@@ -196,7 +218,7 @@ function ProjectOverlay({ project, onClose }: { project: Project | null; onClose
           >
             <button
               onClick={onClose}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-110 active:scale-95 md:h-14 md:w-14"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-background/20 text-background backdrop-blur-sm transition-all hover:bg-background/30 hover:scale-110 active:scale-95 md:h-14 md:w-14"
               aria-label="Close overlay"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
