@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useOverlay } from "@/lib/overlay-context";
 import { siteConfig } from "@/lib/config";
+
+/** When the footer (#contact) rises into this band, hide the fixed bar on scroll-down to avoid overlap. */
+const FOOTER_HIDE_TOP = 96;
+const FOOTER_RELEASE_TOP = 160;
 
 const sections = [
   { id: "hero", label: "Home" },
@@ -29,6 +33,8 @@ export function Header() {
   const [activeSection, setActiveSection] = useState("Home");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [hideOverFooter, setHideOverFooter] = useState(false);
+  const lastScrollY = useRef(0);
   const { isOverlayOpen } = useOverlay();
 
   useEffect(() => {
@@ -73,12 +79,61 @@ export function Header() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    const footer = document.getElementById("contact");
+    if (!footer) {
+      return;
+    }
+
+    const syncFooterOverlap = () => {
+      const rect = footer.getBoundingClientRect();
+      const y = window.scrollY;
+      const scrollingUp = y < lastScrollY.current - 2;
+      lastScrollY.current = y;
+
+      const footerVisible = rect.bottom > 48;
+      const inOverlapBand = footerVisible && rect.top < FOOTER_HIDE_TOP;
+      const clearedBand = !footerVisible || rect.top > FOOTER_RELEASE_TOP;
+
+      if (scrollingUp) {
+        setHideOverFooter(false);
+        return;
+      }
+      if (inOverlapBand) {
+        setHideOverFooter(true);
+        return;
+      }
+      if (clearedBand) {
+        setHideOverFooter(false);
+      }
+    };
+
+    window.addEventListener("scroll", syncFooterOverlap, { passive: true });
+    window.addEventListener("resize", syncFooterOverlap, { passive: true });
+    lastScrollY.current = window.scrollY;
+    syncFooterOverlap();
+    return () => {
+      window.removeEventListener("scroll", syncFooterOverlap);
+      window.removeEventListener("resize", syncFooterOverlap);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hideOverFooter) {
+      setIsMenuOpen(false);
+    }
+  }, [hideOverFooter]);
+
   return (
     <AnimatePresence>
       {!isOverlayOpen && (
         <motion.header
           initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
+          animate={
+            hideOverFooter
+              ? { opacity: 0, y: -28, pointerEvents: "none" }
+              : { opacity: 1, y: 0, pointerEvents: "auto" }
+          }
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           className="fixed top-0 left-0 right-0 z-50 px-4 pt-6 pb-8 sm:px-12 sm:pt-12 sm:pb-10 lg:px-24 lg:pb-12"
