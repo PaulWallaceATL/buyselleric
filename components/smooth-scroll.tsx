@@ -49,6 +49,12 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
       }
 
       if (href === "#contact") {
+        const contact = document.getElementById("contact");
+        if (contact) {
+          // Align top of footer (email block) into view — not document bottom, which clips the headline.
+          lenis.scrollTo(contact, { offset: -24 });
+          return;
+        }
         lenis.scrollTo("bottom", { offset: 0 });
         return;
       }
