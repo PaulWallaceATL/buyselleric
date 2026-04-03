@@ -12,8 +12,8 @@ export const siteConfig = {
   /** Set NEXT_PUBLIC_SITE_URL on Vercel to your production domain */
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://buyselleric.vercel.app",
   email: "eric@buyselleric.com",
-  phoneDisplay: "(555) 000-0000",
-  phoneTel: "+15550000000",
+  phoneDisplay: "478-456-6650",
+  phoneTel: "+14784566650",
   license: "DRE #00000000",
   primaryMarket: "Your metro area",
 

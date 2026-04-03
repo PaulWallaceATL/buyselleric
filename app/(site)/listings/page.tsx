@@ -18,7 +18,10 @@ export default async function ListingsPage(): Promise<ReactNode> {
   const listings = await getPublishedListings();
 
   return (
-    <main id="main-content" className="min-h-screen bg-background px-6 pb-24 pt-28 sm:px-12 lg:px-24">
+    <main
+      id="main-content"
+      className="min-h-screen bg-background px-6 pb-24 pt-28 sm:px-12 lg:px-24 lg:relative lg:z-10"
+    >
       <div className="mx-auto max-w-360 2xl:max-w-450 3xl:max-w-550">
         <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
           {siteConfig.brandSlug}

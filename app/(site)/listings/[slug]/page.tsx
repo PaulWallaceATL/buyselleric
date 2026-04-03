@@ -53,7 +53,10 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
         : "For sale";
 
   return (
-    <main id="main-content" className="min-h-screen bg-background pb-24 pt-24 sm:pt-28">
+    <main
+      id="main-content"
+      className="min-h-screen bg-background pb-24 pt-24 sm:pt-28 lg:relative lg:z-10"
+    >
       <div className="mx-auto max-w-6xl px-6 sm:px-12 lg:px-16">
         <nav className="text-sm text-muted-foreground" aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
