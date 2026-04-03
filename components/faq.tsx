@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useEffect, useRef, useState } from "react";
 import { siteConfig } from "@/lib/config";
+import { eyebrow, sectionTitle, sectionY, siteContainer } from "@/lib/ui";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -69,15 +70,15 @@ function FaqItem({ question, answer, index }: { question: string; answer: string
   return (
     <div
       ref={itemRef}
-      className="border border-foreground/10 rounded-2xl overflow-hidden"
+      className="overflow-hidden rounded-2xl border border-border/80 bg-muted/10 sm:rounded-3xl"
     >
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
-        className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 p-5 text-left sm:min-h-16 sm:p-6"
+        className="flex min-h-[3.5rem] w-full cursor-pointer items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-muted/20 sm:min-h-16 sm:p-6"
       >
-        <span className="text-lg font-semibold text-foreground sm:text-xl">{question}</span>
+        <span className="text-pretty text-base font-semibold text-foreground sm:text-lg">{question}</span>
         <span
           className="relative h-10 w-10 shrink-0 rounded-full border-2 border-foreground/15 bg-muted/30 text-foreground transition-transform duration-300"
           style={{ transform: isOpen ? "rotate(45deg)" : "rotate(0deg)" }}
@@ -131,22 +132,18 @@ export function Faq() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="bg-background py-24 lg:py-32">
-      <div className="px-6 sm:px-12 lg:px-24 max-w-4xl mx-auto">
-        <h2
-          ref={titleRef}
-          className="text-4xl lg:text-5xl font-medium tracking-tight text-foreground text-center mb-4 lg:mb-6"
-        >
-          Questions
-          <br />
-          buyers & sellers ask
+    <section ref={sectionRef} className={`bg-background ${sectionY}`}>
+      <div className={`${siteContainer} max-w-3xl`}>
+        <p className={`${eyebrow} text-center`}>FAQ</p>
+        <h2 ref={titleRef} className={`${sectionTitle} mx-auto mt-3 max-w-xl text-center`}>
+          Questions buyers &amp; sellers ask
         </h2>
-        <p className="text-center text-muted-foreground mb-12 lg:mb-16 max-w-xl mx-auto">
+        <p className="mx-auto mb-10 mt-4 max-w-xl text-center text-pretty text-base leading-relaxed text-muted-foreground sm:mb-14 sm:text-lg">
           Straight answers from {siteConfig.agentName}. Reach out anytime if you do not see yours
           here.
         </p>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:gap-4">
           {faqs.map((faqItem, index) => (
             <FaqItem
               key={index}

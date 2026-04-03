@@ -3,9 +3,10 @@
 import { useActionState } from "react";
 import { submitSellInquiry } from "@/app/actions/sell";
 import { ctaPrimary } from "@/lib/cta-styles";
+import { cardSurface } from "@/lib/ui";
 
 function fieldClass() {
-  return "w-full min-h-[48px] rounded-xl border-2 border-border bg-muted/20 px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-ring outline-none";
+  return "w-full min-h-[48px] rounded-xl border border-border bg-background px-4 py-3.5 text-base text-foreground shadow-sm placeholder:text-muted-foreground transition-shadow focus-ring outline-none focus:border-ring/50 focus:shadow-md sm:rounded-2xl";
 }
 
 export function SellHouseForm() {
@@ -13,7 +14,7 @@ export function SellHouseForm() {
 
   if (state?.ok === true) {
     return (
-      <div className="rounded-2xl border border-border bg-muted/30 p-8 text-center">
+      <div className={`${cardSurface} p-8 text-center sm:p-10`}>
         <p className="text-lg font-medium text-foreground">Thank you.</p>
         <p className="mt-2 text-muted-foreground">
           Eric will review your details and reach out shortly.
@@ -23,7 +24,10 @@ export function SellHouseForm() {
   }
 
   return (
-    <form action={formAction} className="space-y-5 max-w-xl">
+    <form
+      action={formAction}
+      className={`${cardSurface} mx-auto max-w-2xl space-y-6 p-6 sm:space-y-7 sm:p-8 lg:p-10`}
+    >
       {state?.ok === false ? (
         <p className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
           {state.message}
@@ -32,19 +36,19 @@ export function SellHouseForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label htmlFor="full_name" className="mb-1 block text-sm font-medium">
+          <label htmlFor="full_name" className="mb-1.5 block text-sm font-medium text-foreground">
             Full name
           </label>
           <input id="full_name" name="full_name" required className={fieldClass()} />
         </div>
         <div>
-          <label htmlFor="email" className="mb-1 block text-sm font-medium">
+          <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-foreground">
             Email
           </label>
           <input id="email" name="email" type="email" required className={fieldClass()} />
         </div>
         <div>
-          <label htmlFor="phone" className="mb-1 block text-sm font-medium">
+          <label htmlFor="phone" className="mb-1.5 block text-sm font-medium text-foreground">
             Phone
           </label>
           <input id="phone" name="phone" type="tel" className={fieldClass()} />
@@ -52,7 +56,7 @@ export function SellHouseForm() {
       </div>
 
       <div>
-        <label htmlFor="property_address" className="mb-1 block text-sm font-medium">
+        <label htmlFor="property_address" className="mb-1.5 block text-sm font-medium text-foreground">
           Property address
         </label>
         <input id="property_address" name="property_address" className={fieldClass()} />
@@ -60,19 +64,19 @@ export function SellHouseForm() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
-          <label htmlFor="city" className="mb-1 block text-sm font-medium">
+          <label htmlFor="city" className="mb-1.5 block text-sm font-medium text-foreground">
             City
           </label>
           <input id="city" name="city" className={fieldClass()} />
         </div>
         <div>
-          <label htmlFor="state" className="mb-1 block text-sm font-medium">
+          <label htmlFor="state" className="mb-1.5 block text-sm font-medium text-foreground">
             State
           </label>
           <input id="state" name="state" className={fieldClass()} />
         </div>
         <div>
-          <label htmlFor="postal_code" className="mb-1 block text-sm font-medium">
+          <label htmlFor="postal_code" className="mb-1.5 block text-sm font-medium text-foreground">
             ZIP
           </label>
           <input id="postal_code" name="postal_code" className={fieldClass()} />
@@ -81,7 +85,7 @@ export function SellHouseForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="property_type" className="mb-1 block text-sm font-medium">
+          <label htmlFor="property_type" className="mb-1.5 block text-sm font-medium text-foreground">
             Property type
           </label>
           <select id="property_type" name="property_type" className={fieldClass()}>
@@ -94,7 +98,7 @@ export function SellHouseForm() {
           </select>
         </div>
         <div>
-          <label htmlFor="timeline" className="mb-1 block text-sm font-medium">
+          <label htmlFor="timeline" className="mb-1.5 block text-sm font-medium text-foreground">
             When do you hope to sell?
           </label>
           <select id="timeline" name="timeline" className={fieldClass()}>
@@ -108,7 +112,7 @@ export function SellHouseForm() {
       </div>
 
       <div>
-        <label htmlFor="message" className="mb-1 block text-sm font-medium">
+        <label htmlFor="message" className="mb-1.5 block text-sm font-medium text-foreground">
           Tell Eric about your home
         </label>
         <textarea

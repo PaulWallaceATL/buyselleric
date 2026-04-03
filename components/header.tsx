@@ -136,7 +136,7 @@ export function Header() {
           }
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          className="fixed top-0 left-0 right-0 z-50 px-4 pt-6 pb-8 sm:px-12 sm:pt-12 sm:pb-10 lg:px-24 lg:pb-12"
+          className="fixed top-0 left-0 right-0 z-50 px-6 pt-6 pb-8 sm:px-12 sm:pt-12 sm:pb-10 lg:px-24 lg:pb-12"
         >
           <div className="mx-auto flex max-w-360 items-center justify-between gap-4 2xl:max-w-450 3xl:max-w-550">
             <motion.a

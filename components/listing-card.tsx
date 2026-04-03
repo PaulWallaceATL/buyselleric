@@ -13,9 +13,9 @@ export function ListingCard({ listing }: { listing: ListingRow }) {
   return (
     <Link
       href={`/listings/${listing.slug}`}
-      className="group block overflow-hidden rounded-2xl border-2 border-border bg-muted/20 shadow-sm transition-shadow hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="group block overflow-hidden rounded-2xl border border-border/90 bg-muted/20 shadow-sm transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:rounded-3xl"
     >
-      <div className="relative aspect-4/3 w-full overflow-hidden bg-muted">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted sm:aspect-4/3">
         {img ? (
           // eslint-disable-next-line @next/next/no-img-element -- user-supplied listing URLs
           <img
@@ -29,9 +29,9 @@ export function ListingCard({ listing }: { listing: ListingRow }) {
           </div>
         )}
       </div>
-      <div className="p-6">
-        <p className="text-xl font-semibold tracking-tight text-foreground">{listing.title}</p>
-        <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">
+      <div className="p-5 sm:p-6">
+        <p className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{listing.title}</p>
+        <p className="mt-2 text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
           {formatPriceUsd(listing.price_cents)}
         </p>
         <p className="mt-3 text-base text-muted-foreground">
@@ -39,7 +39,7 @@ export function ListingCard({ listing }: { listing: ListingRow }) {
           {listing.square_feet ? ` · ${listing.square_feet.toLocaleString()} sq ft` : ""}
         </p>
         {location ? <p className="mt-1 text-base text-muted-foreground">{location}</p> : null}
-        <p className="mt-5 text-lg font-semibold text-ring underline-offset-4 group-hover:underline">
+        <p className="mt-4 text-base font-semibold text-ring underline-offset-4 group-hover:underline sm:mt-5 sm:text-lg">
           View full details →
         </p>
       </div>

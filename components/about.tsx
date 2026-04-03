@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
 import { siteImages } from "@/lib/site-images";
+import { sectionY, siteContainer } from "@/lib/ui";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -79,9 +80,12 @@ export function About() {
   }, []);
 
   return (
-    <section ref={sectionRef} id="about" className="bg-background pb-24 lg:pb-32">
-      <div className="px-6 sm:px-12 lg:px-24 flex flex-col items-center max-w-360 2xl:max-w-450 3xl:max-w-550 mx-auto">
-        <div ref={imageRef} className="relative aspect-21/9 lg:aspect-3/1 w-full overflow-hidden rounded-full mb-16">
+    <section ref={sectionRef} id="about" className={`bg-background ${sectionY}`}>
+      <div className={`${siteContainer} flex flex-col items-center`}>
+        <div
+          ref={imageRef}
+          className="relative mb-12 aspect-[21/9] w-full overflow-hidden rounded-3xl sm:mb-16 sm:rounded-[2rem] lg:mb-16 lg:aspect-3/1 lg:rounded-full"
+        >
           <Image
             src={siteImages.aboutHero}
             alt="Modern home exterior with landscaping"
@@ -94,18 +98,14 @@ export function About() {
 
         <h2
           ref={headingRef}
-          className="text-[clamp(1.75rem,4vw,3rem)] font-medium leading-[1.2] tracking-tight text-center mx-auto text-foreground max-w-4xl"
+          className="mx-auto max-w-4xl text-center text-balance text-[clamp(1.5rem,4vw,2.75rem)] font-semibold leading-snug tracking-tight text-foreground sm:leading-tight"
         >
           {siteConfig.agentName} combines market data with street-level context—so you can move
           forward with confidence whether you are buying your first place or selling a long-time
           family home.
         </h2>
 
-        <Link
-          ref={ctaRef}
-          href="/sell"
-          className={`${ctaPrimary} mt-8`}
-        >
+        <Link ref={ctaRef} href="/sell" className={`${ctaPrimary} mt-8 w-full sm:w-auto`}>
           Talk about your timeline
         </Link>
       </div>

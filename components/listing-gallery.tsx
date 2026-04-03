@@ -10,7 +10,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
 
   if (clean.length === 0) {
     return (
-      <div className="flex aspect-4/3 w-full items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 text-lg text-muted-foreground">
+      <div className="flex aspect-4/3 w-full items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 p-6 text-center text-base text-muted-foreground sm:rounded-3xl sm:text-lg">
         Photos coming soon
       </div>
     );
@@ -18,7 +18,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="relative aspect-4/3 w-full overflow-hidden rounded-2xl bg-muted shadow-sm sm:aspect-21/9 sm:max-h-[min(70vh,720px)] sm:min-h-[320px]">
+      <div className="relative aspect-4/3 w-full overflow-hidden rounded-2xl bg-muted shadow-md sm:aspect-21/9 sm:max-h-[min(70vh,720px)] sm:min-h-[280px] sm:rounded-3xl lg:min-h-[320px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={main}

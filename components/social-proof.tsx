@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
 import { siteImages } from "@/lib/site-images";
+import { eyebrow, sectionTitle, sectionY, siteContainer } from "@/lib/ui";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -92,23 +93,27 @@ export function SocialProof() {
   }, []);
 
   return (
-    <section ref={sectionRef} id="social-proof" className="bg-background py-24 lg:py-32">
-      <div className="px-6 sm:px-12 lg:px-24 max-w-360 2xl:max-w-450 3xl:max-w-550 mx-auto">
-        <div ref={headerRef} className="flex items-center justify-between mb-12 lg:mb-16">
-          <h2 className="text-3xl lg:text-4xl font-medium tracking-tight text-foreground">
-            Clients who made a move
-          </h2>
-          <Link href="/listings" className={`${ctaPrimary} hidden sm:inline-flex`}>
+    <section ref={sectionRef} id="social-proof" className={`bg-background ${sectionY}`}>
+      <div className={siteContainer}>
+        <div
+          ref={headerRef}
+          className="mb-10 flex flex-col gap-5 sm:mb-12 sm:flex-row sm:items-end sm:justify-between lg:mb-16"
+        >
+          <div className="min-w-0">
+            <p className={eyebrow}>Stories</p>
+            <h2 className={`${sectionTitle} mt-3 max-w-md`}>Clients who made a move</h2>
+          </div>
+          <Link href="/listings" className={`${ctaPrimary} w-full shrink-0 sm:w-auto`}>
             See homes
           </Link>
         </div>
 
         <div
           ref={gridRef}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:grid-rows-[minmax(220px,auto)_minmax(220px,auto)_minmax(180px,auto)]"
+          className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-4 lg:grid-rows-[minmax(200px,auto)_minmax(200px,auto)_minmax(160px,auto)]"
         >
           <div className="row-span-2 flex flex-col gap-4">
-            <div className="relative flex-1 w-full overflow-hidden rounded-2xl">
+            <div className="relative min-h-[200px] w-full flex-1 overflow-hidden rounded-2xl sm:min-h-[220px] sm:rounded-3xl">
               <Image
                 src={siteImages.testimonialLiving}
                 alt="Bright open-plan living and dining area"
@@ -117,7 +122,7 @@ export function SocialProof() {
                 sizes="(max-width: 768px) 100vw, 25vw"
               />
             </div>
-            <div className="relative flex-1 w-full overflow-hidden rounded-full">
+            <div className="relative min-h-[200px] w-full flex-1 overflow-hidden rounded-2xl sm:min-h-[220px] sm:rounded-3xl lg:rounded-full">
               <Image
                 src={siteImages.testimonialExterior}
                 alt="Contemporary home with pool at dusk"
@@ -128,10 +133,10 @@ export function SocialProof() {
             </div>
           </div>
 
-          <div className="lg:col-span-2 row-span-2 bg-muted/50 rounded-2xl p-8 flex flex-col">
+          <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl sm:p-8 lg:col-span-2 lg:row-span-2">
             <div>
               <QuoteIcon className="w-10 h-10 text-foreground/20 mb-6" />
-              <blockquote className="text-2xl lg:text-3xl font-medium leading-snug text-foreground">
+              <blockquote className="text-pretty text-xl font-medium leading-snug text-foreground sm:text-2xl lg:text-3xl">
                 Eric helped us win in a multiple-offer situation without overpaying—and kept us
                 sane through inspection surprises.
               </blockquote>
@@ -151,9 +156,9 @@ export function SocialProof() {
             </div>
           </div>
 
-          <div className="bg-muted/50 rounded-2xl p-6 flex flex-col">
+          <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl">
             <div className="flex-1">
-              <p className="text-3xl font-semibold text-foreground">18 days</p>
+              <p className="text-2xl font-semibold tabular-nums text-foreground sm:text-3xl">18 days</p>
               <p className="text-sm text-foreground/60 mt-1">Average time to accepted offer (sample)</p>
             </div>
             <div className="flex items-center justify-between mt-auto pt-4">
@@ -167,9 +172,9 @@ export function SocialProof() {
             </div>
           </div>
 
-          <div className="bg-muted/50 rounded-2xl p-6 flex flex-col">
+          <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl">
             <div className="flex-1">
-              <p className="text-3xl font-semibold text-foreground">100%</p>
+              <p className="text-2xl font-semibold text-foreground sm:text-3xl">100%</p>
               <p className="text-sm text-foreground/60 mt-1">Paperwork explained before you sign</p>
             </div>
             <div className="flex items-center justify-between mt-auto pt-4">
@@ -183,9 +188,9 @@ export function SocialProof() {
             </div>
           </div>
 
-          <div className="bg-muted/50 rounded-2xl p-8 flex flex-col">
+          <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl sm:p-8">
             <div className="flex-1">
-              <p className="text-3xl lg:text-4xl font-semibold text-foreground">5-star care</p>
+              <p className="text-2xl font-semibold text-foreground sm:text-3xl lg:text-4xl">5-star care</p>
               <p className="text-foreground/60 mt-2">
                 Communication that
                 <br />
@@ -197,8 +202,8 @@ export function SocialProof() {
             </div>
           </div>
 
-          <div className="lg:col-span-3 bg-muted/50 rounded-2xl p-8 flex flex-col">
-            <p className="text-xl lg:text-2xl font-medium leading-relaxed text-foreground max-w-3xl flex-1">
+          <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl sm:p-8 lg:col-span-3">
+            <p className="max-w-3xl flex-1 text-pretty text-lg font-medium leading-relaxed text-foreground sm:text-xl lg:text-2xl">
               We sold above asking after Eric&apos;s staging checklist and pricing strategy. The
               whole team felt informed at every step.
             </p>

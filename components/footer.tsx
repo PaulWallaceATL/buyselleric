@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { siteConfig } from "@/lib/config";
 import { ctaFooterOutline, ctaFooterPrimary } from "@/lib/cta-styles";
+import { siteContainer } from "@/lib/ui";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -29,7 +30,7 @@ export function Footer() {
       id="contact"
       className="scroll-mt-6 bg-foreground text-background sm:scroll-mt-8 lg:scroll-mt-10"
     >
-      <div className="mx-auto max-w-360 px-6 pb-14 pt-28 text-center sm:px-12 sm:pb-16 sm:pt-32 sm:text-left lg:px-24 lg:pb-20 lg:pt-36 2xl:max-w-450 3xl:max-w-550">
+      <div className={`${siteContainer} pb-14 pt-28 text-center sm:pb-16 sm:pt-32 sm:text-left lg:pb-20 lg:pt-36`}>
         <a
           href={mail}
           className="block text-2xl font-medium tracking-tight hover:opacity-80 transition-opacity break-all sm:break-normal sm:text-5xl lg:text-7xl"
@@ -47,11 +48,11 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-360 px-6 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550">
+      <div className={siteContainer}>
         <div className="border-t border-background/10" />
       </div>
 
-      <div className="mx-auto max-w-360 px-6 py-12 sm:px-12 lg:px-24 lg:py-16 2xl:max-w-450 3xl:max-w-550">
+      <div className={`${siteContainer} py-12 lg:py-16`}>
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-start lg:gap-x-10 lg:gap-y-10">
           <div className="lg:col-span-4">
             <h4 className={`${colHeading} mb-6`}>{siteConfig.name}</h4>
@@ -100,7 +101,7 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-360 border-t border-background/10 px-6 py-8 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550">
+      <div className={`${siteContainer} border-t border-background/10 py-8`}>
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap items-center justify-center gap-6 md:justify-start">
             {footerLinks.map((link) => (

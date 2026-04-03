@@ -57,7 +57,14 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+::selection {
+  background-color: color-mix(in srgb, var(--ring) 35%, transparent);
+  color: var(--foreground);
+}
+
 
 .skip-to-content {
   position: absolute;

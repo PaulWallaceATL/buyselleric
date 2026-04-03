@@ -5,6 +5,7 @@ import { siteConfig } from "@/lib/config";
 import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
 import { getPublishedListingBySlug } from "@/lib/listings-queries";
+import { pageMain } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -54,26 +55,29 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
         : "For sale";
 
   return (
-    <main
-      id="main-content"
-      className="min-h-screen bg-background pb-24 pt-24 sm:pt-28 lg:relative lg:z-10"
-    >
-      <div className="mx-auto max-w-6xl px-6 sm:px-12 lg:px-16">
-        <nav className="text-base text-muted-foreground" aria-label="Breadcrumb">
-          <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <main id="main-content" className={pageMain}>
+      <div className="mx-auto w-full max-w-6xl px-6 sm:px-12 lg:px-16">
+        <nav className="text-sm text-muted-foreground sm:text-base" aria-label="Breadcrumb">
+          <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
             <li>
-              <Link href="/" className="hover:text-foreground">
+              <Link href="/" className="rounded-sm hover:text-foreground focus-ring outline-none">
                 Home
               </Link>
             </li>
-            <li aria-hidden="true">/</li>
+            <li aria-hidden="true" className="text-muted-foreground/50">
+              /
+            </li>
             <li>
-              <Link href="/listings" className="hover:text-foreground">
+              <Link href="/listings" className="rounded-sm hover:text-foreground focus-ring outline-none">
                 Listings
               </Link>
             </li>
-            <li aria-hidden="true">/</li>
-            <li className="font-medium text-foreground">{listing.title}</li>
+            <li aria-hidden="true" className="text-muted-foreground/50">
+              /
+            </li>
+            <li className="max-w-[min(100%,16rem)] truncate font-medium text-foreground sm:max-w-none sm:whitespace-normal">
+              {listing.title}
+            </li>
           </ol>
         </nav>
 
@@ -81,17 +85,17 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
           <ListingGallery urls={listing.image_urls} />
         </div>
 
-        <div className="mt-12 grid gap-12 lg:grid-cols-12 lg:gap-14">
+        <div className="mt-8 grid gap-10 sm:mt-10 lg:grid-cols-12 lg:gap-14 lg:gap-y-12">
           <aside className="lg:col-span-5">
             <div className="lg:sticky lg:top-28 lg:space-y-8">
               <div>
-                <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:text-sm">
                   {statusLabel}
                 </p>
-                <h1 className="mt-2 text-3xl font-medium tracking-tight text-foreground sm:text-4xl lg:text-[2.25rem] lg:leading-tight">
+                <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.125rem] lg:leading-tight xl:text-[2.25rem]">
                   {listing.title}
                 </h1>
-                <p className="mt-4 text-3xl font-semibold tabular-nums text-foreground sm:text-4xl">
+                <p className="mt-4 text-2xl font-semibold tabular-nums text-foreground sm:text-3xl lg:text-4xl">
                   {formatPriceUsd(listing.price_cents)}
                 </p>
                 <p className="mt-4 text-lg text-muted-foreground">
@@ -133,8 +137,8 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
           </aside>
 
           <article className="lg:col-span-7">
-            <h2 className="text-xl font-semibold text-foreground">About this home</h2>
-            <p className="mt-4 whitespace-pre-line text-lg leading-relaxed text-muted-foreground">
+            <h2 className="text-lg font-semibold text-foreground sm:text-xl">About this home</h2>
+            <p className="mt-4 whitespace-pre-line text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
               {listing.description || "More details available on request."}
             </p>
 

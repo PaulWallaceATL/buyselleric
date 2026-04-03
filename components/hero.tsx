@@ -283,7 +283,10 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
   };
 
   return (
-    <section id="hero" className="hero relative h-screen w-full bg-background overflow-hidden">
+    <section
+      id="hero"
+      className="hero relative min-h-dvh min-h-screen w-full overflow-hidden bg-background supports-[height:100dvh]:min-h-[100dvh]"
+    >
       <div className="absolute inset-0 z-0">
         <Canvas
           className="h-full w-full opacity-50 saturate-125 md:opacity-85"
@@ -305,10 +308,10 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
       </div>
 
       <div
-        className="relative z-10 mx-auto flex h-full max-w-360 flex-col justify-start px-6 pb-16 pt-32 text-left sm:px-12 sm:pt-36 md:pt-44 md:pb-20 lg:px-24 lg:pt-48 xl:pt-52 2xl:max-w-450 3xl:max-w-550"
+        className="relative z-10 mx-auto flex h-full min-h-[inherit] max-w-360 flex-col justify-start px-6 pb-[max(4rem,env(safe-area-inset-bottom))] pt-[max(8rem,env(safe-area-inset-top)+5rem)] text-left sm:px-12 sm:pt-36 md:pt-44 md:pb-20 lg:px-24 lg:pt-48 xl:pt-52 2xl:max-w-450 3xl:max-w-550"
         style={{ perspective: "1200px" }}
       >
-        <h1 className="text-[clamp(3rem,8vw,12rem)] leading-[1.05] tracking-tight text-foreground">
+        <h1 className="text-balance text-[clamp(2.25rem,7vw,11rem)] leading-[1.06] tracking-tight text-foreground sm:text-[clamp(2.75rem,7.5vw,12rem)]">
           <span className="block overflow-hidden pb-[0.1em]">
             <motion.span
               className="block"
@@ -345,7 +348,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
         </h1>
 
         <motion.p
-          className="mt-8 max-w-md text-[clamp(1.125rem,1.5vw,1.75rem)] leading-relaxed text-foreground/80 lg:max-w-lg 2xl:max-w-xl"
+          className="mt-6 max-w-md text-pretty text-[clamp(1.05rem,2.8vw,1.65rem)] leading-relaxed text-foreground/85 sm:mt-8 lg:max-w-lg 2xl:max-w-xl"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 1, ease: [0.25, 1, 0.5, 1], delay: 1.2 }}
@@ -354,7 +357,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
           pricing conversations, and hands-on support from tour to keys.
         </motion.p>
         <motion.div
-          className="mt-10 flex flex-col gap-4 sm:flex-row sm:flex-wrap"
+          className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:gap-4"
           initial={{ y: 16, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.8, ease: [0.25, 1, 0.5, 1], delay: 1.35 }}
@@ -385,7 +388,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
       </div>
 
       <motion.div
-        className="absolute bottom-8 left-1/2 z-10 -translate-x-1/2 w-full max-w-360 px-6 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550"
+        className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-10 w-full max-w-360 -translate-x-1/2 px-6 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 1.2, delay: 2 }}

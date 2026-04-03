@@ -1,6 +1,7 @@
 import { SellHouseForm } from "@/components/sell-house-form";
 import { siteConfig } from "@/lib/config";
 import { createMetadata } from "@/lib/metadata";
+import { lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -12,19 +13,16 @@ export const metadata: Metadata = createMetadata({
 
 export default function SellPage(): ReactNode {
   return (
-    <main
-      id="main-content"
-      className="min-h-screen bg-background px-6 pb-24 pt-28 sm:px-12 lg:px-24 lg:relative lg:z-10"
-    >
-      <div className="mx-auto max-w-360 2xl:max-w-450 3xl:max-w-550">
-        <h1 className="text-4xl font-medium tracking-tight text-foreground sm:text-5xl">
+    <main id="main-content" className={pageMain}>
+      <div className={siteContainer}>
+        <h1 className={sectionTitle}>
           Sell with {siteConfig.agentName}
         </h1>
-        <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
+        <p className={`${lead} mt-4`}>
           Share a few details about your property and goals. You will get a thoughtful follow-up—no
           pressure, no spam—just a clear next step.
         </p>
-        <div className="mt-12">
+        <div className="mt-10 sm:mt-12">
           <SellHouseForm />
         </div>
       </div>

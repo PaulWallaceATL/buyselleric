@@ -158,7 +158,7 @@ function ServiceItem({ title, href, index }: { title: string; href: string; inde
     >
       <a
         href={href}
-        className="flex items-center justify-between cursor-pointer px-6 py-8 sm:px-12 md:py-10 lg:px-24"
+        className="focus-ring outline-none flex min-h-[4.5rem] cursor-pointer items-center justify-between px-6 py-8 sm:px-12 md:min-h-[5rem] md:py-10 lg:px-24"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >

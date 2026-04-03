@@ -17,7 +17,7 @@ export const metadata: Metadata = createMetadata({
 
 export default function HomePage(): ReactNode {
   return (
-    <main id="main-content" className="lg:relative lg:z-10 flex-1 bg-background">
+    <main id="main-content" className="relative z-10 w-full flex-1 bg-background">
       <Hero />
       <FeaturedListings />
       <Services />
