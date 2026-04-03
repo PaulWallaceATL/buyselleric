@@ -13,7 +13,7 @@ export function ListingCard({ listing }: { listing: ListingRow }) {
   return (
     <Link
       href={`/listings/${listing.slug}`}
-      className="group block overflow-hidden rounded-2xl border border-border bg-muted/20 transition-shadow hover:shadow-lg"
+      className="group block overflow-hidden rounded-2xl border-2 border-border bg-muted/20 shadow-sm transition-shadow hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <div className="relative aspect-4/3 w-full overflow-hidden bg-muted">
         {img ? (
@@ -24,21 +24,24 @@ export function ListingCard({ listing }: { listing: ListingRow }) {
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-full items-center justify-center text-base text-muted-foreground">
             Photo coming soon
           </div>
         )}
       </div>
-      <div className="p-5">
-        <p className="text-lg font-medium tracking-tight text-foreground">{listing.title}</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+      <div className="p-6">
+        <p className="text-xl font-semibold tracking-tight text-foreground">{listing.title}</p>
+        <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">
           {formatPriceUsd(listing.price_cents)}
         </p>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-3 text-base text-muted-foreground">
           {listing.bedrooms} bd · {listing.bathrooms} ba
           {listing.square_feet ? ` · ${listing.square_feet.toLocaleString()} sq ft` : ""}
         </p>
-        {location ? <p className="mt-1 text-sm text-muted-foreground">{location}</p> : null}
+        {location ? <p className="mt-1 text-base text-muted-foreground">{location}</p> : null}
+        <p className="mt-5 text-lg font-semibold text-ring underline-offset-4 group-hover:underline">
+          View full details →
+        </p>
       </div>
     </Link>
   );

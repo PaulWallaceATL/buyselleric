@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { adminSaveListing } from "@/app/actions/admin";
 import type { ListingRow, ListingStatus } from "@/lib/types/db";
 import { AdminListingImageRows } from "@/components/admin-listing-image-rows";
+import { ctaPrimary } from "@/lib/cta-styles";
 
 const statuses: ListingStatus[] = ["draft", "available", "pending", "sold"];
 
@@ -195,7 +196,7 @@ export function AdminListingForm({ listing }: { listing?: ListingRow }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-full bg-foreground px-8 py-3 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50 transition-opacity focus-ring outline-none"
+        className={`${ctaPrimary} disabled:opacity-50`}
       >
         {pending ? "Saving…" : listing ? "Update listing" : "Create listing"}
       </button>

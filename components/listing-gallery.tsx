@@ -10,7 +10,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
 
   if (clean.length === 0) {
     return (
-      <div className="flex aspect-4/3 w-full items-center justify-center rounded-2xl border border-dashed border-border bg-muted/30 text-muted-foreground">
+      <div className="flex aspect-4/3 w-full items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 text-lg text-muted-foreground">
         Photos coming soon
       </div>
     );
@@ -27,16 +27,17 @@ export function ListingGallery({ urls }: { urls: string[] }) {
         />
       </div>
       {clean.length > 1 ? (
-        <div className="flex gap-2 overflow-x-auto pb-1 sm:gap-3">
+        <div className="flex gap-3 overflow-x-auto pb-2 sm:gap-4">
           {clean.map((url, i) => (
             <button
               key={`${url}-${i}`}
               type="button"
               onClick={() => setActive(i)}
-              className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:h-20 sm:w-28 ${
+              aria-label={`Show photo ${i + 1} of ${clean.length}`}
+              className={`relative min-h-[52px] min-w-[4.5rem] shrink-0 overflow-hidden rounded-xl border-2 transition-all sm:min-h-20 sm:min-w-[7.5rem] ${
                 i === safeIndex
                   ? "border-ring ring-2 ring-ring/30"
-                  : "border-transparent opacity-80 hover:opacity-100"
+                  : "border-border/60 opacity-90 hover:opacity-100"
               }`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}

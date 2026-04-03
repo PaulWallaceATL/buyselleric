@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ListingCard } from "@/components/listing-card";
 import { siteConfig } from "@/lib/config";
+import { ctaPrimary } from "@/lib/cta-styles";
 import { getPublishedListings } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
@@ -40,10 +41,7 @@ export default async function ListingsPage(): Promise<ReactNode> {
             <p className="mt-2 text-sm text-muted-foreground">
               Check back soon—or tell Eric what you are looking for.
             </p>
-            <Link
-              href="/sell"
-              className="mt-6 inline-flex rounded-full bg-foreground px-6 py-3 text-sm font-medium text-background"
-            >
+            <Link href="/sell" className={`${ctaPrimary} mt-6`}>
               Start a seller conversation
             </Link>
           </div>

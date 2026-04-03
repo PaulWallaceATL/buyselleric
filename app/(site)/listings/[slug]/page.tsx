@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ListingGallery } from "@/components/listing-gallery";
 import { siteConfig } from "@/lib/config";
+import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
 import { getPublishedListingBySlug } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
@@ -58,7 +59,7 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
       className="min-h-screen bg-background pb-24 pt-24 sm:pt-28 lg:relative lg:z-10"
     >
       <div className="mx-auto max-w-6xl px-6 sm:px-12 lg:px-16">
-        <nav className="text-sm text-muted-foreground" aria-label="Breadcrumb">
+        <nav className="text-base text-muted-foreground" aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <li>
               <Link href="/" className="hover:text-foreground">
@@ -102,24 +103,21 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
                 ) : null}
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap lg:flex-col">
+              <div className="flex flex-col gap-4 lg:flex-col">
                 <Link
                   href={`mailto:${siteConfig.email}?subject=${encodeURIComponent(`Inquiry: ${listing.title}`)}`}
-                  className="inline-flex w-full items-center justify-center rounded-full bg-foreground py-3.5 text-sm font-medium text-background hover:opacity-90 sm:w-auto sm:min-w-[200px] lg:w-full"
+                  className={`${ctaPrimary} lg:w-full`}
                 >
                   Email {siteConfig.agentName}
                 </Link>
-                <Link
-                  href={`tel:${siteConfig.phoneTel}`}
-                  className="inline-flex w-full items-center justify-center rounded-full border border-border py-3.5 text-sm font-medium hover:bg-muted/40 sm:w-auto sm:min-w-[200px] lg:w-full"
-                >
+                <Link href={`tel:${siteConfig.phoneTel}`} className={`${ctaSecondary} lg:w-full`}>
                   Call {siteConfig.phoneDisplay}
                 </Link>
                 <a
                   href={siteConfig.mortgageApplicationUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center rounded-full border border-ring/50 bg-muted/30 py-3.5 text-sm font-medium text-foreground hover:border-ring hover:bg-muted/50 sm:w-auto sm:min-w-[200px] lg:w-full"
+                  className={`${ctaMortgage} lg:w-full`}
                 >
                   Apply for financing
                 </a>
@@ -135,15 +133,15 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
           </aside>
 
           <article className="lg:col-span-7">
-            <h2 className="text-lg font-medium text-foreground">About this home</h2>
-            <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-muted-foreground">
+            <h2 className="text-xl font-semibold text-foreground">About this home</h2>
+            <p className="mt-4 whitespace-pre-line text-lg leading-relaxed text-muted-foreground">
               {listing.description || "More details available on request."}
             </p>
 
             <div className="mt-12 border-t border-border pt-10">
               <Link
                 href="/listings"
-                className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                className="inline-flex min-h-12 items-center text-lg font-semibold text-foreground underline-offset-4 hover:underline"
               >
                 ← Back to all listings
               </Link>

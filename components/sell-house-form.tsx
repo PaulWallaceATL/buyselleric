@@ -2,9 +2,10 @@
 
 import { useActionState } from "react";
 import { submitSellInquiry } from "@/app/actions/sell";
+import { ctaPrimary } from "@/lib/cta-styles";
 
 function fieldClass() {
-  return "w-full rounded-xl border border-border bg-muted/20 px-4 py-3 text-foreground placeholder:text-muted-foreground focus-ring outline-none";
+  return "w-full min-h-[48px] rounded-xl border-2 border-border bg-muted/20 px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-ring outline-none";
 }
 
 export function SellHouseForm() {
@@ -122,7 +123,7 @@ export function SellHouseForm() {
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-full bg-foreground py-3.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50 transition-opacity focus-ring outline-none sm:w-auto sm:px-10"
+        className={`${ctaPrimary} disabled:opacity-50`}
       >
         {pending ? "Sending…" : "Request a consultation"}
       </button>

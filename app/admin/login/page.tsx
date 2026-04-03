@@ -1,8 +1,9 @@
 "use client";
 
+import { ctaPrimary } from "@/lib/cta-styles";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Link from "next/link";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -55,7 +56,7 @@ export default function AdminLoginPage() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-border bg-muted/30 px-4 py-3 text-foreground placeholder:text-muted-foreground focus-ring outline-none"
+              className="w-full min-h-[52px] rounded-xl border-2 border-border bg-muted/30 px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-ring outline-none"
               placeholder="Password"
               required
             />
@@ -64,13 +65,16 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-full bg-foreground py-3 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50 transition-opacity focus-ring outline-none"
+            className={`${ctaPrimary} w-full disabled:opacity-50`}
           >
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
-        <p className="text-center text-sm text-muted-foreground">
-          <Link href="/" className="underline underline-offset-4 hover:text-foreground">
+        <p className="text-center text-base text-muted-foreground">
+          <Link
+            href="/"
+            className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 hover:text-foreground"
+          >
             Back to site
           </Link>
         </p>

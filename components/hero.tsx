@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { siteConfig } from "@/lib/config";
+import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
@@ -350,28 +351,22 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
           pricing conversations, and hands-on support from tour to keys.
         </motion.p>
         <motion.div
-          className="mt-10 flex flex-wrap gap-3"
+          className="mt-10 flex flex-col gap-4 sm:flex-row sm:flex-wrap"
           initial={{ y: 16, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.8, ease: [0.25, 1, 0.5, 1], delay: 1.35 }}
         >
-          <Link
-            href="/listings"
-            className="inline-flex items-center justify-center rounded-full bg-foreground px-6 py-3 text-sm font-medium text-background hover:opacity-90 transition-opacity"
-          >
+          <Link href="/listings" className={ctaPrimary}>
             View listings
           </Link>
-          <Link
-            href="/sell"
-            className="inline-flex items-center justify-center rounded-full border border-foreground/20 px-6 py-3 text-sm font-medium text-foreground hover:bg-foreground/5 transition-colors"
-          >
+          <Link href="/sell" className={ctaSecondary}>
             Sell your home
           </Link>
           <a
             href={siteConfig.mortgageApplicationUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center rounded-full border border-ring/60 bg-background/50 px-6 py-3 text-sm font-medium text-foreground backdrop-blur-sm hover:border-ring hover:bg-muted/40 transition-colors"
+            className={ctaMortgage}
           >
             Apply now
           </a>

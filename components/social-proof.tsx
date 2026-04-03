@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { siteConfig } from "@/lib/config";
+import { ctaPrimary } from "@/lib/cta-styles";
 import { siteImages } from "@/lib/site-images";
 
 if (typeof window !== "undefined") {
@@ -97,10 +98,7 @@ export function SocialProof() {
           <h2 className="text-3xl lg:text-4xl font-medium tracking-tight text-foreground">
             Clients who made a move
           </h2>
-          <Link
-            href="/listings"
-            className="hidden sm:inline-flex items-center justify-center px-6 py-3 rounded-full bg-foreground text-background text-sm font-medium transition-opacity hover:opacity-80"
-          >
+          <Link href="/listings" className={`${ctaPrimary} hidden sm:inline-flex`}>
             See homes
           </Link>
         </div>
@@ -146,9 +144,9 @@ export function SocialProof() {
               <span className="text-xl font-semibold text-foreground">{siteConfig.primaryMarket}</span>
               <Link
                 href="/listings"
-                className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
+                className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
-                <ArrowIcon className="w-4 h-4" />
+                <ArrowIcon className="w-5 h-5" />
               </Link>
             </div>
           </div>
@@ -162,9 +160,9 @@ export function SocialProof() {
               <span className="text-sm font-medium text-foreground">Seller story</span>
               <Link
                 href="/sell"
-                className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
+                className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
-                <ArrowIcon className="w-4 h-4" />
+                <ArrowIcon className="w-5 h-5" />
               </Link>
             </div>
           </div>
@@ -178,9 +176,9 @@ export function SocialProof() {
               <span className="text-sm font-medium text-foreground">Clarity</span>
               <Link
                 href="/#contact"
-                className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
+                className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
-                <ArrowIcon className="w-4 h-4" />
+                <ArrowIcon className="w-5 h-5" />
               </Link>
             </div>
           </div>
@@ -208,9 +206,9 @@ export function SocialProof() {
               <span className="text-xl font-semibold text-foreground">The Okonkwo family</span>
               <Link
                 href="/sell"
-                className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
+                className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
-                <ArrowIcon className="w-4 h-4" />
+                <ArrowIcon className="w-5 h-5" />
               </Link>
             </div>
           </div>

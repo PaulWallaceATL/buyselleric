@@ -86,7 +86,7 @@ export function Header() {
           <div className="mx-auto flex max-w-360 items-center justify-between gap-4 2xl:max-w-450 3xl:max-w-550">
             <motion.a
               href="/"
-              className="flex h-12 sm:h-16 font-medium tracking-tight text-base sm:text-xl items-center justify-center rounded-xl sm:rounded-2xl text-background bg-foreground/88 backdrop-blur-lg px-4 sm:px-5 shadow-lg shadow-foreground/10 shrink-0"
+              className="flex min-h-14 sm:min-h-[4.25rem] items-center justify-center rounded-xl sm:rounded-2xl bg-foreground/88 px-5 py-3 text-lg font-semibold tracking-tight text-background shadow-lg shadow-foreground/10 backdrop-blur-lg sm:px-7 sm:text-2xl shrink-0"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
@@ -96,14 +96,14 @@ export function Header() {
               {siteConfig.brandSlug}
             </motion.a>
 
-            <div className="relative h-12 sm:h-16">
+            <div className="relative min-h-14 sm:min-h-[4.25rem]">
               <motion.div
-                className="absolute top-0 right-0 w-48 sm:w-60 bg-foreground/88 backdrop-blur-lg rounded-xl sm:rounded-2xl shadow-lg shadow-foreground/10 overflow-hidden"
+                className="absolute top-0 right-0 w-52 sm:w-64 bg-foreground/88 backdrop-blur-lg rounded-xl sm:rounded-2xl shadow-lg shadow-foreground/10 overflow-hidden"
                 initial={{ opacity: 0, y: -20 }}
                 animate={{
                   opacity: 1,
                   y: 0,
-                  height: isMenuOpen ? "auto" : isMobile ? 48 : 64,
+                  height: isMenuOpen ? "auto" : isMobile ? 56 : 68,
                 }}
                 transition={{
                   duration: 0.4,
@@ -114,29 +114,29 @@ export function Header() {
                 <button
                   type="button"
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  className="flex h-12 sm:h-16 w-full items-center justify-between gap-4 px-4 sm:px-5 text-background"
+                  className="flex min-h-14 w-full items-center justify-between gap-4 px-4 py-2 text-background sm:min-h-[4.25rem] sm:px-5"
                 >
-                  <span className="text-base sm:text-lg font-medium">{activeSection}</span>
+                  <span className="text-lg font-semibold sm:text-xl">{activeSection}</span>
                   <motion.div
-                    className="relative h-5 w-5 sm:h-6 sm:w-6"
+                    className="relative h-6 w-6 sm:h-7 sm:w-7"
                     animate={{ rotate: isMenuOpen ? 45 : 0 }}
                     transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <span className="absolute left-1/2 top-0 h-5 sm:h-6 w-[1.5px] -translate-x-1/2 bg-current" />
-                    <span className="absolute left-0 top-1/2 h-[1.5px] w-5 sm:w-6 -translate-y-1/2 bg-current" />
+                    <span className="absolute left-1/2 top-0 h-6 sm:h-7 w-[2px] -translate-x-1/2 bg-current" />
+                    <span className="absolute left-0 top-1/2 h-[2px] w-6 sm:w-7 -translate-y-1/2 bg-current" />
                   </motion.div>
                 </button>
 
                 <AnimatePresence>
                   {isMenuOpen && (
                     <motion.nav
-                      className="px-5 pb-5"
+                      className="px-4 pb-5 sm:px-5"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.2, delay: 0.1 }}
                     >
-                      <ul className="flex flex-col gap-1">
+                      <ul className="flex flex-col gap-0.5">
                         {menuItems.map((item, index) => (
                           <motion.li
                             key={item.label}
@@ -155,7 +155,7 @@ export function Header() {
                                 setIsMenuOpen(false);
                                 setActiveSection(item.label);
                               }}
-                                className={`block py-1.5 text-lg font-medium transition-colors hover:text-background ${
+                                className={`block min-h-12 py-3 text-xl font-semibold transition-colors hover:text-background ${
                                 activeSection === item.label
                                   ? "text-background underline underline-offset-4"
                                   : "text-background/65"

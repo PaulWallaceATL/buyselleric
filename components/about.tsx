@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { siteConfig } from "@/lib/config";
+import { ctaPrimary } from "@/lib/cta-styles";
 import { siteImages } from "@/lib/site-images";
 
 if (typeof window !== "undefined") {
@@ -103,7 +104,7 @@ export function About() {
         <Link
           ref={ctaRef}
           href="/sell"
-          className="inline-flex items-center justify-center mt-8 px-6 py-3 rounded-full bg-foreground text-background text-lg tracking-tight font-medium transition-opacity hover:opacity-80"
+          className={`${ctaPrimary} mt-8`}
         >
           Talk about your timeline
         </Link>

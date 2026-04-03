@@ -64,10 +64,11 @@ body {
   left: -9999px;
   top: 1rem;
   z-index: 9999;
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1.25rem;
   background: var(--background);
   border: 2px solid var(--ring);
-  border-radius: 0.375rem;
+  border-radius: 0.5rem;
+  font-size: 1.125rem;
   font-weight: 600;
   text-decoration: none;
   color: var(--foreground);

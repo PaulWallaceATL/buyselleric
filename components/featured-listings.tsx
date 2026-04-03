@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ListingCard } from "@/components/listing-card";
-import { getPublishedListings } from "@/lib/listings-queries";
 import { siteConfig } from "@/lib/config";
+import { ctaMutedOutline, ctaPrimary } from "@/lib/cta-styles";
+import { getPublishedListings } from "@/lib/listings-queries";
 
 export async function FeaturedListings() {
   const listings = await getPublishedListings();
@@ -22,10 +23,7 @@ export async function FeaturedListings() {
               A curated look at current opportunities. Full details and more listings are one click away.
             </p>
           </div>
-          <Link
-            href="/listings"
-            className="inline-flex shrink-0 items-center justify-center rounded-full bg-foreground px-6 py-3 text-sm font-medium text-background transition-opacity hover:opacity-90"
-          >
+          <Link href="/listings" className={ctaPrimary}>
             View all listings
           </Link>
         </div>
@@ -36,10 +34,7 @@ export async function FeaturedListings() {
             <p className="mt-2 text-sm text-muted-foreground">
               Connect Supabase and add homes from the admin panel.
             </p>
-            <Link
-              href="/sell"
-              className="mt-6 inline-flex rounded-full border border-border px-6 py-2.5 text-sm font-medium hover:bg-muted/40"
-            >
+            <Link href="/sell" className={`${ctaMutedOutline} mt-6`}>
               Sell with Eric
             </Link>
           </div>

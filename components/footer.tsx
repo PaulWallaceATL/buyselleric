@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { siteConfig } from "@/lib/config";
+import { ctaFooterOutline, ctaFooterPrimary } from "@/lib/cta-styles";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -30,18 +31,12 @@ export function Footer() {
           {siteConfig.email}
         </a>
 
-        <div className="mt-10 flex flex-wrap justify-center gap-4 sm:justify-start">
-          <Link
-            href={mail}
-            className="inline-flex items-center justify-center px-8 py-4 text-lg font-medium rounded-full bg-background text-foreground hover:bg-background/90 transition-colors"
-          >
+        <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:justify-start">
+          <Link href={mail} className={ctaFooterPrimary}>
             Email Eric
           </Link>
-          <a
-            href={`tel:${siteConfig.phoneTel}`}
-            className="inline-flex items-center justify-center px-8 py-4 text-lg font-medium rounded-full border border-background/30 text-background hover:bg-background/10 transition-colors"
-          >
-            {siteConfig.phoneDisplay}
+          <a href={`tel:${siteConfig.phoneTel}`} className={ctaFooterOutline}>
+            Call {siteConfig.phoneDisplay}
           </a>
         </div>
       </div>
@@ -55,23 +50,23 @@ export function Footer() {
           <div>
             <span className="text-4xl font-medium tracking-tight">{siteConfig.brandSlug}</span>
             <p className="mt-4 text-background/60 text-2xl sm:text-4xl">{siteConfig.tagline}</p>
-            <p className="mt-4 text-sm text-background/50">
+            <p className="mt-4 text-base text-background/55">
               {siteConfig.agentName} · {siteConfig.license}
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-16 lg:gap-24">
             <div>
-              <h4 className="text-sm font-medium text-background/60 mb-6">Areas served</h4>
+              <h4 className="text-base font-semibold text-background/70 mb-6">Areas served</h4>
               <div className="mb-6">
                 <p className="font-medium mb-1">{siteConfig.primaryMarket}</p>
-                <p className="text-background/60 text-sm">Neighborhood tours by appointment</p>
+                <p className="text-background/60 text-base">Neighborhood tours by appointment</p>
               </div>
             </div>
 
             <div>
-              <h4 className="text-sm font-medium text-background/60 mb-6">Services</h4>
-              <ul className="space-y-3">
+              <h4 className="text-base font-semibold text-background/70 mb-6">Services</h4>
+              <ul className="space-y-3 text-base">
                 <li>
                   <span className="text-background">Buyer tours & offers</span>
                 </li>
@@ -88,13 +83,13 @@ export function Footer() {
             </div>
 
             <div>
-              <h4 className="text-sm font-medium text-background/60 mb-6">Navigation</h4>
+              <h4 className="text-base font-semibold text-background/70 mb-6">Navigation</h4>
               <ul className="space-y-3">
                 {navLinks.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-background hover:text-background/60 transition-colors"
+                      className="inline-flex min-h-11 items-center text-lg text-background hover:text-background/75 transition-colors py-1"
                     >
                       {link.label}
                     </Link>
@@ -113,14 +108,14 @@ export function Footer() {
               <Link
                 key={link.label}
                 href={link.href}
-                className="text-sm text-background/60 hover:text-background transition-colors"
+                className="min-h-11 inline-flex items-center text-base text-background/70 hover:text-background transition-colors py-1"
               >
                 {link.label}
               </Link>
             ))}
           </div>
 
-          <p className="text-sm text-background/40">
+          <p className="text-base text-background/45">
             © {new Date().getFullYear()} {siteConfig.name} · {siteConfig.agentName}
           </p>
         </div>

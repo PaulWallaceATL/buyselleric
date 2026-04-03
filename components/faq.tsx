@@ -74,15 +74,17 @@ function FaqItem({ question, answer, index }: { question: string; answer: string
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-6 text-left cursor-pointer"
+        aria-expanded={isOpen}
+        className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 p-5 text-left sm:min-h-16 sm:p-6"
       >
-        <span className="text-lg font-medium text-foreground pr-4">{question}</span>
+        <span className="text-lg font-semibold text-foreground sm:text-xl">{question}</span>
         <span
-          className="relative w-6 h-6 shrink-0 text-foreground transition-transform duration-300"
+          className="relative h-10 w-10 shrink-0 rounded-full border-2 border-foreground/15 bg-muted/30 text-foreground transition-transform duration-300"
           style={{ transform: isOpen ? "rotate(45deg)" : "rotate(0deg)" }}
+          aria-hidden
         >
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-[1.5px] bg-current" />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1.5px] h-4 bg-current" />
+          <span className="absolute left-1/2 top-1/2 h-[2px] w-5 -translate-x-1/2 -translate-y-1/2 bg-current" />
+          <span className="absolute left-1/2 top-1/2 h-5 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-current" />
         </span>
       </button>
       <div
@@ -90,7 +92,9 @@ function FaqItem({ question, answer, index }: { question: string; answer: string
         style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
-          <p className="px-6 pb-6 text-foreground/70 leading-relaxed">{answer}</p>
+          <p className="px-5 pb-6 text-base leading-relaxed text-foreground/80 sm:px-6 sm:text-lg">
+            {answer}
+          </p>
         </div>
       </div>
     </div>
