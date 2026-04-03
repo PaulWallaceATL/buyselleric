@@ -1,5 +1,25 @@
 import type { NextConfig } from "next";
 
+function supabaseStorageImagePattern():
+  | { protocol: "https"; hostname: string; pathname: string }
+  | undefined {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    return {
+      protocol: "https",
+      hostname: new URL(raw).hostname,
+      pathname: "/storage/v1/object/public/**",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+const supabasePattern = supabaseStorageImagePattern();
+
 const nextConfig: NextConfig = {
   // Disable source maps in production to protect code
   productionBrowserSourceMaps: false,
@@ -14,6 +34,7 @@ const nextConfig: NextConfig = {
         hostname: "images.unsplash.com",
         pathname: "/**",
       },
+      ...(supabasePattern ? [supabasePattern] : []),
     ],
   },
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { adminUploadListingImage } from "@/app/actions/admin";
 import { canPreviewImageUrl } from "@/lib/form-images";
 
 const inputClass =
@@ -14,6 +15,25 @@ export function AdminListingImageRows({ initialUrls }: Props) {
   const [rows, setRows] = useState<string[]>(() =>
     initialUrls.length > 0 ? [...initialUrls] : [""]
   );
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleFile(i: number, file: File | undefined) {
+    if (!file) {
+      return;
+    }
+    setUploadingIndex(i);
+    setUploadError(null);
+    const fd = new FormData();
+    fd.set("file", file);
+    const res = await adminUploadListingImage(fd);
+    setUploadingIndex(null);
+    if (res.ok) {
+      updateRow(i, res.url);
+    } else {
+      setUploadError(res.message);
+    }
+  }
 
   function updateRow(i: number, v: string) {
     setRows((prev) => prev.map((x, j) => (j === i ? v : x)));
@@ -49,8 +69,14 @@ export function AdminListingImageRows({ initialUrls }: Props) {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         The <strong className="text-foreground">first</strong> image is the cover on cards and listing pages.
-        Use arrows to change order.
+        Use arrows to change order. Paste a URL or upload a file (stored in Supabase under the{" "}
+        <code className="text-foreground">listing-images</code> bucket).
       </p>
+      {uploadError ? (
+        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          {uploadError}
+        </p>
+      ) : null}
       <div className="space-y-4">
         {rows.map((url, i) => (
           <div
@@ -102,13 +128,33 @@ export function AdminListingImageRows({ initialUrls }: Props) {
                 className={inputClass}
                 autoComplete="off"
               />
-              <button
-                type="button"
-                onClick={() => removeRow(i)}
-                className="mt-2 text-sm text-red-600 underline-offset-2 hover:underline dark:text-red-400"
-              >
-                Remove
-              </button>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <input
+                  id={`image_file_${i}`}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={uploadingIndex !== null}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    void handleFile(i, f);
+                    e.target.value = "";
+                  }}
+                />
+                <label
+                  htmlFor={`image_file_${i}`}
+                  className="inline-flex cursor-pointer rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {uploadingIndex === i ? "Uploading…" : "Upload file"}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  className="text-sm text-red-600 underline-offset-2 hover:underline dark:text-red-400"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           </div>
         ))}

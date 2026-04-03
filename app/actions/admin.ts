@@ -285,3 +285,63 @@ export async function adminUpdateSubmissionStatus(
   revalidatePath("/admin/submissions");
   return { ok: true };
 }
+
+const MAX_LISTING_IMAGE_BYTES = 5 * 1024 * 1024;
+const LISTING_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+function listingImageExt(contentType: string): string {
+  switch (contentType) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return "bin";
+  }
+}
+
+export async function adminUploadListingImage(
+  formData: FormData
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const client = createSupabaseAdminClient();
+  if (!client) {
+    return { ok: false, message: "Supabase admin is not configured." };
+  }
+
+  const file = formData.get("file");
+  if (!file || !(file instanceof File)) {
+    return { ok: false, message: "No file uploaded." };
+  }
+  if (file.size > MAX_LISTING_IMAGE_BYTES) {
+    return { ok: false, message: "Image must be 5MB or smaller." };
+  }
+  if (!LISTING_IMAGE_MIME.has(file.type)) {
+    return { ok: false, message: "Use JPEG, PNG, WebP, or GIF." };
+  }
+
+  const ext = listingImageExt(file.type);
+  const path = `listings/${crypto.randomUUID()}.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const { error } = await client.storage.from("listing-images").upload(path, buffer, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) {
+    console.error("adminUploadListingImage", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  const { data } = client.storage.from("listing-images").getPublicUrl(path);
+  return { ok: true, url: data.publicUrl };
+}

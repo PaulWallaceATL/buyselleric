@@ -304,7 +304,10 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
         </Canvas>
       </div>
 
-      <div className="relative z-10 mx-auto flex h-full max-w-360 flex-col justify-start pt-44 px-6 text-left sm:px-12 sm:pt-48 md:justify-center md:pt-0 lg:px-24 2xl:max-w-450 3xl:max-w-550" style={{ perspective: "1200px" }}>
+      <div
+        className="relative z-10 mx-auto flex h-full max-w-360 flex-col justify-start px-6 pb-16 pt-32 text-left sm:px-12 sm:pt-36 md:pt-44 md:pb-20 lg:px-24 lg:pt-48 xl:pt-52 2xl:max-w-450 3xl:max-w-550"
+        style={{ perspective: "1200px" }}
+      >
         <h1 className="text-[clamp(3rem,8vw,12rem)] leading-[1.05] tracking-tight text-foreground">
           <span className="block overflow-hidden pb-[0.1em]">
             <motion.span
