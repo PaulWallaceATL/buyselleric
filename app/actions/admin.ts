@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
+import { parseListingImageUrlsFromForm } from "@/lib/form-images";
 import { slugify } from "@/lib/format";
 import {
   adminGetListing,
@@ -61,10 +62,7 @@ export async function adminCreateListing(
   const postal_code = String(formData.get("postal_code") ?? "").trim();
   const status = String(formData.get("status") ?? "draft") as ListingStatus;
   const is_published = formData.get("is_published") === "on";
-  const imageLines = String(formData.get("image_urls") ?? "")
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const imageLines = parseListingImageUrlsFromForm(formData);
 
   if (!title) {
     return { ok: false, message: "Title is required." };
@@ -159,10 +157,7 @@ export async function adminUpdateListing(
   const postal_code = String(formData.get("postal_code") ?? "").trim();
   const status = String(formData.get("status") ?? "draft") as ListingStatus;
   const is_published = formData.get("is_published") === "on";
-  const imageLines = String(formData.get("image_urls") ?? "")
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const imageLines = parseListingImageUrlsFromForm(formData);
 
   if (!title) {
     return { ok: false, message: "Title is required." };

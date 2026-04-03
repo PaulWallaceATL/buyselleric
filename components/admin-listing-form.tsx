@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { adminSaveListing } from "@/app/actions/admin";
 import type { ListingRow, ListingStatus } from "@/lib/types/db";
+import { AdminListingImageRows } from "@/components/admin-listing-image-rows";
 
 const statuses: ListingStatus[] = ["draft", "available", "pending", "sold"];
 
@@ -15,7 +16,7 @@ export function AdminListingForm({ listing }: { listing?: ListingRow }) {
 
   const priceUsd =
     listing !== undefined ? (listing.price_cents / 100).toFixed(0) : "";
-  const imagesDefault = listing?.image_urls?.join("\n") ?? "";
+  const initialImageUrls = listing?.image_urls ?? [];
 
   return (
     <form action={formAction} className="max-w-2xl space-y-6">
@@ -177,17 +178,8 @@ export function AdminListingForm({ listing }: { listing?: ListingRow }) {
       </div>
 
       <div>
-        <label htmlFor="image_urls" className="mb-1 block text-sm font-medium">
-          Image URLs (one per line)
-        </label>
-        <textarea
-          id="image_urls"
-          name="image_urls"
-          rows={4}
-          placeholder="https://…"
-          defaultValue={imagesDefault}
-          className={`${fieldClass()} min-h-[100px] resize-y font-mono text-sm`}
-        />
+        <span className="mb-3 block text-sm font-medium">Photos</span>
+        <AdminListingImageRows initialUrls={initialImageUrls} />
       </div>
 
       <label className="flex items-center gap-2 text-sm">
