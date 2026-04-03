@@ -370,6 +370,14 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
           >
             Apply now
           </a>
+          <a
+            href={siteConfig.mortgageApplicationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={ctaMortgage}
+          >
+            Refinance
+          </a>
         </motion.div>
       </div>
 
