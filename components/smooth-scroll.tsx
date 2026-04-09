@@ -1,77 +1,91 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import Lenis from "lenis";
 import { features } from "@/lib/config";
-
-const LENIS_OPTIONS = {
-  duration: 1.6,
-  easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-  orientation: "vertical" as const,
-  gestureOrientation: "vertical" as const,
-  smoothWheel: true,
-  wheelMultiplier: 1,
-  touchMultiplier: 2,
-};
 
 export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
   useEffect(() => {
     if (!features.smoothScroll) return;
 
     const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
+      "(prefers-reduced-motion: reduce)",
     ).matches;
-
     if (prefersReducedMotion) return;
 
-    const lenis = new Lenis(LENIS_OPTIONS);
+    let cancelled = false;
 
-    function raf(time: number) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      import("lenis").then(({ default: Lenis }) => {
+        if (cancelled) return;
 
-    requestAnimationFrame(raf);
+        const lenis = new Lenis({
+          duration: 1.6,
+          easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+          orientation: "vertical" as const,
+          gestureOrientation: "vertical" as const,
+          smoothWheel: true,
+          wheelMultiplier: 1,
+          touchMultiplier: 2,
+        });
 
-    function handleAnchorClick(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      const anchor = target.closest('a[href^="#"]');
-      if (!anchor) return;
-
-      const href = anchor.getAttribute("href");
-      if (!href) return;
-
-      e.preventDefault();
-
-      if (href === "#") {
-        lenis.scrollTo(0, { offset: 0 });
-        return;
-      }
-
-      if (href === "#contact") {
-        const contact = document.getElementById("contact");
-        if (contact) {
-          // Align top of footer (email block) into view — not document bottom, which clips the headline.
-          lenis.scrollTo(contact, { offset: -24 });
-          return;
+        function raf(time: number) {
+          lenis.raf(time);
+          requestAnimationFrame(raf);
         }
-        lenis.scrollTo("bottom", { offset: 0 });
-        return;
-      }
+        requestAnimationFrame(raf);
 
-      const element = document.querySelector(href);
-      if (!element) return;
+        function handleAnchorClick(e: MouseEvent) {
+          const target = e.target as HTMLElement;
+          const anchor = target.closest('a[href^="#"]');
+          if (!anchor) return;
 
-      lenis.scrollTo(element as HTMLElement, { offset: -100 });
-    }
+          const href = anchor.getAttribute("href");
+          if (!href) return;
 
-    document.addEventListener("click", handleAnchorClick);
+          e.preventDefault();
+
+          if (href === "#") {
+            lenis.scrollTo(0, { offset: 0 });
+            return;
+          }
+
+          if (href === "#contact") {
+            const contact = document.getElementById("contact");
+            if (contact) {
+              lenis.scrollTo(contact, { offset: -24 });
+              return;
+            }
+            lenis.scrollTo("bottom", { offset: 0 });
+            return;
+          }
+
+          const element = document.querySelector(href);
+          if (!element) return;
+          lenis.scrollTo(element as HTMLElement, { offset: -100 });
+        }
+
+        document.addEventListener("click", handleAnchorClick);
+
+        window.__lenisCleanup = () => {
+          document.removeEventListener("click", handleAnchorClick);
+          lenis.destroy();
+        };
+      });
+    }, 2000);
 
     return () => {
-      document.removeEventListener("click", handleAnchorClick);
-      lenis.destroy();
+      cancelled = true;
+      clearTimeout(timer);
+      window.__lenisCleanup?.();
     };
   }, []);
 
   return <>{children}</>;
+}
+
+declare global {
+  interface Window {
+    __lenisCleanup?: () => void;
+  }
 }

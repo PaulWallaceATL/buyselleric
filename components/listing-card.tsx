@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { formatPriceUsd } from "@/lib/format";
 import type { ListingRow } from "@/lib/types/db";
@@ -17,11 +18,13 @@ export function ListingCard({ listing }: { listing: ListingRow }) {
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted sm:aspect-4/3">
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element -- user-supplied listing URLs
-          <img
+          <Image
             src={img}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            alt={listing.title ?? ""}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            loading="lazy"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-base text-muted-foreground">

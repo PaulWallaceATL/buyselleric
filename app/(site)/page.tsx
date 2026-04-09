@@ -1,13 +1,16 @@
-import { About } from "@/components/about";
-import { Faq } from "@/components/faq";
 import { FeaturedListings } from "@/components/featured-listings";
-import { Hero } from "@/components/hero";
-import { Services } from "@/components/services";
-import { SocialProof } from "@/components/social-proof";
+import { HeroLoader } from "@/components/hero-loader";
+import { LazySection } from "@/components/lazy-section";
 import { siteConfig } from "@/lib/config";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
+
+const Services = dynamic(() => import("@/components/services").then((m) => ({ default: m.Services })));
+const About = dynamic(() => import("@/components/about").then((m) => ({ default: m.About })));
+const SocialProof = dynamic(() => import("@/components/social-proof").then((m) => ({ default: m.SocialProof })));
+const Faq = dynamic(() => import("@/components/faq").then((m) => ({ default: m.Faq })));
 
 export const metadata: Metadata = createMetadata({
   title: `${siteConfig.name} · ${siteConfig.agentName}`,
@@ -18,12 +21,20 @@ export const metadata: Metadata = createMetadata({
 export default function HomePage(): ReactNode {
   return (
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background">
-      <Hero />
+      <HeroLoader />
       <FeaturedListings />
-      <Services />
-      <About />
-      <SocialProof />
-      <Faq />
+      <LazySection>
+        <Services />
+      </LazySection>
+      <LazySection>
+        <About />
+      </LazySection>
+      <LazySection>
+        <SocialProof />
+      </LazySection>
+      <LazySection>
+        <Faq />
+      </LazySection>
     </main>
   );
 }

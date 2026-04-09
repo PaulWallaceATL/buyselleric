@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 export function ListingGallery({ urls }: { urls: string[] }) {
@@ -19,11 +20,13 @@ export function ListingGallery({ urls }: { urls: string[] }) {
   return (
     <div className="space-y-4">
       <div className="relative aspect-4/3 w-full overflow-hidden rounded-2xl bg-muted shadow-md sm:aspect-21/9 sm:max-h-[min(70vh,720px)] sm:min-h-[280px] sm:rounded-3xl lg:min-h-[320px]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={main}
+        <Image
+          src={main!}
           alt=""
-          className="h-full w-full object-cover"
+          fill
+          sizes="(max-width: 768px) 100vw, 80vw"
+          className="object-cover"
+          priority
         />
       </div>
       {clean.length > 1 ? (
@@ -40,8 +43,14 @@ export function ListingGallery({ urls }: { urls: string[] }) {
                   : "border-border/60 opacity-90 hover:opacity-100"
               }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="" className="h-full w-full object-cover" />
+              <Image
+                src={url}
+                alt=""
+                fill
+                sizes="120px"
+                className="object-cover"
+                loading="lazy"
+              />
             </button>
           ))}
         </div>

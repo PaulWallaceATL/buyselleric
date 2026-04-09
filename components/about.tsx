@@ -92,7 +92,7 @@ export function About() {
             fill
             className="object-cover"
             sizes="(max-width: 1024px) 100vw, 1200px"
-            priority
+            loading="lazy"
           />
         </div>
 
