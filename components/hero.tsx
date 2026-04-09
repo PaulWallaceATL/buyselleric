@@ -1,7 +1,6 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { motion } from "motion/react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { siteConfig } from "@/lib/config";
@@ -313,54 +312,39 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
       >
         <h1 className="text-balance text-[clamp(2.25rem,7vw,11rem)] leading-[1.06] tracking-tight text-foreground sm:text-[clamp(2.75rem,7.5vw,12rem)]">
           <span className="block overflow-hidden pb-[0.1em]">
-            <motion.span
-              className="block"
-              initial={{ y: "120%", rotateX: -90, z: -200, opacity: 0 }}
-              animate={{ y: 0, rotateX: 0, z: 0, opacity: 1 }}
-              transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+            <span
+              className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.3s_both]"
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
               Find the home
-            </motion.span>
+            </span>
           </span>
           <span className="block overflow-hidden pb-[0.1em]">
-            <motion.span
-              className="block"
-              initial={{ y: "120%", rotateX: -90, z: -200, opacity: 0 }}
-              animate={{ y: 0, rotateX: 0, z: 0, opacity: 1 }}
-              transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1], delay: 0.5 }}
+            <span
+              className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.5s_both]"
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
               that fits your life—
-            </motion.span>
+            </span>
           </span>
           <span className="block overflow-hidden pb-[0.1em]">
-            <motion.span
-              className="block"
-              initial={{ y: "120%", rotateX: -90, z: -200, opacity: 0 }}
-              animate={{ y: 0, rotateX: 0, z: 0, opacity: 1 }}
-              transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1], delay: 0.7 }}
+            <span
+              className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.7s_both]"
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
               <em className="font-serif">or sell with a plan.</em>
-            </motion.span>
+            </span>
           </span>
         </h1>
 
-        <motion.p
-          className="mt-6 max-w-md text-pretty text-[clamp(1.05rem,2.8vw,1.65rem)] leading-relaxed text-foreground/85 sm:mt-8 lg:max-w-lg 2xl:max-w-xl"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 1, ease: [0.25, 1, 0.5, 1], delay: 1.2 }}
+        <p
+          className="mt-6 max-w-md text-pretty text-[clamp(1.05rem,2.8vw,1.65rem)] leading-relaxed text-foreground/85 sm:mt-8 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]"
         >
           Eric Adams is your partner for buying and selling real estate—local insight, honest
           pricing conversations, and hands-on support from tour to keys.
-        </motion.p>
-        <motion.div
-          className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:gap-4"
-          initial={{ y: 16, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.8, ease: [0.25, 1, 0.5, 1], delay: 1.35 }}
+        </p>
+        <div
+          className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:gap-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.35s_both]"
         >
           <Link href="/listings" className={ctaPrimary}>
             View listings
@@ -384,19 +368,16 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
           >
             Refinance
           </a>
-        </motion.div>
+        </div>
       </div>
 
-      <motion.div
-        className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-10 w-full max-w-360 -translate-x-1/2 px-6 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1.2, delay: 2 }}
+      <div
+        className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-10 w-full max-w-360 -translate-x-1/2 px-6 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550 animate-[fadeIn_1.2s_ease_2s_both]"
       >
         <span className="text-lg tracking-tight font-medium text-foreground/80">
           Scroll
         </span>
-      </motion.div>
+      </div>
     </section>
   );
 }
