@@ -307,7 +307,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
       </div>
 
       <div
-        className="relative z-10 mx-auto flex h-full min-h-[inherit] max-w-360 flex-col justify-start px-6 pb-[max(4rem,env(safe-area-inset-bottom))] pt-[max(8rem,env(safe-area-inset-top)+5rem)] text-left sm:px-12 sm:pt-36 md:pt-44 md:pb-20 lg:px-24 lg:pt-48 xl:pt-52 2xl:max-w-450 3xl:max-w-550"
+        className="relative z-10 mx-auto flex h-full min-h-[inherit] max-w-360 flex-col justify-center px-6 pb-[max(5rem,env(safe-area-inset-bottom)+2rem)] pt-[max(6rem,env(safe-area-inset-top)+4rem)] text-left sm:px-12 sm:pt-28 md:pb-24 lg:px-24 lg:pt-32 2xl:max-w-450 3xl:max-w-550"
         style={{ perspective: "1200px" }}
       >
         <h1 className="text-balance text-[clamp(2.25rem,7vw,11rem)] leading-[1.06] tracking-tight text-foreground sm:text-[clamp(2.75rem,7.5vw,12rem)]">
