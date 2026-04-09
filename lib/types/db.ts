@@ -15,6 +15,8 @@ export interface ListingRow {
   city: string;
   state: string;
   postal_code: string;
+  latitude: number | null;
+  longitude: number | null;
   status: ListingStatus;
   is_published: boolean;
   image_urls: string[];

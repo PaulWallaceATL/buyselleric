@@ -1,6 +1,7 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { HeroSearch } from "@/components/hero-search";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { siteConfig } from "@/lib/config";
@@ -338,13 +339,16 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
         </h1>
 
         <p
-          className="mt-6 max-w-md text-pretty text-[clamp(1.05rem,2.8vw,1.65rem)] leading-relaxed text-foreground/85 sm:mt-8 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]"
+          className="mt-4 max-w-md text-pretty text-[clamp(1rem,2.5vw,1.45rem)] leading-relaxed text-foreground/85 sm:mt-6 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]"
         >
           Eric Adams is your partner for buying and selling real estate—local insight, honest
           pricing conversations, and hands-on support from tour to keys.
         </p>
+        <div className="mt-6 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-8">
+          <HeroSearch />
+        </div>
         <div
-          className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:gap-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.35s_both]"
+          className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap sm:gap-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.5s_both]"
         >
           <Link href="/listings" className={ctaPrimary}>
             View listings

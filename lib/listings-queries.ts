@@ -17,6 +17,26 @@ export async function getPublishedListings(): Promise<ListingRow[]> {
   return (data ?? []) as ListingRow[];
 }
 
+export async function searchListings(query: string): Promise<ListingRow[]> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return [];
+
+  const term = `%${query.trim()}%`;
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .or(
+      `address_line.ilike.${term},city.ilike.${term},state.ilike.${term},postal_code.ilike.${term},title.ilike.${term}`,
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("searchListings", error.message);
+    return [];
+  }
+  return (data ?? []) as ListingRow[];
+}
+
 export async function getPublishedListingBySlug(slug: string): Promise<ListingRow | null> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
