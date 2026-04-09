@@ -308,10 +308,10 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
       </div>
 
       <div
-        className="relative z-10 mx-auto flex h-full min-h-[inherit] max-w-360 flex-col justify-center px-6 pb-[max(5rem,env(safe-area-inset-bottom)+2rem)] pt-[max(6rem,env(safe-area-inset-top)+4rem)] text-left sm:px-12 sm:pt-28 md:pb-24 lg:px-24 lg:pt-32 2xl:max-w-450 3xl:max-w-550"
+        className="relative z-10 mx-auto flex h-full min-h-[inherit] max-w-360 flex-col justify-center px-6 pb-[max(2.5rem,env(safe-area-inset-bottom)+1rem)] pt-[max(5.5rem,env(safe-area-inset-top)+3.5rem)] text-left sm:px-12 sm:pt-24 md:pb-16 lg:px-24 lg:pt-28 2xl:max-w-450 3xl:max-w-550"
         style={{ perspective: "1200px" }}
       >
-        <h1 className="text-balance text-[clamp(2.25rem,7vw,11rem)] leading-[1.06] tracking-tight text-foreground sm:text-[clamp(2.75rem,7.5vw,12rem)]">
+        <h1 className="text-balance text-[clamp(2rem,6.5vw,10rem)] leading-[1.06] tracking-tight text-foreground sm:text-[clamp(2.5rem,7vw,11rem)]">
           <span className="block overflow-hidden pb-[0.1em]">
             <span
               className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.3s_both]"
@@ -339,16 +339,16 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
         </h1>
 
         <p
-          className="mt-4 max-w-md text-pretty text-[clamp(1rem,2.5vw,1.45rem)] leading-relaxed text-foreground/85 sm:mt-6 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]"
+          className="mt-3 max-w-md text-pretty text-[clamp(0.95rem,2.3vw,1.35rem)] leading-relaxed text-foreground/85 sm:mt-5 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]"
         >
           Eric Adams is your partner for buying and selling real estate—local insight, honest
           pricing conversations, and hands-on support from tour to keys.
         </p>
-        <div className="mt-6 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-8">
+        <div className="mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
           <HeroSearch />
         </div>
         <div
-          className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap sm:gap-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.5s_both]"
+          className="hero-ctas mt-3 flex flex-row flex-wrap gap-2 sm:mt-4 sm:gap-3 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.5s_both]"
         >
           <Link href="/listings" className={ctaPrimary}>
             View listings
@@ -375,13 +375,6 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
         </div>
       </div>
 
-      <div
-        className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-10 w-full max-w-360 -translate-x-1/2 px-6 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550 animate-[fadeIn_1.2s_ease_2s_both]"
-      >
-        <span className="text-lg tracking-tight font-medium text-foreground/80">
-          Scroll
-        </span>
-      </div>
     </section>
   );
 }
