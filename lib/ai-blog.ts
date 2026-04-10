@@ -66,7 +66,7 @@ export async function generateFromPrompt(prompt: string): Promise<GeneratedBlogP
   return parseAIResponse(text);
 }
 
-export async function generateFromUrl(url: string, extractedContent: string): Promise<GeneratedBlogPost> {
+export async function generateFromUrl(url: string, extractedContent: string, _ogImage?: string | null): Promise<GeneratedBlogPost> {
   const client = getOpenAIClient();
   const response = await client.chat.completions.create({
     model: "gpt-4o",
@@ -114,7 +114,12 @@ function parseAIResponse(text: string): GeneratedBlogPost {
   };
 }
 
-export async function extractContentFromUrl(url: string): Promise<string> {
+export interface ExtractedContent {
+  text: string;
+  ogImage: string | null;
+}
+
+export async function extractContentFromUrl(url: string): Promise<ExtractedContent> {
   const response = await fetch(url, {
     headers: {
       "User-Agent":
@@ -129,7 +134,22 @@ export async function extractContentFromUrl(url: string): Promise<string> {
   }
 
   const html = await response.text();
-  return extractTextFromHtml(html);
+  return {
+    text: extractTextFromHtml(html),
+    ogImage: extractOgImage(html),
+  };
+}
+
+function extractOgImage(html: string): string | null {
+  const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+  if (ogMatch?.[1]) return ogMatch[1];
+
+  const twitterMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+  if (twitterMatch?.[1]) return twitterMatch[1];
+
+  return null;
 }
 
 function extractTextFromHtml(html: string): string {

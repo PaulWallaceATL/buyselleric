@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useRef } from "react";
-import { adminSaveBlogPost, type AdminBlogFormState } from "@/app/actions/admin-blog";
+import { adminSaveBlogPost, adminUploadBlogImage, type AdminBlogFormState } from "@/app/actions/admin-blog";
 import type { BlogPostRow } from "@/lib/types/db";
 
 const label = "mb-1 block text-sm font-medium text-foreground";
@@ -17,11 +17,15 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
   const [aiUrl, setAiUrl] = useState("");
   const [generating, setGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [coverPreview, setCoverPreview] = useState<string | null>(post?.cover_image_url ?? null);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
   const excerptRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const coverRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -51,11 +55,39 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
       if (excerptRef.current) excerptRef.current.value = data.excerpt || "";
       if (bodyRef.current) bodyRef.current.value = data.body || "";
 
+      if (data.cover_image_url && coverRef.current) {
+        coverRef.current.value = data.cover_image_url;
+        setCoverPreview(data.cover_image_url);
+      }
+
       setMode("manual");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Network error. Please try again.");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const result = await adminUploadBlogImage(fd);
+      if (result.ok) {
+        if (coverRef.current) coverRef.current.value = result.url;
+        setCoverPreview(result.url);
+      } else {
+        setAiError(result.message);
+      }
+    } catch {
+      setAiError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -123,7 +155,7 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
           <h3 className="text-base font-semibold text-foreground">Import from URL</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Paste a link to an existing article. The AI will read it and create an original,
-            SEO-optimized version for your blog.
+            SEO-optimized version for your blog. The cover image will be auto-detected if available.
           </p>
           <input
             type="url"
@@ -187,13 +219,51 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
         </div>
 
         <div>
-          <label htmlFor="cover_image_url" className={label}>Cover image URL</label>
-          <input id="cover_image_url" name="cover_image_url" type="url" defaultValue={post?.cover_image_url ?? ""} placeholder="https://..." className={input} />
+          <label htmlFor="cover_image_url" className={label}>Cover image</label>
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <input
+                ref={coverRef}
+                id="cover_image_url"
+                name="cover_image_url"
+                type="url"
+                defaultValue={post?.cover_image_url ?? ""}
+                placeholder="https://... or upload below"
+                className={`${input} flex-1`}
+                onChange={(e) => setCoverPreview(e.target.value || null)}
+              />
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/20 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/40">
+                {uploading ? "Uploading…" : "Upload"}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={uploading}
+                />
+              </label>
+            </div>
+            {coverPreview && (
+              <div className="relative h-40 w-full overflow-hidden rounded-lg border border-border bg-muted/10">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverPreview} alt="Cover preview" className="h-full w-full object-cover" />
+              </div>
+            )}
+          </div>
         </div>
 
         <div>
           <label htmlFor="body" className={label}>Body (Markdown supported)</label>
-          <textarea ref={bodyRef} id="body" name="body" rows={16} defaultValue={post?.body ?? ""} className={`${input} font-mono text-xs leading-relaxed`} required />
+          <textarea
+            ref={bodyRef}
+            id="body"
+            name="body"
+            defaultValue={post?.body ?? ""}
+            className={`${input} font-mono text-xs leading-relaxed resize-y`}
+            style={{ minHeight: "400px", maxHeight: "80vh", overflow: "auto" }}
+            required
+          />
         </div>
 
         <div className="flex items-center gap-3">

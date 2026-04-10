@@ -179,3 +179,50 @@ export async function adminDeleteBlogPost(id: string): Promise<AdminBlogFormStat
   revalidatePath("/admin/blog");
   redirect("/admin/blog");
 }
+
+const MAX_BLOG_IMAGE_BYTES = 5 * 1024 * 1024;
+const BLOG_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+function blogImageExt(contentType: string): string {
+  switch (contentType) {
+    case "image/jpeg": return "jpg";
+    case "image/png": return "png";
+    case "image/webp": return "webp";
+    case "image/gif": return "gif";
+    default: return "bin";
+  }
+}
+
+export async function adminUploadBlogImage(
+  formData: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const client = createSupabaseAdminClient();
+  if (!client) return { ok: false, message: "Supabase admin is not configured." };
+
+  const file = formData.get("file");
+  if (!file || !(file instanceof File)) return { ok: false, message: "No file uploaded." };
+  if (file.size > MAX_BLOG_IMAGE_BYTES) return { ok: false, message: "Image must be 5 MB or smaller." };
+  if (!BLOG_IMAGE_MIME.has(file.type)) return { ok: false, message: "Use JPEG, PNG, WebP, or GIF." };
+
+  const ext = blogImageExt(file.type);
+  const path = `blog/${crypto.randomUUID()}.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const { error } = await client.storage.from("blog-images").upload(path, buffer, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) {
+    console.error("adminUploadBlogImage", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  const { data } = client.storage.from("blog-images").getPublicUrl(path);
+  return { ok: true, url: data.publicUrl };
+}

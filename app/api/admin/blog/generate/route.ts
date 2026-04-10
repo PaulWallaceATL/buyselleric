@@ -67,16 +67,20 @@ export async function POST(request: Request) {
         );
       }
 
-      const content = await extractContentFromUrl(parsed.toString());
-      if (content.length < 100) {
+      const extracted = await extractContentFromUrl(parsed.toString());
+      if (extracted.text.length < 100) {
         return NextResponse.json(
           { ok: false, message: "Could not extract enough content from that URL. Try a different article." },
           { status: 400 },
         );
       }
 
-      const result = await generateFromUrl(parsed.toString(), content);
-      return NextResponse.json({ ok: true, ...result });
+      const result = await generateFromUrl(parsed.toString(), extracted.text, extracted.ogImage);
+      return NextResponse.json({
+        ok: true,
+        ...result,
+        cover_image_url: extracted.ogImage || null,
+      });
     }
 
     return NextResponse.json(
