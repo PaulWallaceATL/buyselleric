@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AdminDuplicateBlogButton } from "@/components/admin-duplicate-blog-button";
 import { adminListBlogPosts, createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { ReactNode } from "react";
 
@@ -77,6 +78,7 @@ export default async function AdminBlogPage(): Promise<ReactNode> {
                   </p>
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">views</p>
                 </div>
+                <AdminDuplicateBlogButton postId={p.id} />
                 <Link
                   href={`/admin/blog/${p.id}/edit`}
                   className="text-sm font-medium text-foreground underline-offset-4 hover:underline"

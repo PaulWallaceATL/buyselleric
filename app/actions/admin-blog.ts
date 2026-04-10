@@ -167,6 +167,57 @@ export async function adminDeleteBlogPostForm(
   return adminDeleteBlogPost(id);
 }
 
+export async function adminDuplicateBlogPost(
+  _prev: AdminBlogFormState,
+  formData: FormData,
+): Promise<AdminBlogFormState> {
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { ok: false, message: "Missing post id." };
+
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const client = createSupabaseAdminClient();
+  if (!client) return { ok: false, message: "Supabase admin is not configured." };
+
+  const source = await adminGetBlogPost(client, id);
+  if (!source) return { ok: false, message: "Post not found." };
+
+  const baseSlug = slugify(`Copy ${source.title}`);
+  let finalSlug = baseSlug;
+  const existing = await adminListBlogPosts(client);
+  const slugs = new Set(existing.map((p) => p.slug));
+  let n = 0;
+  while (slugs.has(finalSlug)) {
+    n += 1;
+    finalSlug = `${baseSlug}-${n}`;
+  }
+
+  const { error } = await client.from("blog_posts").insert({
+    slug: finalSlug,
+    title: `Copy — ${source.title}`,
+    excerpt: source.excerpt,
+    meta_description: source.meta_description,
+    seo_keywords: source.seo_keywords,
+    body: source.body,
+    cover_image_url: source.cover_image_url,
+    author: source.author,
+    is_published: false,
+    published_at: null,
+  });
+
+  if (error) {
+    console.error("adminDuplicateBlogPost", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath("/admin/blog");
+  redirect("/admin/blog");
+}
+
 export async function adminDeleteBlogPost(id: string): Promise<AdminBlogFormState> {
   try {
     await requireAdminSession();
