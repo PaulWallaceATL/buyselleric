@@ -28,10 +28,10 @@ function SplitText({ children }: { children: string }) {
 }
 
 const services = [
-  { id: 1, title: "Buyer representation", href: "/listings" },
-  { id: 2, title: "Seller marketing & prep", href: "/sell" },
-  { id: 3, title: "Pricing & negotiation", href: "/#contact" },
-  { id: 4, title: "Closing coordination", href: "/#contact" },
+  { id: 1, title: "Buyer representation", href: "/services/buyer-representation" },
+  { id: 2, title: "Seller marketing & prep", href: "/services/seller-marketing" },
+  { id: 3, title: "Pricing & negotiation", href: "/services/pricing-negotiation" },
+  { id: 4, title: "Closing coordination", href: "/services/closing-coordination" },
 ];
 
 function ServiceItem({ title, href, index }: { title: string; href: string; index: number }) {
