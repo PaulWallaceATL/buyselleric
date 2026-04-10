@@ -117,10 +117,11 @@ function parseAIResponse(text: string): GeneratedBlogPost {
 export async function extractContentFromUrl(url: string): Promise<string> {
   const response = await fetch(url, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; BuySellEric-Bot/1.0)",
-      Accept: "text/html",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml",
     },
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {

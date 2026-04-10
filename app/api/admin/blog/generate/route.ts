@@ -7,6 +7,8 @@ import {
   generateFromUrl,
 } from "@/lib/ai-blog";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const jar = await cookies();
   const token = jar.get(ADMIN_COOKIE_NAME)?.value;
