@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   const client = createSupabaseAdminClient();
   if (!client) {
-    return NextResponse.json({ ok: false, message: "Supabase not configured" }, { status: 500 });
+    return NextResponse.json({ ok: false, message: "Supabase not configured — check SUPABASE_SERVICE_ROLE_KEY" }, { status: 500 });
   }
 
   let formData: FormData;
@@ -35,28 +35,37 @@ export async function POST(request: Request) {
 
   const file = formData.get("file");
   if (!file || !(file instanceof File)) {
-    return NextResponse.json({ ok: false, message: "No file" }, { status: 400 });
+    return NextResponse.json({ ok: false, message: "No file in form data" }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ ok: false, message: "File too large (5 MB max)" }, { status: 400 });
   }
   if (!ALLOWED.has(file.type)) {
-    return NextResponse.json({ ok: false, message: "Use JPEG, PNG, WebP, or GIF" }, { status: 400 });
+    return NextResponse.json({ ok: false, message: `Invalid type: ${file.type}. Use JPEG, PNG, WebP, or GIF` }, { status: 400 });
   }
 
-  const path = `blog/${crypto.randomUUID()}.${ext(file.type)}`;
+  const filePath = `blog/${crypto.randomUUID()}.${ext(file.type)}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error } = await client.storage.from("blog-images").upload(path, buffer, {
-    contentType: file.type,
-    upsert: false,
-  });
+  const buckets = ["blog-images", "listing-images"];
+  const errors: string[] = [];
 
-  if (error) {
-    console.error("Blog image upload error:", JSON.stringify(error));
-    return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
+  for (const bucket of buckets) {
+    const { error } = await client.storage.from(bucket).upload(filePath, buffer, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+    if (!error) {
+      const { data } = client.storage.from(bucket).getPublicUrl(filePath);
+      return NextResponse.json({ ok: true, url: data.publicUrl, bucket });
+    }
+
+    errors.push(`${bucket}: ${error.message}`);
   }
 
-  const { data } = client.storage.from("blog-images").getPublicUrl(path);
-  return NextResponse.json({ ok: true, url: data.publicUrl });
+  return NextResponse.json(
+    { ok: false, message: `Upload failed on all buckets. ${errors.join(" | ")}` },
+    { status: 500 },
+  );
 }
