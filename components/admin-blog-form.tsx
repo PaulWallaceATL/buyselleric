@@ -73,6 +73,7 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
     if (!file) return;
 
     setUploading(true);
+    setAiError(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -81,10 +82,14 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
         if (coverRef.current) coverRef.current.value = result.url;
         setCoverPreview(result.url);
       } else {
-        setAiError(result.message);
+        const localPreview = URL.createObjectURL(file);
+        setCoverPreview(localPreview);
+        setAiError(`Upload failed: ${result.message}. You can also paste an image URL directly.`);
       }
     } catch {
-      setAiError("Upload failed. Please try again.");
+      const localPreview = URL.createObjectURL(file);
+      setCoverPreview(localPreview);
+      setAiError("Upload to storage failed. Make sure the blog-images bucket exists in Supabase. You can paste an image URL instead.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -244,6 +249,11 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
                 />
               </label>
             </div>
+            {aiError && mode === "manual" && (
+              <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                {aiError}
+              </p>
+            )}
             {coverPreview && (
               <div className="relative h-40 w-full overflow-hidden rounded-lg border border-border bg-muted/10">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -255,15 +265,17 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
 
         <div>
           <label htmlFor="body" className={label}>Body (Markdown supported)</label>
-          <textarea
-            ref={bodyRef}
-            id="body"
-            name="body"
-            defaultValue={post?.body ?? ""}
-            className={`${input} font-mono text-xs leading-relaxed resize-y`}
-            style={{ minHeight: "400px", maxHeight: "80vh", overflow: "auto" }}
-            required
-          />
+          <div className="relative" style={{ height: "clamp(400px, 50vh, 600px)" }}>
+            <textarea
+              ref={bodyRef}
+              id="body"
+              name="body"
+              defaultValue={post?.body ?? ""}
+              className="absolute inset-0 w-full rounded-lg border border-border bg-muted/20 px-3 py-2.5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+              style={{ resize: "none", overflow: "auto" }}
+              required
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
