@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useRef } from "react";
-import { adminSaveBlogPost, adminUploadBlogImage, type AdminBlogFormState } from "@/app/actions/admin-blog";
+import { adminSaveBlogPost, type AdminBlogFormState } from "@/app/actions/admin-blog";
 import type { BlogPostRow } from "@/lib/types/db";
 
 const label = "mb-1 block text-sm font-medium text-foreground";
@@ -85,19 +85,18 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const result = await adminUploadBlogImage(fd);
-      if (result.ok) {
-        if (coverRef.current) coverRef.current.value = result.url;
-        setCoverPreview(result.url);
+      const res = await fetch("/api/admin/blog/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.ok && data.url) {
+        if (coverRef.current) coverRef.current.value = data.url;
+        setCoverPreview(data.url);
       } else {
-        const localPreview = URL.createObjectURL(file);
-        setCoverPreview(localPreview);
-        setAiError(`Upload failed: ${result.message}. You can also paste an image URL directly.`);
+        setCoverPreview(URL.createObjectURL(file));
+        setAiError(`Upload failed: ${data.message || "Unknown error"}. You can paste an image URL instead.`);
       }
-    } catch {
-      const localPreview = URL.createObjectURL(file);
-      setCoverPreview(localPreview);
-      setAiError("Upload to storage failed. Make sure the blog-images bucket exists in Supabase. You can paste an image URL instead.");
+    } catch (err) {
+      setCoverPreview(URL.createObjectURL(file));
+      setAiError(`Upload error: ${err instanceof Error ? err.message : "Network error"}. You can paste an image URL instead.`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
