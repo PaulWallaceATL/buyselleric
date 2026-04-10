@@ -362,7 +362,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
             rel="noopener noreferrer"
             className={ctaMortgage}
           >
-            Apply now
+            Get pre-approved
           </a>
           <a
             href={siteConfig.mortgageApplicationUrl}

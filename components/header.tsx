@@ -21,6 +21,7 @@ const menuItems = [
   { label: "Homes", href: "#featured-listings" },
   { label: "Listings", href: "/listings" },
   { label: "Sell", href: "/sell" },
+  { label: "Blog", href: "/blog" },
   { label: "Services", href: "#services-menu" },
   { label: "About", href: "#about" },
   { label: "Stories", href: "#social-proof" },

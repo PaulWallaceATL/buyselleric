@@ -24,6 +24,20 @@ export interface ListingRow {
   updated_at: string;
 }
 
+export interface BlogPostRow {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  body: string;
+  cover_image_url: string | null;
+  author: string;
+  is_published: boolean;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SellSubmissionRow {
   id: string;
   full_name: string;

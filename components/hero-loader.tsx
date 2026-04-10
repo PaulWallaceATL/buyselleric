@@ -65,7 +65,7 @@ function HeroContent() {
           Sell your home
         </Link>
         <a href={siteConfig.mortgageApplicationUrl} target="_blank" rel="noopener noreferrer" className={ctaMortgage}>
-          Apply now
+          Get pre-approved
         </a>
         <a href={siteConfig.mortgageApplicationUrl} target="_blank" rel="noopener noreferrer" className={ctaMortgage}>
           Refinance
