@@ -32,6 +32,9 @@ export interface BlogPostRow {
   body: string;
   cover_image_url: string | null;
   author: string;
+  seo_keywords: string[];
+  meta_description: string;
+  view_count: number;
   is_published: boolean;
   published_at: string | null;
   created_at: string;

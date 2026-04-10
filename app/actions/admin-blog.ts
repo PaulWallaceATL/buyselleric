@@ -48,6 +48,9 @@ async function adminCreateBlogPost(
   const title = String(formData.get("title") ?? "").trim();
   let slug = String(formData.get("slug") ?? "").trim();
   const excerpt = String(formData.get("excerpt") ?? "").trim();
+  const meta_description = String(formData.get("meta_description") ?? "").trim();
+  const seo_keywords_raw = String(formData.get("seo_keywords") ?? "").trim();
+  const seo_keywords = seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [];
   const body = String(formData.get("body") ?? "").trim();
   const cover_image_url = String(formData.get("cover_image_url") ?? "").trim() || null;
   const author = String(formData.get("author") ?? "Eric Adams").trim();
@@ -71,6 +74,8 @@ async function adminCreateBlogPost(
     slug: finalSlug,
     title,
     excerpt,
+    meta_description,
+    seo_keywords,
     body,
     cover_image_url,
     author,
@@ -108,6 +113,9 @@ async function adminUpdateBlogPost(
   const title = String(formData.get("title") ?? "").trim();
   let slug = String(formData.get("slug") ?? "").trim();
   const excerpt = String(formData.get("excerpt") ?? "").trim();
+  const meta_description = String(formData.get("meta_description") ?? "").trim();
+  const seo_keywords_raw = String(formData.get("seo_keywords") ?? "").trim();
+  const seo_keywords = seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [];
   const body = String(formData.get("body") ?? "").trim();
   const cover_image_url = String(formData.get("cover_image_url") ?? "").trim() || null;
   const author = String(formData.get("author") ?? "Eric Adams").trim();
@@ -134,7 +142,7 @@ async function adminUpdateBlogPost(
 
   const { error } = await client
     .from("blog_posts")
-    .update({ slug, title, excerpt, body, cover_image_url, author, is_published, published_at })
+    .update({ slug, title, excerpt, meta_description, seo_keywords, body, cover_image_url, author, is_published, published_at })
     .eq("id", id);
 
   if (error) {

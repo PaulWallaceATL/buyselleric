@@ -23,6 +23,8 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
   const titleRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
   const excerptRef = useRef<HTMLTextAreaElement>(null);
+  const metaRef = useRef<HTMLTextAreaElement>(null);
+  const keywordsRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -58,6 +60,12 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
       if (data.cover_image_url && coverRef.current) {
         coverRef.current.value = data.cover_image_url;
         setCoverPreview(data.cover_image_url);
+      }
+      if (data.seo_keywords?.length && keywordsRef.current) {
+        keywordsRef.current.value = data.seo_keywords.join(", ");
+      }
+      if (data.excerpt && metaRef.current) {
+        metaRef.current.value = data.excerpt;
       }
 
       setMode("manual");
@@ -222,6 +230,16 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
         <div>
           <label htmlFor="excerpt" className={label}>Excerpt</label>
           <textarea ref={excerptRef} id="excerpt" name="excerpt" rows={2} data-lenis-prevent defaultValue={post?.excerpt ?? ""} placeholder="Short summary shown on the blog list page" className={input} />
+        </div>
+
+        <div>
+          <label htmlFor="meta_description" className={label}>Meta description (SEO)</label>
+          <textarea ref={metaRef} id="meta_description" name="meta_description" rows={2} data-lenis-prevent defaultValue={post?.meta_description ?? ""} placeholder="Under 160 characters — shown in Google search results" className={input} />
+        </div>
+
+        <div>
+          <label htmlFor="seo_keywords" className={label}>SEO keywords (comma-separated)</label>
+          <input ref={keywordsRef} id="seo_keywords" name="seo_keywords" type="text" defaultValue={post?.seo_keywords?.join(", ") ?? ""} placeholder="atlanta real estate, home buying tips, georgia homes" className={input} />
         </div>
 
         <div>

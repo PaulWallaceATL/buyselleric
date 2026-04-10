@@ -1,8 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { BlogViewTracker } from "@/components/blog-view-tracker";
+import { siteConfig } from "@/lib/config";
 import { getPublishedPostBySlug } from "@/lib/blog-queries";
-import { createMetadata } from "@/lib/metadata";
 import { siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -15,11 +16,35 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPublishedPostBySlug(slug);
   if (!post) return {};
-  return createMetadata({
+
+  const description = post.meta_description || post.excerpt || `Read "${post.title}" by ${post.author}`;
+  const keywords = post.seo_keywords?.length ? post.seo_keywords : undefined;
+  const url = `${siteConfig.url}/blog/${slug}`;
+
+  return {
     title: post.title,
-    description: post.excerpt || `Read "${post.title}" by ${post.author}`,
-    path: `/blog/${slug}`,
-  });
+    description,
+    keywords,
+    authors: [{ name: post.author }],
+    openGraph: {
+      title: post.title,
+      description,
+      url,
+      type: "article",
+      publishedTime: post.published_at ?? undefined,
+      authors: [post.author],
+      ...(post.cover_image_url ? { images: [{ url: post.cover_image_url, width: 1200, height: 630 }] } : {}),
+    },
+    twitter: {
+      card: post.cover_image_url ? "summary_large_image" : "summary",
+      title: post.title,
+      description,
+      ...(post.cover_image_url ? { images: [post.cover_image_url] } : {}),
+    },
+    alternates: {
+      canonical: url,
+    },
+  };
 }
 
 export default async function BlogPostPage({ params }: Props): Promise<ReactNode> {
@@ -27,8 +52,28 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
   const post = await getPublishedPostBySlug(slug);
   if (!post) notFound();
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.meta_description || post.excerpt,
+    author: { "@type": "Person", name: post.author },
+    publisher: { "@type": "Organization", name: siteConfig.name },
+    datePublished: post.published_at,
+    dateModified: post.updated_at,
+    url: `${siteConfig.url}/blog/${slug}`,
+    ...(post.cover_image_url ? { image: post.cover_image_url } : {}),
+    ...(post.seo_keywords?.length ? { keywords: post.seo_keywords.join(", ") } : {}),
+  };
+
   return (
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background pb-24 pt-24 sm:pb-28 sm:pt-28 lg:pt-32">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <BlogViewTracker slug={slug} />
+
       <article className={`${siteContainer} max-w-3xl`}>
         <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground">
           ← Back to blog
@@ -53,6 +98,16 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
             </>
           )}
         </div>
+
+        {post.seo_keywords?.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {post.seo_keywords.map((kw) => (
+              <span key={kw} className="rounded-full bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                {kw}
+              </span>
+            ))}
+          </div>
+        )}
 
         {post.cover_image_url && (
           <div className="relative mt-8 aspect-[21/9] w-full overflow-hidden rounded-2xl bg-muted sm:rounded-3xl">
