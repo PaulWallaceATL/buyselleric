@@ -136,6 +136,7 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
             rows={4}
+            data-lenis-prevent
             placeholder='e.g. "Write about spring home maintenance tips for Atlanta homeowners, focusing on HVAC, gutters, and curb appeal before listing season"'
             className={`${input} mt-4`}
           />
@@ -220,7 +221,7 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
 
         <div>
           <label htmlFor="excerpt" className={label}>Excerpt</label>
-          <textarea ref={excerptRef} id="excerpt" name="excerpt" rows={2} defaultValue={post?.excerpt ?? ""} placeholder="Short summary shown on the blog list page" className={input} />
+          <textarea ref={excerptRef} id="excerpt" name="excerpt" rows={2} data-lenis-prevent defaultValue={post?.excerpt ?? ""} placeholder="Short summary shown on the blog list page" className={input} />
         </div>
 
         <div>
@@ -269,9 +270,10 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
             ref={bodyRef}
             id="body"
             name="body"
+            data-lenis-prevent
             defaultValue={post?.body ?? ""}
             className="block w-full rounded-lg border border-border bg-muted/20 px-3 py-2.5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-            style={{ height: "500px", overflowY: "scroll" }}
+            style={{ height: "500px", overflowY: "scroll", touchAction: "pan-y" }}
             required
           />
         </div>
