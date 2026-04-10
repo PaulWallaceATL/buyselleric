@@ -222,15 +222,15 @@ export async function adminUploadBlogImage(
   const path = `blog/${crypto.randomUUID()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error } = await client.storage.from("blog-images").upload(path, buffer, {
+  const { error } = await client.storage.from("listing-images").upload(path, buffer, {
     contentType: file.type,
     upsert: false,
   });
   if (error) {
-    console.error("adminUploadBlogImage", error.message);
-    return { ok: false, message: error.message };
+    console.error("adminUploadBlogImage bucket=listing-images path=" + path, error.message);
+    return { ok: false, message: `Storage error: ${error.message}` };
   }
 
-  const { data } = client.storage.from("blog-images").getPublicUrl(path);
+  const { data } = client.storage.from("listing-images").getPublicUrl(path);
   return { ok: true, url: data.publicUrl };
 }
