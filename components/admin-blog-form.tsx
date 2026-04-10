@@ -265,17 +265,15 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
 
         <div>
           <label htmlFor="body" className={label}>Body (Markdown supported)</label>
-          <div className="relative" style={{ height: "clamp(400px, 50vh, 600px)" }}>
-            <textarea
-              ref={bodyRef}
-              id="body"
-              name="body"
-              defaultValue={post?.body ?? ""}
-              className="absolute inset-0 w-full rounded-lg border border-border bg-muted/20 px-3 py-2.5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-              style={{ resize: "none", overflow: "auto" }}
-              required
-            />
-          </div>
+          <textarea
+            ref={bodyRef}
+            id="body"
+            name="body"
+            defaultValue={post?.body ?? ""}
+            className="block w-full rounded-lg border border-border bg-muted/20 px-3 py-2.5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+            style={{ height: "500px", overflowY: "scroll" }}
+            required
+          />
         </div>
 
         <div className="flex items-center gap-3">
