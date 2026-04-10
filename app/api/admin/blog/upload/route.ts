@@ -47,16 +47,16 @@ export async function POST(request: Request) {
   const path = `blog/${crypto.randomUUID()}.${ext(file.type)}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error } = await client.storage.from("listing-images").upload(path, buffer, {
+  const { error } = await client.storage.from("blog-images").upload(path, buffer, {
     contentType: file.type,
     upsert: false,
   });
 
   if (error) {
-    console.error("Blog image upload error:", error);
+    console.error("Blog image upload error:", JSON.stringify(error));
     return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
   }
 
-  const { data } = client.storage.from("listing-images").getPublicUrl(path);
+  const { data } = client.storage.from("blog-images").getPublicUrl(path);
   return NextResponse.json({ ok: true, url: data.publicUrl });
 }
