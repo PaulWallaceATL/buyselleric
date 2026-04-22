@@ -281,7 +281,7 @@ export async function searchActiveListings(
 
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Property",
-    Class: "Residential",
+    Class: "RESI",
     Query: "(Status=A)",
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",
@@ -314,7 +314,7 @@ export async function searchListingsSince(
 
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Property",
-    Class: "Residential",
+    Class: "RESI",
     Query: `(Status=A),(ModificationTimestamp=${ts}+)`,
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",
