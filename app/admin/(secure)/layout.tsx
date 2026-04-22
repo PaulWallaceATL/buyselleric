@@ -33,6 +33,9 @@ export default async function AdminSecureLayout({
             <Link href="/admin/blog" className="hover:opacity-80">
               Blog
             </Link>
+            <Link href="/admin/mls" className="hover:opacity-80">
+              MLS
+            </Link>
             <Link href="/listings" className="text-muted-foreground hover:text-foreground">
               Public listings
             </Link>

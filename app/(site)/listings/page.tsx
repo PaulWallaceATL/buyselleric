@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { ListingCard } from "@/components/listing-card";
+import { UnifiedListingCard } from "@/components/unified-listing-card";
 import { ListingsMapView } from "@/components/listings-map-view";
 import { ListingsSearchBar } from "@/components/listings-search-bar";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
-import { getPublishedListings, searchListings } from "@/lib/listings-queries";
+import { getAllListingsWithMls, searchAllListings } from "@/lib/listings-queries";
 import { eyebrow, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
@@ -27,7 +27,7 @@ export default async function ListingsPage({
   const query = typeof params.q === "string" ? params.q.trim() : "";
   const view = typeof params.view === "string" ? params.view : "list";
 
-  const listings = query ? await searchListings(query) : await getPublishedListings();
+  const listings = query ? await searchAllListings(query) : await getAllListingsWithMls();
 
   return (
     <main id="main-content" className={pageMain}>
@@ -54,14 +54,14 @@ export default async function ListingsPage({
             <ListingsMapView listings={listings} />
             <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
               {listings.map((l) => (
-                <ListingCard key={l.id} listing={l} />
+                <UnifiedListingCard key={l.id} listing={l} />
               ))}
             </div>
           </div>
         ) : (
           <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {listings.map((l) => (
-              <ListingCard key={l.id} listing={l} />
+              <UnifiedListingCard key={l.id} listing={l} />
             ))}
           </div>
         )}

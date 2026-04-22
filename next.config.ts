@@ -21,7 +21,7 @@ function supabaseStorageImagePattern():
 const supabasePattern = supabaseStorageImagePattern();
 
 const nextConfig: NextConfig = {
-  // Disable source maps in production to protect code
+  serverExternalPackages: ["rets-client"],
   productionBrowserSourceMaps: false,
   // Remove console.log in production
   compiler: {

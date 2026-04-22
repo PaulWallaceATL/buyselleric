@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { ListingRow } from "@/lib/types/db";
+import type { UnifiedListing } from "@/lib/listings-queries";
 
 const ListingsMap = dynamic(() => import("@/components/listings-map"), {
   ssr: false,
@@ -15,7 +15,7 @@ const ListingsMap = dynamic(() => import("@/components/listings-map"), {
   ),
 });
 
-export function ListingsMapView({ listings }: { listings: ListingRow[] }) {
+export function ListingsMapView({ listings }: { listings: UnifiedListing[] }) {
   const pins = listings
     .filter((l) => l.latitude != null && l.longitude != null)
     .map((l) => ({
@@ -24,7 +24,7 @@ export function ListingsMapView({ listings }: { listings: ListingRow[] }) {
       lat: l.latitude!,
       lng: l.longitude!,
       price_cents: l.price_cents,
-      slug: l.slug,
+      slug: l.slug ?? l.mls_id ?? l.id,
       city: l.city,
       state: l.state,
       bedrooms: l.bedrooms,

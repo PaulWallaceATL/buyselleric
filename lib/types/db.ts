@@ -41,6 +41,44 @@ export interface BlogPostRow {
   updated_at: string;
 }
 
+export interface MlsListingRow {
+  id: string;
+  mls_id: string;
+  title: string;
+  address_line: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  price_cents: number;
+  bedrooms: number;
+  bathrooms: number;
+  square_feet: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  description: string;
+  property_type: string;
+  status: string;
+  image_urls: string[];
+  listing_agent: string;
+  listing_office: string;
+  raw_data: Record<string, unknown>;
+  synced_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MlsSyncLogRow {
+  id: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  inserted: number;
+  updated: number;
+  deactivated: number;
+  total_fetched: number;
+  error: string | null;
+}
+
 export interface SellSubmissionRow {
   id: string;
   full_name: string;
