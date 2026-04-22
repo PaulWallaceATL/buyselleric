@@ -56,7 +56,8 @@ export async function POST(request: Request) {
 
     while (hasMore) {
       const result = await searchActiveListings(offset, batchSize);
-      const records = result.records.filter((r) => r.mls_id);
+      const SOLD_STATUSES = new Set(["sold", "closed", "withdrawn", "expired", "cancelled", "canceled"]);
+      const records = result.records.filter((r) => r.mls_id && !SOLD_STATUSES.has(r.status.toLowerCase()));
       totalFetched += records.length;
 
       if (records.length > 0) {

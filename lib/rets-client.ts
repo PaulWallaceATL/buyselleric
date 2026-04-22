@@ -303,7 +303,7 @@ export async function searchActiveListings(
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Property",
     Class: "RESI",
-    Query: "(MlsStatus=Active)",
+    Query: "(ListPrice=1+)",
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",
     Limit: String(limit),
@@ -336,7 +336,7 @@ export async function searchListingsSince(
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Property",
     Class: "RESI",
-    Query: `(MlsStatus=Active),(ModificationTimestamp=${ts}+)`,
+    Query: `(ListPrice=1+),(ModificationTimestamp=${ts}+)`,
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",
     Limit: String(limit),
