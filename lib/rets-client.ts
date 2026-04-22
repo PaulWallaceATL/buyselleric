@@ -61,6 +61,7 @@ function buildDigestHeader(
 interface RetsSession {
   searchUrl: string;
   metadataUrl: string;
+  getObjectUrl: string;
   cookie: string;
   challenge: DigestChallenge;
   nc: number;
@@ -104,10 +105,12 @@ async function retsLogin(): Promise<RetsSession> {
   const baseUrl = new URL(config.loginUrl).origin;
   const searchMatch = body.match(/Search=([^\s<]+)/);
   const metadataMatch = body.match(/GetMetadata=([^\s<]+)/);
+  const getObjectMatch = body.match(/GetObject=([^\s<]+)/);
 
   return {
     searchUrl: searchMatch ? baseUrl + searchMatch[1] : baseUrl + "/server/search",
     metadataUrl: metadataMatch ? baseUrl + metadataMatch[1] : baseUrl + "/server/getmetadata",
+    getObjectUrl: getObjectMatch ? baseUrl + getObjectMatch[1] : baseUrl + "/server/getobject",
     cookie,
     challenge,
     nc: 2,
@@ -132,6 +135,53 @@ async function retsFetch(session: RetsSession, url: string, params: Record<strin
   });
 
   return await res.text();
+}
+
+export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 5): Promise<string[]> {
+  const session = await retsLogin();
+  const config = getConfig();
+  const urls: string[] = [];
+
+  for (let i = 0; i < maxPhotos; i++) {
+    const params: Record<string, string> = {
+      Type: "Photo",
+      Resource: "Property",
+      ID: `${listingId}:${i}`,
+      Location: "1",
+    };
+    const qs = new URLSearchParams(params).toString();
+    const fullUrl = `${session.getObjectUrl}?${qs}`;
+    const uri = new URL(fullUrl).pathname + "?" + qs;
+    const authHeader = buildDigestHeader("GET", uri, config.username, config.password, session.challenge, session.nc++);
+
+    try {
+      const res = await fetch(fullUrl, {
+        headers: {
+          "User-Agent": "BuySellEric/1.0",
+          "RETS-Version": "RETS/1.7.2",
+          Authorization: authHeader,
+          Cookie: session.cookie,
+        },
+        redirect: "manual",
+      });
+
+      const contentType = res.headers.get("content-type") ?? "";
+      const location = res.headers.get("location");
+
+      if (location && location.startsWith("http")) {
+        urls.push(location);
+      } else if (contentType.startsWith("image/")) {
+        const objectUrl = res.headers.get("content-location") ?? res.headers.get("location");
+        if (objectUrl) urls.push(objectUrl);
+      } else {
+        break;
+      }
+    } catch {
+      break;
+    }
+  }
+
+  return urls;
 }
 
 export async function rawSearch(query: string, limit: number = 5): Promise<string> {

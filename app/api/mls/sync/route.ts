@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     let totalFetched = 0;
     const syncTimestamp = new Date().toISOString();
 
-    const { searchActiveListings } = await import("@/lib/rets-client");
+    const { searchActiveListings, fetchPhotoUrls } = await import("@/lib/rets-client");
 
     let offset = 0;
     const batchSize = 2500;
@@ -61,6 +61,13 @@ export async function POST(request: Request) {
       totalFetched += records.length;
 
       if (records.length > 0) {
+        for (const record of records.slice(0, 50)) {
+          if (record.mls_id && record.image_urls.length === 0) {
+            try {
+              record.image_urls = await fetchPhotoUrls(record.mls_id, 1);
+            } catch { /* skip photo errors */ }
+          }
+        }
         const { inserted, updated } = await upsertBatch(client, records, syncTimestamp);
         totalInserted += inserted;
         totalUpdated += updated;
