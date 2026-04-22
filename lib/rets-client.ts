@@ -315,9 +315,11 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
   const remarks = get(["PublicRemarks"]);
   const subdivision = get(["SubdivisionName"]);
 
+  const validSubdivision = subdivision && subdivision.toLowerCase() !== "none" ? subdivision : "";
+
   return {
     mls_id: mlsId,
-    title: subdivision ? `${subdivision} · ${addressLine}` : addressLine || `${city} Home`,
+    title: validSubdivision ? `${validSubdivision} · ${addressLine}` : addressLine || `${city} Home`,
     address_line: addressLine,
     city,
     state: state || "GA",

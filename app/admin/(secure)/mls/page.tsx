@@ -1,3 +1,4 @@
+import { AdminMlsPhotosButton } from "@/components/admin-mls-photos-button";
 import { AdminMlsSyncButton } from "@/components/admin-mls-sync-button";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { MlsSyncLogRow } from "@/lib/types/db";
@@ -35,7 +36,10 @@ export default async function AdminMlsPage(): Promise<ReactNode> {
           <h1 className="text-2xl font-medium tracking-tight text-foreground">MLS Feed</h1>
           <p className="mt-1 text-sm text-muted-foreground">GAMLS RETS integration — synced listings from the Georgia MLS.</p>
         </div>
-        <AdminMlsSyncButton />
+        <div className="flex flex-col gap-3">
+          <AdminMlsSyncButton />
+          <AdminMlsPhotosButton />
+        </div>
       </div>
 
       {!hasRetsConfig && (

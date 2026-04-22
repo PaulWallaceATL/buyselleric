@@ -38,9 +38,12 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   const mainImage = listing.image_urls[0] ?? null;
 
   return (
-    <main id="main-content" className="relative z-10 w-full flex-1 bg-background pb-24 pt-24 sm:pb-28 sm:pt-28 lg:pt-32">
+    <main id="main-content" className="relative z-10 w-full flex-1 bg-background pb-24 pt-32 sm:pb-28 sm:pt-36 lg:pt-40">
       <div className={`${siteContainer} max-w-4xl`}>
-        <Link href="/listings" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+        <Link
+          href="/listings"
+          className="relative z-20 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
+        >
           ← Back to listings
         </Link>
 
