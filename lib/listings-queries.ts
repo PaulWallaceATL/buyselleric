@@ -158,9 +158,15 @@ export async function getPublishedListingBySlug(slug: string): Promise<ListingRo
 }
 
 export async function getMlsListingById(mlsId: string): Promise<MlsListingRow | null> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return null;
-  const { data, error } = await supabase.from("mls_listings").select("*").eq("mls_id", mlsId).maybeSingle();
+  const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+  const client = createSupabaseAdminClient();
+  if (!client) {
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return null;
+    const { data } = await supabase.from("mls_listings").select("*").eq("mls_id", mlsId).maybeSingle();
+    return data as MlsListingRow | null;
+  }
+  const { data, error } = await client.from("mls_listings").select("*").eq("mls_id", mlsId).maybeSingle();
   if (error) { console.error("getMlsListingById", error.message); return null; }
   return data as MlsListingRow | null;
 }
