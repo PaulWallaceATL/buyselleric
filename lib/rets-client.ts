@@ -185,10 +185,19 @@ export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 5): 
 }
 
 export async function rawSearch(query: string, limit: number = 5): Promise<string> {
+  return rawSearchAny("Property", "RESI", query, limit);
+}
+
+export async function rawSearchAny(
+  resource: string,
+  classId: string,
+  query: string,
+  limit: number = 5,
+): Promise<string> {
   const session = await retsLogin();
   return retsFetch(session, session.searchUrl, {
-    SearchType: "Property",
-    Class: "RESI",
+    SearchType: resource,
+    Class: classId,
     Query: query,
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",

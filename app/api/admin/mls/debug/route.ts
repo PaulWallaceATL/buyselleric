@@ -14,10 +14,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query") || "(MlsStatus=Active)";
   const limit = Number(searchParams.get("limit") || "3");
+  const resource = searchParams.get("resource") || "Property";
+  const classId = searchParams.get("class") || "RESI";
 
   try {
-    const { rawSearch } = await import("@/lib/rets-client");
-    const body = await rawSearch(query, limit);
+    const { rawSearchAny } = await import("@/lib/rets-client");
+    const body = await rawSearchAny(resource, classId, query, limit);
 
     return NextResponse.json({
       ok: true,
