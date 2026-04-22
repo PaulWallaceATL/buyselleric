@@ -10,6 +10,8 @@ import { siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+export const dynamic = "force-dynamic";
+
 type Props = Readonly<{ params: Promise<{ id: string }> }>;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
