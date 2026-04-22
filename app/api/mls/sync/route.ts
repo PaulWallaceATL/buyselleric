@@ -1,35 +1,53 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { searchActiveListings, type MlsListingData } from "@/lib/rets-client";
 
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const client = createSupabaseAdminClient();
-  if (!client) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
-  }
-
-  const { data: logRow } = await client
-    .from("mls_sync_log")
-    .insert({ status: "running" })
-    .select("id")
-    .single();
-  const logId = logRow?.id;
-
-  let totalInserted = 0;
-  let totalUpdated = 0;
-  let totalFetched = 0;
-  const syncTimestamp = new Date().toISOString();
-
   try {
+    const authHeader = request.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET;
+    const jar = await cookies();
+    const adminToken = jar.get(ADMIN_COOKIE_NAME)?.value;
+    const isAdmin = verifyAdminSession(adminToken);
+    const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+    if (!isAdmin && !isCron) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!process.env.RETS_LOGIN_URL || !process.env.RETS_USERNAME || !process.env.RETS_PASSWORD) {
+      return NextResponse.json(
+        { ok: false, error: "RETS credentials not configured. Set RETS_LOGIN_URL, RETS_USERNAME, RETS_PASSWORD in Vercel." },
+        { status: 500 },
+      );
+    }
+
+    const client = createSupabaseAdminClient();
+    if (!client) {
+      return NextResponse.json({ ok: false, error: "Supabase not configured" }, { status: 500 });
+    }
+
+    let logId: string | undefined;
+    try {
+      const { data: logRow } = await client
+        .from("mls_sync_log")
+        .insert({ status: "running" })
+        .select("id")
+        .single();
+      logId = logRow?.id;
+    } catch {
+      // mls_sync_log table may not exist yet -- continue without logging
+    }
+
+    let totalInserted = 0;
+    let totalUpdated = 0;
+    let totalFetched = 0;
+    const syncTimestamp = new Date().toISOString();
+
     let offset = 0;
     const batchSize = 2500;
     let hasMore = true;
@@ -51,54 +69,47 @@ export async function POST(request: Request) {
       if (offset > 200000) break;
     }
 
-    const deactivateResult = await client
-      .from("mls_listings")
-      .update({ status: "inactive" })
-      .lt("synced_at", syncTimestamp)
-      .eq("status", "active")
-      .select("id");
-    const deactivated = deactivateResult.data?.length ?? 0;
+    let deactivated = 0;
+    try {
+      const deactivateResult = await client
+        .from("mls_listings")
+        .update({ status: "inactive" })
+        .lt("synced_at", syncTimestamp)
+        .eq("status", "active")
+        .select("id");
+      deactivated = deactivateResult.data?.length ?? 0;
+    } catch {
+      // mls_listings table may be empty or not exist
+    }
 
     if (logId) {
-      await client
-        .from("mls_sync_log")
-        .update({
-          status: "completed",
-          finished_at: new Date().toISOString(),
-          inserted: totalInserted,
-          updated: totalUpdated,
-          deactivated: deactivated ?? 0,
-          total_fetched: totalFetched,
-        })
-        .eq("id", logId);
+      try {
+        await client
+          .from("mls_sync_log")
+          .update({
+            status: "completed",
+            finished_at: new Date().toISOString(),
+            inserted: totalInserted,
+            updated: totalUpdated,
+            deactivated,
+            total_fetched: totalFetched,
+          })
+          .eq("id", logId);
+      } catch { /* ignore log failures */ }
     }
 
     return NextResponse.json({
       ok: true,
       inserted: totalInserted,
       updated: totalUpdated,
-      deactivated: deactivated ?? 0,
+      deactivated,
       total_fetched: totalFetched,
     });
   } catch (err) {
     console.error("MLS sync error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
-
-    if (logId) {
-      await client
-        .from("mls_sync_log")
-        .update({
-          status: "failed",
-          finished_at: new Date().toISOString(),
-          error: message,
-          total_fetched: totalFetched,
-          inserted: totalInserted,
-          updated: totalUpdated,
-        })
-        .eq("id", logId);
-    }
-
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const stack = err instanceof Error ? err.stack?.slice(0, 500) : undefined;
+    return NextResponse.json({ ok: false, error: message, stack }, { status: 500 });
   }
 }
 
