@@ -233,42 +233,48 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
     return Number.isFinite(n) ? n : null;
   };
 
-  const mlsId = get(["ListingId", "ListingKey", "L_ListingID", "MLSNumber", "Matrix_Unique_ID", "sysid"]);
-  const streetNum = get(["StreetNumber", "L_AddressNumber", "StreetNumberNumeric"]);
-  const streetDir = get(["StreetDirPrefix", "L_AddressDirection"]);
-  const streetName = get(["StreetName", "L_AddressStreet"]);
-  const streetSuffix = get(["StreetSuffix", "L_AddressSuffix"]);
-  const unitNum = get(["UnitNumber", "L_AddressUnit"]);
+  const mlsId = get(["ListingId"]);
+  const unparsedAddr = get(["UnparsedAddress"]);
+  const streetNum = get(["StreetNumber"]);
+  const streetDir = get(["StreetDirPrefix"]);
+  const streetName = get(["StreetName"]);
+  const streetSuffix = get(["StreetSuffix"]);
+  const streetDirSuffix = get(["StreetDirSuffix"]);
+  const unitNum = get(["UnitNumber", "Unit"]);
 
-  const addressParts = [streetNum, streetDir, streetName, streetSuffix].filter(Boolean);
-  let addressLine = addressParts.join(" ");
-  if (unitNum) addressLine += `, ${unitNum}`;
+  let addressLine = unparsedAddr;
+  if (!addressLine) {
+    const parts = [streetNum, streetDir, streetName, streetSuffix, streetDirSuffix].filter(Boolean);
+    addressLine = parts.join(" ");
+    if (unitNum) addressLine += ` #${unitNum}`;
+  }
 
-  const city = get(["City", "L_City"]);
-  const state = get(["StateOrProvince", "L_State", "State"]);
-  const postalCode = get(["PostalCode", "L_Zip", "ZipCode"]);
-  const priceDollars = getNum(["ListPrice", "L_AskingPrice", "CurrentPrice", "OriginalListPrice"]);
-  const remarks = get(["PublicRemarks", "L_Remarks", "Remarks"]);
+  const city = get(["City"]);
+  const state = get(["StateOrProvince"]);
+  const postalCode = get(["PostalCode"]);
+  const priceDollars = getNum(["ListPrice"]);
+  const remarks = get(["PublicRemarks"]);
+  const subdivision = get(["SubdivisionName"]);
 
   return {
     mls_id: mlsId,
-    title: remarks.slice(0, 100) || `${addressLine}, ${city}`.slice(0, 100),
+    title: subdivision ? `${subdivision} · ${addressLine}` : addressLine || `${city} Home`,
     address_line: addressLine,
     city,
     state: state || "GA",
     postal_code: postalCode,
     price_cents: Math.round(priceDollars * 100),
-    bedrooms: Math.round(getNum(["BedroomsTotal", "L_Bedrooms", "Bedrooms"])),
-    bathrooms: getNum(["BathroomsTotalDecimal", "BathroomsFull", "L_Baths", "Bathrooms"]),
-    square_feet: getNumOrNull(["LivingArea", "L_SquareFeet", "SqFtTotal", "BuildingAreaTotal"]),
-    latitude: getNumOrNull(["Latitude", "L_Latitude"]),
-    longitude: getNumOrNull(["Longitude", "L_Longitude"]),
+    bedrooms: Math.round(getNum(["BedroomsTotal"])),
+    bathrooms: getNum(["BathroomsFull"]),
+    square_feet: getNumOrNull(["LivingArea"]),
+    latitude: getNumOrNull(["Latitude"]),
+    longitude: getNumOrNull(["Longitude"]),
     description: remarks,
-    property_type: get(["PropertyType", "PropertySubType", "L_Type_"]),
-    status: get(["StandardStatus", "MlsStatus", "L_Status", "Status"]),
+    property_type: get(["PropertySubType", "PropertyType"]),
+    status: get(["MlsStatus"]),
     image_urls: [],
-    listing_agent: get(["ListAgentFullName", "L_ListAgent1", "ListAgentName"]),
-    listing_office: get(["ListOfficeName", "L_ListOffice1", "ListOffice"]),
+    listing_agent: get(["ListAgent"]),
+    listing_office: get(["ListOffice"]),
     raw_data: record as Record<string, unknown>,
   };
 }
@@ -282,7 +288,7 @@ export async function searchActiveListings(
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Property",
     Class: "RESI",
-    Query: "(Status=A)",
+    Query: "(MlsStatus=Active)",
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",
     Limit: String(limit),
@@ -315,7 +321,7 @@ export async function searchListingsSince(
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Property",
     Class: "RESI",
-    Query: `(Status=A),(ModificationTimestamp=${ts}+)`,
+    Query: `(MlsStatus=Active),(ModificationTimestamp=${ts}+)`,
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",
     Limit: String(limit),
