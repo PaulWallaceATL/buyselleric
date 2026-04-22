@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { searchActiveListings, type MlsListingData } from "@/lib/rets-client";
+import type { MlsListingData } from "@/lib/rets-client";
 
 export const maxDuration = 300;
 
@@ -47,6 +47,8 @@ export async function POST(request: Request) {
     let totalUpdated = 0;
     let totalFetched = 0;
     const syncTimestamp = new Date().toISOString();
+
+    const { searchActiveListings } = await import("@/lib/rets-client");
 
     let offset = 0;
     const batchSize = 2500;

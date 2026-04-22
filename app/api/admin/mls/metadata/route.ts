@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
-import { getMetadataResources, getMetadataClasses, getMetadataTable } from "@/lib/rets-client";
 
 export const maxDuration = 60;
 
@@ -18,6 +17,8 @@ export async function GET(request: Request) {
   const classId = searchParams.get("class") || "Residential";
 
   try {
+    const { getMetadataResources, getMetadataClasses, getMetadataTable } = await import("@/lib/rets-client");
+
     if (type === "resources") {
       const data = await getMetadataResources();
       return NextResponse.json({ ok: true, type: "resources", data });
@@ -36,9 +37,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Use ?type=resources|classes|table" }, { status: 400 });
   } catch (err) {
     console.error("RETS metadata error:", err);
-    return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "RETS connection failed" },
-      { status: 500 },
-    );
+    const message = err instanceof Error ? err.message : "RETS connection failed";
+    const stack = err instanceof Error ? err.stack?.slice(0, 500) : undefined;
+    return NextResponse.json({ ok: false, error: message, stack }, { status: 500 });
   }
 }
