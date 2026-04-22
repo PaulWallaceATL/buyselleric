@@ -21,13 +21,17 @@ export async function GET(request: Request) {
     const { rawSearchAny } = await import("@/lib/rets-client");
     const body = await rawSearchAny(resource, classId, query, limit);
 
+    const countMatches = (body.match(/<DATA>/g) || []).length;
     return NextResponse.json({
       ok: true,
       query,
+      resource,
+      class: classId,
       bodyLength: body.length,
-      preview: body.slice(0, 5000),
+      preview: body.slice(0, 8000),
       hasColumns: body.includes("<COLUMNS>"),
       hasData: body.includes("<DATA>"),
+      dataRecordsInBody: countMatches,
       replyCode: body.match(/ReplyCode="([^"]+)"/)?.[1],
       replyText: body.match(/ReplyText="([^"]+)"/)?.[1],
       recordCount: body.match(/Records="([^"]+)"/)?.[1],
