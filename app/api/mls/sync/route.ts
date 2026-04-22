@@ -61,12 +61,19 @@ export async function POST(request: Request) {
       totalFetched += records.length;
 
       if (records.length > 0) {
-        for (const record of records.slice(0, 50)) {
-          if (record.mls_id && record.image_urls.length === 0) {
+        const photoResults = await Promise.all(
+          records.slice(0, 100).map(async (record) => {
+            if (!record.mls_id) return [];
             try {
-              record.image_urls = await fetchPhotoUrls(record.mls_id, 1);
-            } catch { /* skip photo errors */ }
-          }
+              return await fetchPhotoUrls(record.mls_id, 10);
+            } catch {
+              return [];
+            }
+          }),
+        );
+        for (let i = 0; i < photoResults.length; i++) {
+          const rec = records[i];
+          if (rec) rec.image_urls = photoResults[i] ?? [];
         }
         const { inserted, updated } = await upsertBatch(client, records, syncTimestamp);
         totalInserted += inserted;

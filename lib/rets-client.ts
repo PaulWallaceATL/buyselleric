@@ -137,51 +137,36 @@ async function retsFetch(session: RetsSession, url: string, params: Record<strin
   return await res.text();
 }
 
-export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 5): Promise<string[]> {
+export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 10): Promise<string[]> {
   const session = await retsLogin();
-  const config = getConfig();
-  const urls: string[] = [];
 
-  for (let i = 0; i < maxPhotos; i++) {
-    const params: Record<string, string> = {
-      Type: "Photo",
-      Resource: "Property",
-      ID: `${listingId}:${i}`,
-      Location: "1",
-    };
-    const qs = new URLSearchParams(params).toString();
-    const fullUrl = `${session.getObjectUrl}?${qs}`;
-    const uri = new URL(fullUrl).pathname + "?" + qs;
-    const authHeader = buildDigestHeader("GET", uri, config.username, config.password, session.challenge, session.nc++);
+  const body = await retsFetch(session, session.searchUrl, {
+    SearchType: "Media",
+    Class: "Media",
+    Query: `(MediaResourceKey=${listingId}),(MediaType=Photo)`,
+    QueryType: "DMQL2",
+    Format: "COMPACT-DECODED",
+    Limit: String(maxPhotos),
+    Offset: "1",
+    StandardNames: "0",
+  });
 
-    try {
-      const res = await fetch(fullUrl, {
-        headers: {
-          "User-Agent": "BuySellEric/1.0",
-          "RETS-Version": "RETS/1.7.2",
-          Authorization: authHeader,
-          Cookie: session.cookie,
-        },
-        redirect: "manual",
-      });
+  const records = parseCompactData(body);
 
-      const contentType = res.headers.get("content-type") ?? "";
-      const location = res.headers.get("location");
+  const sorted = records
+    .map((r) => ({
+      order: Number(r.MediaOrder ?? "999"),
+      preferred: r.PreferredPhoto === "Y" || r.PreferredPhoto === "true" || r.PreferredPhoto === "1",
+      url: r.MediaURL || r.OriginalURL || r.MediaMidsizeURL || r.MediaThumbnailURL || "",
+    }))
+    .filter((r) => r.url && r.url.startsWith("http"))
+    .sort((a, b) => {
+      if (a.preferred && !b.preferred) return -1;
+      if (!a.preferred && b.preferred) return 1;
+      return a.order - b.order;
+    });
 
-      if (location && location.startsWith("http")) {
-        urls.push(location);
-      } else if (contentType.startsWith("image/")) {
-        const objectUrl = res.headers.get("content-location") ?? res.headers.get("location");
-        if (objectUrl) urls.push(objectUrl);
-      } else {
-        break;
-      }
-    } catch {
-      break;
-    }
-  }
-
-  return urls;
+  return sorted.map((r) => r.url);
 }
 
 export async function rawSearch(query: string, limit: number = 5): Promise<string> {
