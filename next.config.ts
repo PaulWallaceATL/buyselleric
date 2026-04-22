@@ -21,7 +21,6 @@ function supabaseStorageImagePattern():
 const supabasePattern = supabaseStorageImagePattern();
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["rets-client"],
   productionBrowserSourceMaps: false,
   // Remove console.log in production
   compiler: {

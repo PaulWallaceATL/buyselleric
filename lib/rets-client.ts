@@ -1,51 +1,193 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import rets from "rets-client";
+import { XMLParser } from "fast-xml-parser";
+import crypto from "crypto";
 
 function getConfig() {
   const loginUrl = process.env.RETS_LOGIN_URL;
   const username = process.env.RETS_USERNAME;
   const password = process.env.RETS_PASSWORD;
-
   if (!loginUrl || !username || !password) {
     throw new Error("RETS_LOGIN_URL, RETS_USERNAME, and RETS_PASSWORD must be set");
   }
-
   return { loginUrl, username, password };
 }
 
-export async function withRetsClient<T>(
-  fn: (client: any) => Promise<T>,
-): Promise<T> {
-  const config = getConfig();
+const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
 
-  return rets.getAutoLogoutClient(
-    {
-      loginUrl: config.loginUrl,
-      username: config.username,
-      password: config.password,
-      version: "RETS/1.7.2",
-      userAgent: "BuySellEric/1.0",
-    } as any,
-    (client: any) => fn(client),
-  ) as Promise<T>;
+// --- Digest Authentication ---
+
+interface DigestChallenge {
+  realm: string;
+  nonce: string;
+  qop?: string | undefined;
+  opaque?: string | undefined;
 }
 
-export async function getMetadataResources(): Promise<unknown> {
-  return withRetsClient(async (client) => {
-    return await client.metadata.getResources();
+function parseDigestChallenge(header: string): DigestChallenge | null {
+  if (!header.toLowerCase().startsWith("digest ")) return null;
+  const params: Record<string, string> = {};
+  const matches = header.slice(7).matchAll(/(\w+)="([^"]+)"/g);
+  for (const m of matches) {
+    if (m[1] && m[2]) params[m[1]] = m[2];
+  }
+  const realm = params.realm;
+  const nonce = params.nonce;
+  if (!realm || !nonce) return null;
+  return { realm, nonce, qop: params.qop, opaque: params.opaque };
+}
+
+function buildDigestHeader(
+  method: string, uri: string, username: string, password: string, challenge: DigestChallenge, nc: number,
+): string {
+  const ha1 = crypto.createHash("md5").update(`${username}:${challenge.realm}:${password}`).digest("hex");
+  const ha2 = crypto.createHash("md5").update(`${method}:${uri}`).digest("hex");
+  const cnonce = crypto.randomBytes(8).toString("hex");
+  const ncStr = nc.toString(16).padStart(8, "0");
+
+  let response: string;
+  if (challenge.qop) {
+    response = crypto.createHash("md5").update(`${ha1}:${challenge.nonce}:${ncStr}:${cnonce}:auth:${ha2}`).digest("hex");
+  } else {
+    response = crypto.createHash("md5").update(`${ha1}:${challenge.nonce}:${ha2}`).digest("hex");
+  }
+
+  let header = `Digest username="${username}", realm="${challenge.realm}", nonce="${challenge.nonce}", uri="${uri}", response="${response}"`;
+  if (challenge.qop) header += `, qop=auth, nc=${ncStr}, cnonce="${cnonce}"`;
+  if (challenge.opaque) header += `, opaque="${challenge.opaque}"`;
+  return header;
+}
+
+// --- RETS Session ---
+
+interface RetsSession {
+  searchUrl: string;
+  metadataUrl: string;
+  cookie: string;
+  challenge: DigestChallenge;
+  nc: number;
+}
+
+async function retsLogin(): Promise<RetsSession> {
+  const config = getConfig();
+  const loginUri = new URL(config.loginUrl).pathname;
+
+  const initialRes = await fetch(config.loginUrl, {
+    method: "GET",
+    headers: { "User-Agent": "BuySellEric/1.0", "RETS-Version": "RETS/1.7.2" },
+    redirect: "manual",
   });
+
+  const wwwAuth = initialRes.headers.get("www-authenticate");
+  if (!wwwAuth) throw new Error("RETS server did not return authentication challenge");
+
+  const challenge = parseDigestChallenge(wwwAuth);
+  if (!challenge) throw new Error("Could not parse digest auth challenge");
+
+  const authHeader = buildDigestHeader("GET", loginUri, config.username, config.password, challenge, 1);
+
+  const loginRes = await fetch(config.loginUrl, {
+    method: "GET",
+    headers: {
+      "User-Agent": "BuySellEric/1.0",
+      "RETS-Version": "RETS/1.7.2",
+      Authorization: authHeader,
+    },
+    redirect: "manual",
+  });
+
+  const cookie = loginRes.headers.get("set-cookie") ?? "";
+  const body = await loginRes.text();
+
+  if (!body.includes("ReplyCode=\"0\"") && !body.includes('ReplyCode="0"')) {
+    throw new Error(`RETS login failed: ${body.slice(0, 300)}`);
+  }
+
+  const baseUrl = new URL(config.loginUrl).origin;
+  const searchMatch = body.match(/Search=([^\s<]+)/);
+  const metadataMatch = body.match(/GetMetadata=([^\s<]+)/);
+
+  return {
+    searchUrl: searchMatch ? baseUrl + searchMatch[1] : baseUrl + "/server/search",
+    metadataUrl: metadataMatch ? baseUrl + metadataMatch[1] : baseUrl + "/server/getmetadata",
+    cookie,
+    challenge,
+    nc: 2,
+  };
+}
+
+async function retsFetch(session: RetsSession, url: string, params: Record<string, string>): Promise<string> {
+  const config = getConfig();
+  const qs = new URLSearchParams(params).toString();
+  const fullUrl = `${url}?${qs}`;
+  const uri = new URL(fullUrl).pathname + "?" + qs;
+
+  const authHeader = buildDigestHeader("GET", uri, config.username, config.password, session.challenge, session.nc++);
+
+  const res = await fetch(fullUrl, {
+    headers: {
+      "User-Agent": "BuySellEric/1.0",
+      "RETS-Version": "RETS/1.7.2",
+      Authorization: authHeader,
+      Cookie: session.cookie,
+    },
+  });
+
+  return await res.text();
+}
+
+// --- Metadata ---
+
+export async function getMetadataResources(): Promise<unknown> {
+  const session = await retsLogin();
+  const body = await retsFetch(session, session.metadataUrl, {
+    Type: "METADATA-RESOURCE", ID: "0", Format: "STANDARD-XML",
+  });
+  return xmlParser.parse(body);
 }
 
 export async function getMetadataClasses(resourceId: string): Promise<unknown> {
-  return withRetsClient(async (client) => {
-    return await client.metadata.getClass(resourceId);
+  const session = await retsLogin();
+  const body = await retsFetch(session, session.metadataUrl, {
+    Type: "METADATA-CLASS", ID: resourceId, Format: "STANDARD-XML",
   });
+  return xmlParser.parse(body);
 }
 
 export async function getMetadataTable(resourceId: string, classId: string): Promise<unknown> {
-  return withRetsClient(async (client) => {
-    return await client.metadata.getTable(resourceId, classId);
+  const session = await retsLogin();
+  const body = await retsFetch(session, session.metadataUrl, {
+    Type: "METADATA-TABLE", ID: `${resourceId}:${classId}`, Format: "STANDARD-XML",
   });
+  return xmlParser.parse(body);
+}
+
+// --- Search ---
+
+function parseCompactData(body: string): Record<string, string>[] {
+  const records: Record<string, string>[] = [];
+
+  const delimMatch = body.match(/DELIMITER\s+value="(\d+)"/i);
+  const delimiter = delimMatch ? String.fromCharCode(Number(delimMatch[1])) : "\t";
+
+  const columnsMatch = body.match(/<COLUMNS>([\s\S]*?)<\/COLUMNS>/);
+  if (!columnsMatch || !columnsMatch[1]) return records;
+  const columns = columnsMatch[1].trim().split(delimiter).map((c) => c.trim()).filter(Boolean);
+
+  const dataRegex = /<DATA>([\s\S]*?)<\/DATA>/g;
+  let match: RegExpExecArray | null;
+  while ((match = dataRegex.exec(body)) !== null) {
+    const raw = match[1];
+    if (!raw) continue;
+    const values = raw.trim().split(delimiter);
+    const record: Record<string, string> = {};
+    for (let i = 0; i < columns.length && i < values.length; i++) {
+      const col = columns[i];
+      const val = values[i];
+      if (col && val) record[col] = val.trim();
+    }
+    if (Object.keys(record).length > 0) records.push(record);
+  }
+
+  return records;
 }
 
 export interface MlsListingData {
@@ -70,12 +212,6 @@ export interface MlsListingData {
   raw_data: Record<string, unknown>;
 }
 
-/**
- * Maps a RETS record to our mls_listings schema.
- * Field names will be finalized after metadata discovery --
- * these are common RETS/RESO field names that GAMLS likely uses.
- * After running the metadata route, update these mappings.
- */
 export function mapRetsRecord(record: Record<string, string>): MlsListingData {
   const get = (keys: string[]): string => {
     for (const k of keys) {
@@ -97,7 +233,7 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
     return Number.isFinite(n) ? n : null;
   };
 
-  const mlsId = get(["ListingId", "ListingKey", "L_ListingID", "MLSNumber", "Matrix_Unique_ID"]);
+  const mlsId = get(["ListingId", "ListingKey", "L_ListingID", "MLSNumber", "Matrix_Unique_ID", "sysid"]);
   const streetNum = get(["StreetNumber", "L_AddressNumber", "StreetNumberNumeric"]);
   const streetDir = get(["StreetDirPrefix", "L_AddressDirection"]);
   const streetName = get(["StreetName", "L_AddressStreet"]);
@@ -112,10 +248,11 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
   const state = get(["StateOrProvince", "L_State", "State"]);
   const postalCode = get(["PostalCode", "L_Zip", "ZipCode"]);
   const priceDollars = getNum(["ListPrice", "L_AskingPrice", "CurrentPrice", "OriginalListPrice"]);
+  const remarks = get(["PublicRemarks", "L_Remarks", "Remarks"]);
 
   return {
     mls_id: mlsId,
-    title: get(["PublicRemarks", "L_Remarks"]).slice(0, 100) || `${addressLine}, ${city}`,
+    title: remarks.slice(0, 100) || `${addressLine}, ${city}`.slice(0, 100),
     address_line: addressLine,
     city,
     state: state || "GA",
@@ -126,7 +263,7 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
     square_feet: getNumOrNull(["LivingArea", "L_SquareFeet", "SqFtTotal", "BuildingAreaTotal"]),
     latitude: getNumOrNull(["Latitude", "L_Latitude"]),
     longitude: getNumOrNull(["Longitude", "L_Longitude"]),
-    description: get(["PublicRemarks", "L_Remarks", "Remarks"]),
+    description: remarks,
     property_type: get(["PropertyType", "PropertySubType", "L_Type_"]),
     status: get(["StandardStatus", "MlsStatus", "L_Status", "Status"]),
     image_urls: [],
@@ -140,30 +277,31 @@ export async function searchActiveListings(
   offset: number = 0,
   limit: number = 2500,
 ): Promise<{ records: MlsListingData[]; hasMore: boolean; count: number }> {
-  return withRetsClient(async (client) => {
-    const query = "(Status=A)";
+  const session = await retsLogin();
 
-    const searchResult = await client.search.query(
-      "Property",
-      "Residential",
-      query,
-      {
-        limit,
-        offset,
-        restrictedIndicator: "***",
-      },
-    );
-
-    const records = (searchResult.results || []).map((r: Record<string, string>) =>
-      mapRetsRecord(r),
-    );
-
-    return {
-      records,
-      hasMore: records.length >= limit,
-      count: searchResult.count || records.length,
-    };
+  const body = await retsFetch(session, session.searchUrl, {
+    SearchType: "Property",
+    Class: "Residential",
+    Query: "(Status=A)",
+    QueryType: "DMQL2",
+    Format: "COMPACT-DECODED",
+    Limit: String(limit),
+    Offset: String(offset + 1),
+    StandardNames: "0",
+    Count: "1",
   });
+
+  const rawRecords = parseCompactData(body);
+  const records = rawRecords.map(mapRetsRecord).filter((r) => r.mls_id);
+
+  const countMatch = body.match(/Records="(\d+)"/);
+  const totalCount = countMatch ? Number(countMatch[1]) : records.length;
+
+  return {
+    records,
+    hasMore: records.length >= limit,
+    count: totalCount,
+  };
 }
 
 export async function searchListingsSince(
@@ -171,28 +309,22 @@ export async function searchListingsSince(
   offset: number = 0,
   limit: number = 2500,
 ): Promise<{ records: MlsListingData[]; hasMore: boolean }> {
-  return withRetsClient(async (client) => {
-    const ts = since.toISOString().replace("T", " ").slice(0, 19);
-    const query = `(Status=A),(ModificationTimestamp=${ts}+)`;
+  const session = await retsLogin();
+  const ts = since.toISOString().replace("T", " ").slice(0, 19);
 
-    const searchResult = await client.search.query(
-      "Property",
-      "Residential",
-      query,
-      {
-        limit,
-        offset,
-        restrictedIndicator: "***",
-      },
-    );
-
-    const records = (searchResult.results || []).map((r: Record<string, string>) =>
-      mapRetsRecord(r),
-    );
-
-    return {
-      records,
-      hasMore: records.length >= limit,
-    };
+  const body = await retsFetch(session, session.searchUrl, {
+    SearchType: "Property",
+    Class: "Residential",
+    Query: `(Status=A),(ModificationTimestamp=${ts}+)`,
+    QueryType: "DMQL2",
+    Format: "COMPACT-DECODED",
+    Limit: String(limit),
+    Offset: String(offset + 1),
+    StandardNames: "0",
   });
+
+  const rawRecords = parseCompactData(body);
+  const records = rawRecords.map(mapRetsRecord).filter((r) => r.mls_id);
+
+  return { records, hasMore: records.length >= limit };
 }
