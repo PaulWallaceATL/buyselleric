@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return createMetadata({
     title,
     description: `${formatPriceUsd(listing.price_cents)} · ${listing.bedrooms} bd · ${listing.bathrooms} ba in ${listing.city}, ${listing.state}`,
-    path: `/listings/mls-${id}`,
+    path: `/listings/mls/${id}`,
   });
 }
 

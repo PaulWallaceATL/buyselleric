@@ -10,7 +10,7 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
   const href =
     listing.source === "manual" && listing.slug
       ? `/listings/${listing.slug}`
-      : `/listings/mls-${listing.mls_id}`;
+      : `/listings/mls/${listing.mls_id}`;
 
   return (
     <Link
