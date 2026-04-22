@@ -134,6 +134,21 @@ async function retsFetch(session: RetsSession, url: string, params: Record<strin
   return await res.text();
 }
 
+export async function rawSearch(query: string, limit: number = 5): Promise<string> {
+  const session = await retsLogin();
+  return retsFetch(session, session.searchUrl, {
+    SearchType: "Property",
+    Class: "RESI",
+    Query: query,
+    QueryType: "DMQL2",
+    Format: "COMPACT-DECODED",
+    Limit: String(limit),
+    Offset: "1",
+    StandardNames: "0",
+    Count: "1",
+  });
+}
+
 // --- Metadata ---
 
 export async function getMetadataResources(): Promise<unknown> {
