@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { UnifiedListingCard } from "@/components/unified-listing-card";
+import { ListingsFilters } from "@/components/listings-filters";
 import { ListingsMapView } from "@/components/listings-map-view";
+import { ListingsPagination } from "@/components/listings-pagination";
 import { ListingsSearchBar } from "@/components/listings-search-bar";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
-import { getAllListingsWithMls, searchAllListings } from "@/lib/listings-queries";
+import { searchWithFilters, type ListingFilters } from "@/lib/listings-queries";
 import { eyebrow, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
@@ -18,67 +21,115 @@ export const metadata: Metadata = createMetadata({
   path: "/listings",
 });
 
+function parseNum(val: string | string[] | undefined): number | undefined {
+  if (typeof val !== "string") return undefined;
+  const n = Number(val);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 export default async function ListingsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<ReactNode> {
   const params = await searchParams;
-  const query = typeof params.q === "string" ? params.q.trim() : "";
-  const view = typeof params.view === "string" ? params.view : "list";
 
-  const listings = query ? await searchAllListings(query) : await getAllListingsWithMls();
+  const filters: ListingFilters = {
+    q: typeof params.q === "string" ? params.q.trim() : undefined,
+    minPrice: parseNum(params.minPrice),
+    maxPrice: parseNum(params.maxPrice),
+    minBeds: parseNum(params.minBeds),
+    minBaths: parseNum(params.minBaths),
+    minSqft: parseNum(params.minSqft),
+    maxSqft: parseNum(params.maxSqft),
+    propertyType: typeof params.propertyType === "string" ? params.propertyType : undefined,
+    sort: (typeof params.sort === "string" ? params.sort : "price_desc") as ListingFilters["sort"],
+    page: parseNum(params.page) ?? 1,
+    perPage: 24,
+  };
+
+  const view = typeof params.view === "string" ? params.view : "list";
+  const { listings, total, page, totalPages } = await searchWithFilters(filters);
+
+  const baseParams: Record<string, string> = {};
+  if (filters.q) baseParams.q = filters.q;
+  if (filters.minPrice) baseParams.minPrice = String(filters.minPrice);
+  if (filters.maxPrice) baseParams.maxPrice = String(filters.maxPrice);
+  if (filters.minBeds) baseParams.minBeds = String(filters.minBeds);
+  if (filters.minBaths) baseParams.minBaths = String(filters.minBaths);
+  if (filters.minSqft) baseParams.minSqft = String(filters.minSqft);
+  if (filters.maxSqft) baseParams.maxSqft = String(filters.maxSqft);
+  if (filters.sort && filters.sort !== "price_desc") baseParams.sort = filters.sort;
+  if (view !== "list") baseParams.view = view;
+
+  const hasFilters = !!(filters.q || filters.minPrice || filters.maxPrice || filters.minBeds || filters.minBaths || filters.minSqft || filters.maxSqft);
 
   return (
     <main id="main-content" className={pageMain}>
       <div className={siteContainer}>
         <p className={eyebrow}>{siteConfig.brandSlug}</p>
         <h1 className={`${sectionTitle} mt-3`}>
-          {query ? "Search results" : "Available homes"}
+          {hasFilters ? "Search results" : "Available homes"}
         </h1>
         <p className={`${lead} mt-4`}>
-          {query
-            ? `Showing homes matching "${query}"`
-            : "Every listing is presented with honest details and professional photography when available. Reach out for private showings or off-market opportunities."}
+          {filters.q
+            ? `Showing homes matching "${filters.q}"`
+            : "Browse homes across Georgia. Use filters to narrow your search."}
         </p>
 
-        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <ListingsSearchBar defaultValue={query} />
-          <ViewToggle query={query} activeView={view} />
+        <div className="mt-8 flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <ListingsSearchBar defaultValue={filters.q ?? ""} />
+            <ViewToggle baseParams={baseParams} activeView={view} />
+          </div>
+          <Suspense>
+            <ListingsFilters />
+          </Suspense>
         </div>
 
         {listings.length === 0 ? (
-          <EmptyState query={query} />
+          <EmptyState hasFilters={hasFilters} query={filters.q} />
         ) : view === "map" ? (
-          <div className="mt-10">
+          <div className="mt-8">
             <ListingsMapView listings={listings} />
-            <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {listings.map((l) => (
                 <UnifiedListingCard key={l.id} listing={l} />
               ))}
             </div>
           </div>
         ) : (
-          <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {listings.map((l) => (
               <UnifiedListingCard key={l.id} listing={l} />
             ))}
           </div>
         )}
+
+        <ListingsPagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          baseParams={baseParams}
+        />
       </div>
     </main>
   );
 }
 
-function ViewToggle({ query, activeView }: { query: string; activeView: string }) {
-  const base = query ? `/listings?q=${encodeURIComponent(query)}` : "/listings";
-  const listHref = query ? `${base}&view=list` : `${base}?view=list`;
-  const mapHref = query ? `${base}&view=map` : `${base}?view=map`;
+function ViewToggle({ baseParams, activeView }: { baseParams: Record<string, string>; activeView: string }) {
+  function buildHref(v: string) {
+    const p = new URLSearchParams(baseParams);
+    if (v !== "list") p.set("view", v); else p.delete("view");
+    p.delete("page");
+    const qs = p.toString();
+    return `/listings${qs ? `?${qs}` : ""}`;
+  }
 
   return (
     <div className="flex shrink-0 items-center gap-2">
       <Link
-        href={listHref}
+        href={buildHref("list")}
         className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
           activeView !== "map"
             ? "bg-foreground text-background"
@@ -91,7 +142,7 @@ function ViewToggle({ query, activeView }: { query: string; activeView: string }
         List
       </Link>
       <Link
-        href={mapHref}
+        href={buildHref("map")}
         className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
           activeView === "map"
             ? "bg-foreground text-background"
@@ -107,26 +158,26 @@ function ViewToggle({ query, activeView }: { query: string; activeView: string }
   );
 }
 
-function EmptyState({ query }: { query: string }) {
+function EmptyState({ hasFilters }: { hasFilters: boolean; query?: string | undefined }) {
   return (
     <div className="mt-10 rounded-3xl border border-dashed border-border bg-muted/20 p-10 text-center sm:mt-12 sm:p-12">
-      <p className="text-foreground font-medium">
-        {query ? `No homes found matching "${query}"` : "No published listings yet."}
+      <p className="font-medium text-foreground">
+        {hasFilters ? "No homes match your filters" : "No published listings yet."}
       </p>
       <p className="mt-2 text-sm text-muted-foreground">
-        {query
-          ? "Try a different search term, or browse all available listings."
+        {hasFilters
+          ? "Try adjusting your price range, bedrooms, or search term."
           : "Check back soon—or tell Eric what you are looking for."}
       </p>
       <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-        {query && (
+        {hasFilters && (
           <Link href="/listings" className={ctaPrimary}>
-            View all listings
+            Clear all filters
           </Link>
         )}
         <Link
           href="/sell"
-          className={query ? "text-sm font-medium text-ring underline underline-offset-4" : ctaPrimary}
+          className={hasFilters ? "text-sm font-medium text-ring underline underline-offset-4" : ctaPrimary}
         >
           Start a seller conversation
         </Link>
