@@ -19,9 +19,10 @@ export async function POST(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const limit = Math.min(500, Number(searchParams.get("limit") || "50"));
+  const debug = searchParams.get("debug") === "1";
 
   try {
-    const { fetchPhotoUrls } = await import("@/lib/rets-client");
+    const { fetchPhotoUrls, probeMediaSearch } = await import("@/lib/rets-client");
 
     // Fetch all active listings, filter in JS to avoid RLS/filter quirks
     const { data: allListings, error: fetchError } = await client
@@ -45,6 +46,23 @@ export async function POST(request: Request) {
         totalListings: allListings?.length ?? 0,
         withPhotos: (allListings ?? []).filter((l) => l.image_urls && l.image_urls.length > 0).length,
         updated: 0,
+      });
+    }
+
+    if (debug) {
+      const sample = needsPhotos[0];
+      if (!sample?.mls_id) {
+        return NextResponse.json({ ok: false, error: "No sample listing for debug" }, { status: 400 });
+      }
+      const attempts = await probeMediaSearch(sample.mls_id, 15);
+      const urls = await fetchPhotoUrls(sample.mls_id, 15);
+      return NextResponse.json({
+        ok: true,
+        debug: true,
+        sampleMlsId: sample.mls_id,
+        resolvedUrls: urls,
+        attempts,
+        hint: "If all replyCode≠0 or recordCount=0, open /api/admin/mls/metadata?type=table&resource=Media&class=Media and match the link field to ListingId.",
       });
     }
 

@@ -137,36 +137,158 @@ async function retsFetch(session: RetsSession, url: string, params: Record<strin
   return await res.text();
 }
 
-export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 30): Promise<string[]> {
-  const session = await retsLogin();
+function parseRetsReply(body: string): { replyCode: string; replyText: string } {
+  const replyCode = body.match(/ReplyCode="([^"]+)"/)?.[1] ?? "";
+  const replyText = body.match(/ReplyText="([^"]+)"/)?.[1] ?? "";
+  return { replyCode, replyText };
+}
 
-  const body = await retsFetch(session, session.searchUrl, {
-    SearchType: "Media",
-    Class: "Media",
-    Query: `(MediaResourceId=${listingId}),(MediaCategory=Photo),(MediaListingStatus=Active)`,
-    QueryType: "DMQL2",
-    Format: "COMPACT-DECODED",
-    Limit: String(maxPhotos),
-    Offset: "1",
-    StandardNames: "0",
-  });
+/** Pull image URLs from a Media row; RESO / MLS system names vary widely. */
+function mediaUrlsFromRecord(r: Record<string, string>): string[] {
+  const keyHints = [
+    "MediaURL",
+    "MediaURLFull",
+    "MediaURLHiRes",
+    "OriginalURL",
+    "MediaMidsizeURL",
+    "MediaThumbnailURL",
+    "ImageURL",
+    "PhotoURL",
+    "URL",
+    "Url",
+  ];
+  const found: string[] = [];
+  for (const k of keyHints) {
+    const v = r[k];
+    if (v && /^https?:\/\//i.test(v.trim())) found.push(v.trim());
+  }
+  if (found.length === 0) {
+    for (const v of Object.values(r)) {
+      if (v && /^https?:\/\//i.test(v.trim())) found.push(v.trim());
+    }
+  }
+  return [...new Set(found)];
+}
 
-  const records = parseCompactData(body);
-
-  const sorted = records
-    .map((r) => ({
-      order: Number(r.MediaOrder ?? "999"),
-      preferred: r.PreferredPhoto === "Y" || r.PreferredPhoto === "true" || r.PreferredPhoto === "1",
-      url: r.MediaURL || r.OriginalURL || r.MediaMidsizeURL || r.MediaThumbnailURL || "",
-    }))
-    .filter((r) => r.url && r.url.startsWith("http"))
+function sortMediaRecords(records: Record<string, string>[]): { order: number; preferred: boolean; url: string }[] {
+  return records
+    .flatMap((r) => {
+      const urls = mediaUrlsFromRecord(r);
+      return urls.map((url) => ({
+        order: Number(r.MediaOrder ?? r.Order ?? "999"),
+        preferred:
+          r.PreferredPhoto === "Y" ||
+          r.PreferredPhoto === "y" ||
+          r.PreferredPhoto === "true" ||
+          r.PreferredPhoto === "1",
+        url,
+      }));
+    })
+    .filter((r) => r.url.startsWith("http"))
     .sort((a, b) => {
       if (a.preferred && !b.preferred) return -1;
       if (!a.preferred && b.preferred) return 1;
       return a.order - b.order;
     });
+}
 
-  return sorted.map((r) => r.url);
+export interface PhotoProbeAttempt {
+  query: string;
+  standardNames: string;
+  replyCode: string;
+  replyText: string;
+  recordCount: number;
+  columnSample: string[];
+  bodyPreview: string;
+}
+
+/**
+ * GAMLS / RESO Media rows usually link via ResourceRecordKey or ListingKey, not MediaResourceId
+ * (MediaResourceId often identifies the related resource type, not the listing id).
+ */
+export async function probeMediaSearch(listingId: string, maxPhotos: number = 10): Promise<PhotoProbeAttempt[]> {
+  const session = await retsLogin();
+  const attempts: PhotoProbeAttempt[] = [];
+  const queries = buildMediaQueryCandidates(listingId);
+
+  for (const { query, standardNames } of queries) {
+    const body = await retsFetch(session, session.searchUrl, {
+      SearchType: "Media",
+      Class: "Media",
+      Query: query,
+      QueryType: "DMQL2",
+      Format: "COMPACT-DECODED",
+      Limit: String(maxPhotos),
+      Offset: "1",
+      StandardNames: standardNames,
+    });
+    const { replyCode, replyText } = parseRetsReply(body);
+    const records = parseCompactData(body);
+    const colMatch = body.match(/<COLUMNS>([\s\S]*?)<\/COLUMNS>/);
+    const delimMatch = body.match(/DELIMITER\s+value="(\d+)"/i);
+    const delimiter = delimMatch ? String.fromCharCode(Number(delimMatch[1])) : "\t";
+    const columnSample = colMatch?.[1]
+      ? colMatch[1].trim().split(delimiter).map((c) => c.trim()).filter(Boolean).slice(0, 40)
+      : [];
+
+    attempts.push({
+      query,
+      standardNames,
+      replyCode,
+      replyText,
+      recordCount: records.length,
+      columnSample,
+      bodyPreview: body.slice(0, 2500),
+    });
+  }
+
+  return attempts;
+}
+
+function buildMediaQueryCandidates(listingId: string): { query: string; standardNames: string }[] {
+  const id = listingId.trim();
+  const q: { query: string; standardNames: string }[] = [
+    { query: `(ResourceRecordKey=${id}),(MediaCategory=Photo)`, standardNames: "0" },
+    { query: `(ResourceRecordKey=${id})`, standardNames: "0" },
+    { query: `(ListingKey=${id}),(MediaCategory=Photo)`, standardNames: "0" },
+    { query: `(ListingId=${id}),(MediaCategory=Photo)`, standardNames: "0" },
+    { query: `(MediaListingKey=${id}),(MediaCategory=Photo)`, standardNames: "0" },
+    { query: `(MediaResourceId=${id}),(MediaCategory=Photo)`, standardNames: "0" },
+    { query: `(MediaResourceId=${id}),(MediaCategory=Photo),(MediaListingStatus=Active)`, standardNames: "0" },
+    // RESO standard names (when feed maps them)
+    { query: `(ListingKey=${id}),(MediaCategory=Photo)`, standardNames: "1" },
+    { query: `(ResourceRecordKey=${id}),(MediaCategory=Photo)`, standardNames: "1" },
+  ];
+  return q;
+}
+
+export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 30): Promise<string[]> {
+  const session = await retsLogin();
+  const queries = buildMediaQueryCandidates(listingId);
+
+  for (const { query, standardNames } of queries) {
+    const body = await retsFetch(session, session.searchUrl, {
+      SearchType: "Media",
+      Class: "Media",
+      Query: query,
+      QueryType: "DMQL2",
+      Format: "COMPACT-DECODED",
+      Limit: String(maxPhotos),
+      Offset: "1",
+      StandardNames: standardNames,
+    });
+
+    const { replyCode } = parseRetsReply(body);
+    if (replyCode && replyCode !== "0") continue;
+
+    const records = parseCompactData(body);
+    const sorted = sortMediaRecords(records);
+    if (sorted.length > 0) {
+      return sorted.map((r) => r.url).slice(0, maxPhotos);
+    }
+  }
+
+  return [];
 }
 
 export async function rawSearch(query: string, limit: number = 5): Promise<string> {
