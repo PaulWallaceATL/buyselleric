@@ -137,13 +137,13 @@ async function retsFetch(session: RetsSession, url: string, params: Record<strin
   return await res.text();
 }
 
-export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 10): Promise<string[]> {
+export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 30): Promise<string[]> {
   const session = await retsLogin();
 
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Media",
     Class: "Media",
-    Query: `(MediaResourceKey=${listingId}),(MediaType=Photo)`,
+    Query: `(MediaResourceId=${listingId}),(MediaCategory=Photo),(MediaListingStatus=Active)`,
     QueryType: "DMQL2",
     Format: "COMPACT-DECODED",
     Limit: String(maxPhotos),
