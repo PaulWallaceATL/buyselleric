@@ -6,7 +6,7 @@ import type { MlsListingData } from "@/lib/rets-client";
 
 export const maxDuration = 300;
 
-const DEFAULT_BATCH = 1000;
+const DEFAULT_BATCH = 400;
 const MIN_BATCH = 100;
 const MAX_BATCH = 2500;
 
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
       if (skipPhotosThisRun) {
         const ids = records.map((r) => r.mls_id);
         const byMls = new Map<string, string[]>();
-        const idChunk = 400;
+          const idChunk = 250;
         for (let i = 0; i < ids.length; i += idChunk) {
           const slice = ids.slice(i, i + idChunk);
           const { data: existingRows } = await client

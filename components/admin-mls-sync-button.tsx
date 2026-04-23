@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 
-const BATCH_SIZE = 1000;
-/** Safety cap (~150k RETS rows per button click). */
-const MAX_BATCHES = 150;
+/** Smaller pages stay under Vercel timeouts (merge + upsert + RETS). */
+const BATCH_SIZE = 400;
+/** Pause between chunks to ease rate limits. */
+const PAUSE_MS = 350;
+/** Safety cap for one browser session. */
+const MAX_BATCHES = 400;
 
 type SyncChunkResponse = {
   ok?: boolean;
@@ -88,11 +91,13 @@ export function AdminMlsSyncButton() {
             `Finished. ~${retsTotal ?? "?"} matches reported by RETS, ${sumRetsRows} RETS rows pulled in this run, ${sumUpserted} row upserts, ${lastDeactivated} listings marked inactive (no longer in feed).`,
           );
           if (photosMode === "skipped_large_feed") {
-            lines.push(`Photos were skipped (large feed). Use “Fetch photos” to backfill images.`);
+            lines.push(`Photos were skipped (large feed). Use “Fetch all photos (batched)” to backfill images.`);
           }
           setResult(lines.join("\n"));
           return;
         }
+
+        await new Promise((r) => setTimeout(r, PAUSE_MS));
       }
 
       setResult(
@@ -116,7 +121,8 @@ export function AdminMlsSyncButton() {
         {syncing ? "Syncing… (batched)" : "Sync now"}
       </button>
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-        Pulls up to {BATCH_SIZE.toLocaleString()} listings per request until RETS reports the feed is complete.
+        Pulls up to {BATCH_SIZE.toLocaleString()} listings per HTTP request (with a short pause between requests) until
+        RETS reports the feed is complete.
         Same <code className="rounded bg-muted px-1">mls_id</code> is upserted, so there are no duplicates.
       </p>
       {result && (

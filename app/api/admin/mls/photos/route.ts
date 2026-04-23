@@ -3,7 +3,24 @@ import { NextResponse } from "next/server";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-export const maxDuration = 300;
+export const maxDuration = 120;
+
+type PhotoBody = {
+  after_id?: string;
+  batch_size?: number;
+  debug?: boolean;
+};
+
+const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+const DEFAULT_PROCESS = 35;
+const MAX_PROCESS = 80;
+
+function parseAfterUuid(raw: string | undefined): string {
+  if (!raw || raw === ZERO_UUID) return ZERO_UUID;
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRe.test(raw) ? raw : ZERO_UUID;
+}
 
 export async function POST(request: Request) {
   const jar = await cookies();
@@ -18,114 +35,196 @@ export async function POST(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const limit = Math.min(500, Number(searchParams.get("limit") || "50"));
-  const debug = searchParams.get("debug") === "1";
+  let body: PhotoBody = {};
+  try {
+    body = (await request.json()) as PhotoBody;
+  } catch {
+    /* query only */
+  }
+
+  const debug =
+    searchParams.get("debug") === "1" ||
+    body.debug === true ||
+    searchParams.get("debug") === "true";
+
+  const afterId = parseAfterUuid(
+    typeof body.after_id === "string" ? body.after_id : searchParams.get("after_id") ?? undefined,
+  );
+
+  const rawSize = Number(body.batch_size ?? searchParams.get("batch_size") ?? DEFAULT_PROCESS);
+  const processLimit = Math.min(MAX_PROCESS, Math.max(5, Number.isFinite(rawSize) ? rawSize : DEFAULT_PROCESS));
 
   try {
-    const { fetchPhotoUrls, probeMediaSearch, MLS_MEDIA_MAX_URLS } = await import("@/lib/rets-client");
-
-    // Fetch all active listings, filter in JS to avoid RLS/filter quirks
-    const { data: allListings, error: fetchError } = await client
-      .from("mls_listings")
-      .select("id, mls_id, image_urls")
-      .eq("status", "active")
-      .limit(500);
-
-    if (fetchError) {
-      return NextResponse.json({ ok: false, error: `DB fetch: ${fetchError.message}` }, { status: 500 });
-    }
-
-    const needsPhotos = (allListings ?? [])
-      .filter((l) => !l.image_urls || l.image_urls.length === 0)
-      .slice(0, limit);
-
-    if (needsPhotos.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        message: "No listings need photos",
-        totalListings: allListings?.length ?? 0,
-        withPhotos: (allListings ?? []).filter((l) => l.image_urls && l.image_urls.length > 0).length,
-        updated: 0,
-      });
-    }
+    const { fetchPhotoUrlsWithSession, createRetsSession, probeMediaSearch, fetchPhotoUrls, MLS_MEDIA_MAX_URLS } =
+      await import("@/lib/rets-client");
 
     if (debug) {
-      const sample = needsPhotos[0];
-      if (!sample?.mls_id) {
-        return NextResponse.json({ ok: false, error: "No sample listing for debug" }, { status: 400 });
+      let sid: string | undefined;
+      const { data: rpcOne, error: rpcErr } = await client.rpc("mls_listings_missing_photos_batch", {
+        p_limit: 1,
+        p_after_id: afterId,
+      });
+      if (!rpcErr && rpcOne?.[0]) {
+        sid = (rpcOne[0] as { mls_id: string }).mls_id;
+      } else {
+        const { data: fb } = await client
+          .from("mls_listings")
+          .select("mls_id, image_urls")
+          .eq("status", "active")
+          .order("id", { ascending: true })
+          .limit(80);
+        const row = (fb ?? []).find((r) => {
+          const u = (r as { image_urls?: string[] | null }).image_urls;
+          return !u || u.length === 0;
+        }) as { mls_id: string } | undefined;
+        sid = row?.mls_id;
       }
-      const attempts = await probeMediaSearch(sample.mls_id, 15);
-      const urls = await fetchPhotoUrls(sample.mls_id, Math.min(30, MLS_MEDIA_MAX_URLS));
+      if (!sid) {
+        return NextResponse.json({
+          ok: false,
+          error:
+            rpcErr?.message ??
+            "No sample listing without photos. Run supabase/mls-listings-missing-photos-rpc.sql if RPC is missing.",
+        }, { status: 400 });
+      }
+      const attempts = await probeMediaSearch(sid, 15);
+      const urls = await fetchPhotoUrls(sid, Math.min(30, MLS_MEDIA_MAX_URLS));
       return NextResponse.json({
         ok: true,
         debug: true,
-        sampleMlsId: sample.mls_id,
+        sampleMlsId: sid,
         resolvedUrls: urls,
         attempts,
-        hint: "If all replyCode≠0 or recordCount=0, open /api/admin/mls/metadata?type=table&resource=Media&class=Media and match the link field to ListingId.",
       });
     }
 
+    const { data: rpcRows, error: rpcError } = await client.rpc("mls_listings_missing_photos_batch", {
+      p_limit: processLimit,
+      p_after_id: afterId,
+    });
+
+    let rows: { id: string; mls_id: string }[] = [];
+    let usedRpc = false;
+
+    if (!rpcError && rpcRows && (rpcRows as unknown[]).length > 0) {
+      rows = rpcRows as { id: string; mls_id: string }[];
+      usedRpc = true;
+    } else {
+      let scan = client
+        .from("mls_listings")
+        .select("id, mls_id, image_urls")
+        .eq("status", "active")
+        .order("id", { ascending: true })
+        .limit(600);
+      if (afterId !== ZERO_UUID) scan = scan.gt("id", afterId);
+      const { data: scanRows, error: scanErr } = await scan;
+
+      if (scanErr) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: rpcError?.message ?? scanErr.message,
+            hint: "Run supabase/mls-listings-missing-photos-rpc.sql in Supabase for reliable paging.",
+          },
+          { status: 500 },
+        );
+      }
+
+      const filtered = (scanRows ?? [])
+        .filter((r) => {
+          const u = (r as { image_urls?: string[] | null }).image_urls;
+          return !u || u.length === 0;
+        })
+        .map((r) => ({ id: (r as { id: string }).id, mls_id: (r as { mls_id: string }).mls_id }))
+        .slice(0, processLimit);
+
+      if (filtered.length === 0) {
+        const scanned = scanRows ?? [];
+        const advanced = scanned.length >= 600;
+        const lastRow = advanced ? (scanned[scanned.length - 1] as { id: string }) : null;
+        return NextResponse.json({
+          ok: true,
+          done: !advanced,
+          after_id: lastRow?.id ?? afterId,
+          checked: 0,
+          updated: 0,
+          fetchedZero: 0,
+          errors: 0,
+          errorSamples: [] as string[],
+          used_rpc: usedRpc,
+          message: advanced
+            ? "No empty-image rows in this window; cursor advanced by id."
+            : "No listings missing photos.",
+        });
+      }
+
+      rows = filtered;
+    }
+
+    if (rows.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        done: true,
+        after_id: afterId,
+        checked: 0,
+        updated: 0,
+        fetchedZero: 0,
+        errors: 0,
+        errorSamples: [],
+        used_rpc: usedRpc,
+        message: "No listings missing photos in this page.",
+      });
+    }
+
+    const session = await createRetsSession();
     let updated = 0;
-    let errors = 0;
     let fetchedZero = 0;
+    let errors = 0;
     const errorSamples: string[] = [];
-    const batchSize = 10;
 
-    for (let i = 0; i < needsPhotos.length; i += batchSize) {
-      const batch = needsPhotos.slice(i, i + batchSize);
-      const results = await Promise.all(
-        batch.map(async (l) => {
-          try {
-            const urls = await fetchPhotoUrls(l.mls_id, MLS_MEDIA_MAX_URLS);
-            return { id: l.id, mls_id: l.mls_id, urls, error: null };
-          } catch (err) {
-            return {
-              id: l.id,
-              mls_id: l.mls_id,
-              urls: [],
-              error: err instanceof Error ? err.message : String(err),
-            };
-          }
-        }),
-      );
-
-      for (const r of results) {
-        if (r.error) {
-          errors++;
-          if (errorSamples.length < 3) errorSamples.push(`${r.mls_id}: ${r.error}`);
-          continue;
-        }
-        if (r.urls.length === 0) {
+    for (const row of rows) {
+      try {
+        const urls = await fetchPhotoUrlsWithSession(session, row.mls_id, MLS_MEDIA_MAX_URLS);
+        if (urls.length === 0) {
           fetchedZero++;
           continue;
         }
-        const { error } = await client
-          .from("mls_listings")
-          .update({ image_urls: r.urls })
-          .eq("id", r.id);
+        const { error } = await client.from("mls_listings").update({ image_urls: urls }).eq("id", row.id);
         if (error) {
           errors++;
-          if (errorSamples.length < 3) errorSamples.push(`${r.mls_id} update: ${error.message}`);
+          if (errorSamples.length < 4) errorSamples.push(`${row.mls_id}: ${error.message}`);
         } else {
           updated++;
+        }
+      } catch (err) {
+        errors++;
+        if (errorSamples.length < 4) {
+          errorSamples.push(`${row.mls_id}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     }
 
+    const lastId = rows[rows.length - 1]!.id;
+    const done = rows.length < processLimit;
+
     return NextResponse.json({
       ok: true,
-      totalListings: allListings?.length ?? 0,
-      checked: needsPhotos.length,
+      done,
+      after_id: lastId,
+      checked: rows.length,
       updated,
       fetchedZero,
       errors,
       errorSamples,
+      used_rpc: usedRpc,
     });
   } catch (err) {
-    return NextResponse.json({
-      ok: false,
-      error: err instanceof Error ? err.message : "Unknown error",
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: err instanceof Error ? err.message : "Unknown error",
+      },
+      { status: 500 },
+    );
   }
 }

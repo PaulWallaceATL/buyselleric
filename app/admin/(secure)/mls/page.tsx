@@ -12,6 +12,19 @@ export default async function AdminMlsPage(): Promise<ReactNode> {
   let recentSyncs: MlsSyncLogRow[] = [];
 
   if (client) {
+    const staleCutoff = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    const { error: staleErr } = await client
+      .from("mls_sync_log")
+      .update({
+        status: "failed",
+        error: "Stale running entry (timeout, tab closed, or interrupted sync).",
+        finished_at: new Date().toISOString(),
+      })
+      .eq("status", "running")
+      .is("finished_at", null)
+      .lt("started_at", staleCutoff);
+    if (staleErr) console.error("mls_sync_log stale cleanup:", staleErr.message);
+
     const [countResult, activeResult, logResult] = await Promise.all([
       client.from("mls_listings").select("id", { count: "exact", head: true }).then((r) => r),
       client.from("mls_listings").select("id", { count: "exact", head: true }).eq("status", "active").then((r) => r),
