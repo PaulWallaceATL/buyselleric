@@ -42,6 +42,12 @@ const nextConfig: NextConfig = {
         hostname: "**.connectmls.com",
         pathname: "/**",
       },
+      // GAMLS photo CDN (e.g. gamls-assets.cdn-connectmls.com) — not *.connectmls.com
+      {
+        protocol: "https",
+        hostname: "*.cdn-connectmls.com",
+        pathname: "/**",
+      },
       {
         protocol: "https",
         hostname: "**.amazonaws.com",
