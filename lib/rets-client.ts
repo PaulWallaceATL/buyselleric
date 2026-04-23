@@ -178,9 +178,10 @@ export async function rawSearchAny(
   classId: string,
   query: string,
   limit: number = 5,
+  select: string = "",
 ): Promise<string> {
   const session = await retsLogin();
-  return retsFetch(session, session.searchUrl, {
+  const params: Record<string, string> = {
     SearchType: resource,
     Class: classId,
     Query: query,
@@ -190,7 +191,9 @@ export async function rawSearchAny(
     Offset: "1",
     StandardNames: "0",
     Count: "1",
-  });
+  };
+  if (select) params.Select = select;
+  return retsFetch(session, session.searchUrl, params);
 }
 
 // --- Metadata ---

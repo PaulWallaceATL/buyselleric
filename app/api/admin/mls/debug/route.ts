@@ -16,10 +16,11 @@ export async function GET(request: Request) {
   const limit = Number(searchParams.get("limit") || "3");
   const resource = searchParams.get("resource") || "Property";
   const classId = searchParams.get("class") || "RESI";
+  const select = searchParams.get("select") || "";
 
   try {
     const { rawSearchAny } = await import("@/lib/rets-client");
-    const body = await rawSearchAny(resource, classId, query, limit);
+    const body = await rawSearchAny(resource, classId, query, limit, select);
 
     const countMatches = (body.match(/<DATA>/g) || []).length;
     return NextResponse.json({
