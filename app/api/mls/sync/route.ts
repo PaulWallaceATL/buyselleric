@@ -45,7 +45,8 @@ export async function POST(request: Request) {
 
     let totalInserted = 0;
     let totalUpdated = 0;
-    let totalFetched = 0;
+    let totalRetsRowsPulled = 0;
+    let totalActiveSaved = 0;
     const syncTimestamp = new Date().toISOString();
 
     const {
@@ -55,27 +56,70 @@ export async function POST(request: Request) {
       MLS_MEDIA_MAX_URLS,
     } = await import("@/lib/rets-client");
 
+    const photoMaxTotal = Number.parseInt(process.env.MLS_SYNC_PHOTO_MAX_TOTAL ?? "800", 10);
+    const photoThreshold = Number.isFinite(photoMaxTotal) ? photoMaxTotal : 800;
+
     let offset = 0;
     const batchSize = 2500;
     let hasMore = true;
     let listingsWithPhotos = 0;
+    let retsTotalMatches: number | null = null;
+    let photoPolicyLocked = false;
+    let skipPhotosThisRun = false;
+
+    const session = await createRetsSession();
 
     while (hasMore) {
-      const session = await createRetsSession();
       const result = await searchActiveListingsWithSession(session, offset, batchSize);
+      if (retsTotalMatches === null) retsTotalMatches = result.count;
+
       const SOLD_STATUSES = new Set(["sold", "closed", "withdrawn", "expired", "cancelled", "canceled"]);
-      const records = result.records.filter((r) => r.mls_id && !SOLD_STATUSES.has(r.status.toLowerCase()));
-      totalFetched += records.length;
+      const batchFromRets = result.records;
+      if (batchFromRets.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      const records = batchFromRets.filter((r) => r.mls_id && !SOLD_STATUSES.has(r.status.toLowerCase()));
+
+      totalRetsRowsPulled += batchFromRets.length;
+      totalActiveSaved += records.length;
+
+      if (!photoPolicyLocked) {
+        photoPolicyLocked = true;
+        skipPhotosThisRun = result.count > photoThreshold;
+      }
 
       if (records.length > 0) {
-        for (const record of records) {
-          if (!record.mls_id) continue;
-          try {
-            record.image_urls = await fetchPhotoUrlsWithSession(session, record.mls_id, MLS_MEDIA_MAX_URLS);
-          } catch {
-            record.image_urls = [];
+        if (skipPhotosThisRun) {
+          const ids = records.map((r) => r.mls_id);
+          const byMls = new Map<string, string[]>();
+          const idChunk = 400;
+          for (let i = 0; i < ids.length; i += idChunk) {
+            const slice = ids.slice(i, i + idChunk);
+            const { data: existingRows } = await client
+              .from("mls_listings")
+              .select("mls_id, image_urls")
+              .in("mls_id", slice);
+            for (const row of existingRows ?? []) {
+              const e = row as { mls_id: string; image_urls: unknown };
+              byMls.set(e.mls_id, Array.isArray(e.image_urls) ? (e.image_urls as string[]) : []);
+            }
           }
-          if (record.image_urls.length > 0) listingsWithPhotos++;
+          for (const record of records) {
+            const prev = byMls.get(record.mls_id);
+            record.image_urls = prev && prev.length > 0 ? prev : [];
+          }
+        } else {
+          for (const record of records) {
+            if (!record.mls_id) continue;
+            try {
+              record.image_urls = await fetchPhotoUrlsWithSession(session, record.mls_id, MLS_MEDIA_MAX_URLS);
+            } catch {
+              record.image_urls = [];
+            }
+            if (record.image_urls.length > 0) listingsWithPhotos++;
+          }
         }
         const { inserted, updated } = await upsertBatch(client, records, syncTimestamp);
         totalInserted += inserted;
@@ -83,9 +127,9 @@ export async function POST(request: Request) {
       }
 
       hasMore = result.hasMore;
-      offset += batchSize;
+      offset += batchFromRets.length;
 
-      if (offset > 200000) break;
+      if (offset > 1_500_000) break;
     }
 
     let deactivated = 0;
@@ -111,7 +155,7 @@ export async function POST(request: Request) {
             inserted: totalInserted,
             updated: totalUpdated,
             deactivated,
-            total_fetched: totalFetched,
+            total_fetched: totalRetsRowsPulled,
           })
           .eq("id", logId);
       } catch { /* ignore log failures */ }
@@ -122,8 +166,12 @@ export async function POST(request: Request) {
       inserted: totalInserted,
       updated: totalUpdated,
       deactivated,
-      total_fetched: totalFetched,
+      total_fetched: totalRetsRowsPulled,
+      total_active_listings: totalActiveSaved,
+      rets_total_matches: retsTotalMatches,
+      photos_during_sync: skipPhotosThisRun ? "skipped_large_feed" : "fetched",
       listings_with_photos: listingsWithPhotos,
+      photo_threshold: photoThreshold,
     });
   } catch (err) {
     console.error("MLS sync error:", err);

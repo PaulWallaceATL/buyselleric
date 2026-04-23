@@ -20,8 +20,18 @@ export function AdminMlsSyncButton() {
         return;
       }
       if (data.ok) {
+        const withPhotos =
+          typeof data.listings_with_photos === "number" ? ` · ${data.listings_with_photos} with photos` : "";
+        const matches =
+          typeof data.rets_total_matches === "number"
+            ? ` · RETS total matches (reported): ${data.rets_total_matches}`
+            : "";
+        const photoNote =
+          data.photos_during_sync === "skipped_large_feed"
+            ? " · Photos skipped during sync (large feed); run “Fetch photos” in batches or raise MLS_SYNC_PHOTO_MAX_TOTAL"
+            : "";
         setResult(
-          `Sync complete: ${data.total_fetched} fetched, ${data.inserted} upserted, ${data.deactivated} deactivated`,
+          `Sync complete: ${data.total_fetched} RETS rows pulled, ${typeof data.total_active_listings === "number" ? `${data.total_active_listings} active rows processed` : "rows processed"}, ${data.inserted} upserted, ${data.deactivated} deactivated${matches}${photoNote}${withPhotos}`,
         );
       } else {
         setResult(`Sync failed: ${data.error}${data.stack ? `\n${data.stack}` : ""}`);

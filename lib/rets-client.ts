@@ -501,6 +501,29 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
   };
 }
 
+/** Total matches from RETS search when Count=1 (attribute name varies by server). */
+function parseRetsSearchTotalCount(body: string): number | null {
+  const retsOpen = body.match(/<RETS\b[^>]*>/i)?.[0] ?? "";
+  const fromRets =
+    retsOpen.match(/\bRecords="(\d+)"/i)?.[1] ??
+    retsOpen.match(/\bCount="(\d+)"/i)?.[1] ??
+    retsOpen.match(/\bTotalRecords="(\d+)"/i)?.[1];
+  if (fromRets) {
+    const n = Number(fromRets);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  const countTag = body.match(/<COUNT[^>]*>(\d+)<\/COUNT>/i)?.[1];
+  if (countTag) {
+    const n = Number(countTag);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  if (/<RETS[^>]*ReplyCode="20201"/i.test(body)) return 0;
+  return null;
+}
+
+/**
+ * @param offset - 0-based index of first row to return (RETS Offset is offset+1).
+ */
 export async function searchActiveListingsWithSession(
   session: RetsSession,
   offset: number = 0,
@@ -521,12 +544,16 @@ export async function searchActiveListingsWithSession(
   const rawRecords = parseCompactData(body);
   const records = rawRecords.map(mapRetsRecord).filter((r) => r.mls_id);
 
-  const countMatch = body.match(/Records="(\d+)"/);
-  const totalCount = countMatch ? Number(countMatch[1]) : records.length;
+  const totalFromRets = parseRetsSearchTotalCount(body);
+  const totalCount = totalFromRets ?? offset + records.length;
+  const nextOffset = offset + records.length;
+  const hasMore =
+    records.length > 0 &&
+    (totalFromRets != null ? nextOffset < totalFromRets : records.length >= limit);
 
   return {
     records,
-    hasMore: records.length >= limit,
+    hasMore,
     count: totalCount,
   };
 }
@@ -556,10 +583,17 @@ export async function searchListingsSince(
     Limit: String(limit),
     Offset: String(offset + 1),
     StandardNames: "0",
+    Count: "1",
   });
 
   const rawRecords = parseCompactData(body);
   const records = rawRecords.map(mapRetsRecord).filter((r) => r.mls_id);
 
-  return { records, hasMore: records.length >= limit };
+  const totalFromRets = parseRetsSearchTotalCount(body);
+  const nextOffset = offset + records.length;
+  const fullPage = records.length >= limit;
+  const hasMore =
+    records.length > 0 && (fullPage || (totalFromRets != null && nextOffset < totalFromRets));
+
+  return { records, hasMore };
 }
