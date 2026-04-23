@@ -285,9 +285,9 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
   return (
     <section
       id="hero"
-      className="hero relative min-h-dvh min-h-screen w-full overflow-hidden bg-background supports-[height:100dvh]:min-h-[100dvh]"
+      className="hero relative min-h-dvh min-h-screen w-full bg-background supports-[height:100dvh]:min-h-[100dvh]"
     >
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 overflow-hidden">
         <Canvas
           className="h-full w-full opacity-50 saturate-125 md:opacity-85"
           style={{ pointerEvents: "none" }}
@@ -344,11 +344,11 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
           Eric Adams is your partner for buying and selling real estate—local insight, honest
           pricing conversations, and hands-on support from tour to keys.
         </p>
-        <div className="mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
+        <div className="relative z-[45] mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
           <HeroSearch />
         </div>
         <div
-          className="hero-ctas mt-3 flex flex-row flex-wrap gap-2 sm:mt-4 sm:gap-3 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.5s_both]"
+          className="hero-ctas relative z-10 mt-3 flex flex-row flex-wrap gap-2 sm:mt-4 sm:gap-3 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.5s_both]"
         >
           <Link href="/listings" className={ctaPrimary}>
             View listings
