@@ -48,32 +48,34 @@ export async function POST(request: Request) {
     let totalFetched = 0;
     const syncTimestamp = new Date().toISOString();
 
-    const { searchActiveListings, fetchPhotoUrls } = await import("@/lib/rets-client");
+    const {
+      createRetsSession,
+      searchActiveListingsWithSession,
+      fetchPhotoUrlsWithSession,
+      MLS_MEDIA_MAX_URLS,
+    } = await import("@/lib/rets-client");
 
     let offset = 0;
     const batchSize = 2500;
     let hasMore = true;
+    let listingsWithPhotos = 0;
 
     while (hasMore) {
-      const result = await searchActiveListings(offset, batchSize);
+      const session = await createRetsSession();
+      const result = await searchActiveListingsWithSession(session, offset, batchSize);
       const SOLD_STATUSES = new Set(["sold", "closed", "withdrawn", "expired", "cancelled", "canceled"]);
       const records = result.records.filter((r) => r.mls_id && !SOLD_STATUSES.has(r.status.toLowerCase()));
       totalFetched += records.length;
 
       if (records.length > 0) {
-        const photoResults = await Promise.all(
-          records.slice(0, 100).map(async (record) => {
-            if (!record.mls_id) return [];
-            try {
-              return await fetchPhotoUrls(record.mls_id, 10);
-            } catch {
-              return [];
-            }
-          }),
-        );
-        for (let i = 0; i < photoResults.length; i++) {
-          const rec = records[i];
-          if (rec) rec.image_urls = photoResults[i] ?? [];
+        for (const record of records) {
+          if (!record.mls_id) continue;
+          try {
+            record.image_urls = await fetchPhotoUrlsWithSession(session, record.mls_id, MLS_MEDIA_MAX_URLS);
+          } catch {
+            record.image_urls = [];
+          }
+          if (record.image_urls.length > 0) listingsWithPhotos++;
         }
         const { inserted, updated } = await upsertBatch(client, records, syncTimestamp);
         totalInserted += inserted;
@@ -121,6 +123,7 @@ export async function POST(request: Request) {
       updated: totalUpdated,
       deactivated,
       total_fetched: totalFetched,
+      listings_with_photos: listingsWithPhotos,
     });
   } catch (err) {
     console.error("MLS sync error:", err);

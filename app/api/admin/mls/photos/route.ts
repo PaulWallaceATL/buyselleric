@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   const debug = searchParams.get("debug") === "1";
 
   try {
-    const { fetchPhotoUrls, probeMediaSearch } = await import("@/lib/rets-client");
+    const { fetchPhotoUrls, probeMediaSearch, MLS_MEDIA_MAX_URLS } = await import("@/lib/rets-client");
 
     // Fetch all active listings, filter in JS to avoid RLS/filter quirks
     const { data: allListings, error: fetchError } = await client
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: false, error: "No sample listing for debug" }, { status: 400 });
       }
       const attempts = await probeMediaSearch(sample.mls_id, 15);
-      const urls = await fetchPhotoUrls(sample.mls_id, 15);
+      const urls = await fetchPhotoUrls(sample.mls_id, Math.min(30, MLS_MEDIA_MAX_URLS));
       return NextResponse.json({
         ok: true,
         debug: true,
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       const results = await Promise.all(
         batch.map(async (l) => {
           try {
-            const urls = await fetchPhotoUrls(l.mls_id, 30);
+            const urls = await fetchPhotoUrls(l.mls_id, MLS_MEDIA_MAX_URLS);
             return { id: l.id, mls_id: l.mls_id, urls, error: null };
           } catch (err) {
             return {

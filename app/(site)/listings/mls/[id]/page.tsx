@@ -1,6 +1,6 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
+import { ListingGallery } from "@/components/listing-gallery";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
@@ -35,7 +35,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   const location = [listing.address_line, listing.city, listing.state, listing.postal_code]
     .filter(Boolean)
     .join(", ");
-  const mainImage = listing.image_urls[0] ?? null;
+  const galleryUrls = listing.image_urls ?? [];
 
   return (
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background pb-24 pt-32 sm:pb-28 sm:pt-36 lg:pt-40">
@@ -47,16 +47,9 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
           ← Back to listings
         </Link>
 
-        {mainImage && (
-          <div className="relative mt-6 aspect-[16/9] w-full overflow-hidden rounded-2xl bg-muted shadow-md sm:rounded-3xl">
-            <Image
-              src={mainImage}
-              alt={title}
-              fill
-              sizes="(max-width: 768px) 100vw, 900px"
-              className="object-cover"
-              priority
-            />
+        {galleryUrls.length > 0 && (
+          <div className="mt-6">
+            <ListingGallery urls={galleryUrls} />
           </div>
         )}
 

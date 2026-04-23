@@ -58,7 +58,7 @@ function buildDigestHeader(
 
 // --- RETS Session ---
 
-interface RetsSession {
+export interface RetsSession {
   searchUrl: string;
   metadataUrl: string;
   getObjectUrl: string;
@@ -67,7 +67,7 @@ interface RetsSession {
   nc: number;
 }
 
-async function retsLogin(): Promise<RetsSession> {
+export async function createRetsSession(): Promise<RetsSession> {
   const config = getConfig();
   const loginUri = new URL(config.loginUrl).pathname;
 
@@ -143,13 +143,15 @@ function parseRetsReply(body: string): { replyCode: string; replyText: string } 
   return { replyCode, replyText };
 }
 
-/** Pull image URLs from a Media row; RESO / MLS system names vary widely. */
-function mediaUrlsFromRecord(r: Record<string, string>): string[] {
-  const keyHints = [
-    "MediaURL",
+/**
+ * One URL per Media row — prefer highest-res fields so we do not store thumb + midsize + full as three "photos".
+ */
+function bestPhotoUrlFromRecord(r: Record<string, string>): string {
+  const preference = [
+    "OriginalURL",
     "MediaURLFull",
     "MediaURLHiRes",
-    "OriginalURL",
+    "MediaURL",
     "MediaMidsizeURL",
     "MediaThumbnailURL",
     "ImageURL",
@@ -157,39 +159,48 @@ function mediaUrlsFromRecord(r: Record<string, string>): string[] {
     "URL",
     "Url",
   ];
-  const found: string[] = [];
-  for (const k of keyHints) {
+  for (const k of preference) {
     const v = r[k];
-    if (v && /^https?:\/\//i.test(v.trim())) found.push(v.trim());
+    if (v && /^https?:\/\//i.test(v.trim())) return v.trim();
   }
-  if (found.length === 0) {
-    for (const v of Object.values(r)) {
-      if (v && /^https?:\/\//i.test(v.trim())) found.push(v.trim());
-    }
+  for (const v of Object.values(r)) {
+    if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
   }
-  return [...new Set(found)];
+  return "";
 }
+
+/** Max photo URLs stored per listing (fetched via paginated RETS Media search). */
+export const MLS_MEDIA_MAX_URLS = 500;
+const RETS_MEDIA_PAGE_SIZE = 250;
 
 function sortMediaRecords(records: Record<string, string>[]): { order: number; preferred: boolean; url: string }[] {
   return records
-    .flatMap((r) => {
-      const urls = mediaUrlsFromRecord(r);
-      return urls.map((url) => ({
-        order: Number(r.MediaOrder ?? r.Order ?? "999"),
-        preferred:
-          r.PreferredPhoto === "Y" ||
-          r.PreferredPhoto === "y" ||
-          r.PreferredPhoto === "true" ||
-          r.PreferredPhoto === "1",
-        url,
-      }));
-    })
+    .map((r) => ({
+      order: Number(r.MediaOrder ?? r.Order ?? "999"),
+      preferred:
+        r.PreferredPhoto === "Y" ||
+        r.PreferredPhoto === "y" ||
+        r.PreferredPhoto === "true" ||
+        r.PreferredPhoto === "1",
+      url: bestPhotoUrlFromRecord(r),
+    }))
     .filter((r) => r.url.startsWith("http"))
     .sort((a, b) => {
       if (a.preferred && !b.preferred) return -1;
       if (!a.preferred && b.preferred) return 1;
       return a.order - b.order;
     });
+}
+
+function dedupeUrlsPreserveOrder(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    if (!u || seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+  }
+  return out;
 }
 
 export interface PhotoProbeAttempt {
@@ -207,7 +218,7 @@ export interface PhotoProbeAttempt {
  * (MediaResourceId often identifies the related resource type, not the listing id).
  */
 export async function probeMediaSearch(listingId: string, maxPhotos: number = 10): Promise<PhotoProbeAttempt[]> {
-  const session = await retsLogin();
+  const session = await createRetsSession();
   const attempts: PhotoProbeAttempt[] = [];
   const queries = buildMediaQueryCandidates(listingId);
 
@@ -247,48 +258,73 @@ export async function probeMediaSearch(listingId: string, maxPhotos: number = 10
 
 function buildMediaQueryCandidates(listingId: string): { query: string; standardNames: string }[] {
   const id = listingId.trim();
+  // GAMLS: MediaResourceId + Photo works first; other boards may need fallbacks below.
   const q: { query: string; standardNames: string }[] = [
+    { query: `(MediaResourceId=${id}),(MediaCategory=Photo)`, standardNames: "0" },
     { query: `(ResourceRecordKey=${id}),(MediaCategory=Photo)`, standardNames: "0" },
     { query: `(ResourceRecordKey=${id})`, standardNames: "0" },
     { query: `(ListingKey=${id}),(MediaCategory=Photo)`, standardNames: "0" },
     { query: `(ListingId=${id}),(MediaCategory=Photo)`, standardNames: "0" },
     { query: `(MediaListingKey=${id}),(MediaCategory=Photo)`, standardNames: "0" },
-    { query: `(MediaResourceId=${id}),(MediaCategory=Photo)`, standardNames: "0" },
-    { query: `(MediaResourceId=${id}),(MediaCategory=Photo),(MediaListingStatus=Active)`, standardNames: "0" },
-    // RESO standard names (when feed maps them)
     { query: `(ListingKey=${id}),(MediaCategory=Photo)`, standardNames: "1" },
     { query: `(ResourceRecordKey=${id}),(MediaCategory=Photo)`, standardNames: "1" },
   ];
   return q;
 }
 
-export async function fetchPhotoUrls(listingId: string, maxPhotos: number = 30): Promise<string[]> {
-  const session = await retsLogin();
+/** Fetch photo URLs using an existing RETS session (digest nonce counter must stay sequential). */
+export async function fetchPhotoUrlsWithSession(
+  session: RetsSession,
+  listingId: string,
+  maxPhotos: number = MLS_MEDIA_MAX_URLS,
+): Promise<string[]> {
+  const cap = Math.min(Math.max(1, maxPhotos), 999);
+  const pageSize = Math.min(RETS_MEDIA_PAGE_SIZE, cap);
   const queries = buildMediaQueryCandidates(listingId);
 
   for (const { query, standardNames } of queries) {
-    const body = await retsFetch(session, session.searchUrl, {
-      SearchType: "Media",
-      Class: "Media",
-      Query: query,
-      QueryType: "DMQL2",
-      Format: "COMPACT-DECODED",
-      Limit: String(maxPhotos),
-      Offset: "1",
-      StandardNames: standardNames,
-    });
+    const allRecords: Record<string, string>[] = [];
+    let offset = 1;
 
-    const { replyCode } = parseRetsReply(body);
-    if (replyCode && replyCode !== "0") continue;
+    for (;;) {
+      const body = await retsFetch(session, session.searchUrl, {
+        SearchType: "Media",
+        Class: "Media",
+        Query: query,
+        QueryType: "DMQL2",
+        Format: "COMPACT-DECODED",
+        Limit: String(pageSize),
+        Offset: String(offset),
+        StandardNames: standardNames,
+      });
 
-    const records = parseCompactData(body);
-    const sorted = sortMediaRecords(records);
-    if (sorted.length > 0) {
-      return sorted.map((r) => r.url).slice(0, maxPhotos);
+      const { replyCode } = parseRetsReply(body);
+      if (replyCode && replyCode !== "0") {
+        if (offset === 1) break;
+        break;
+      }
+
+      const page = parseCompactData(body);
+      if (page.length === 0) break;
+      allRecords.push(...page);
+      if (page.length < pageSize) break;
+      offset += pageSize;
+      if (allRecords.length >= cap * 2) break;
     }
+
+    if (allRecords.length === 0) continue;
+
+    const sorted = sortMediaRecords(allRecords);
+    const urls = dedupeUrlsPreserveOrder(sorted.map((r) => r.url));
+    if (urls.length > 0) return urls.slice(0, cap);
   }
 
   return [];
+}
+
+export async function fetchPhotoUrls(listingId: string, maxPhotos: number = MLS_MEDIA_MAX_URLS): Promise<string[]> {
+  const session = await createRetsSession();
+  return fetchPhotoUrlsWithSession(session, listingId, maxPhotos);
 }
 
 export async function rawSearch(query: string, limit: number = 5): Promise<string> {
@@ -302,7 +338,7 @@ export async function rawSearchAny(
   limit: number = 5,
   select: string = "",
 ): Promise<string> {
-  const session = await retsLogin();
+  const session = await createRetsSession();
   const params: Record<string, string> = {
     SearchType: resource,
     Class: classId,
@@ -321,7 +357,7 @@ export async function rawSearchAny(
 // --- Metadata ---
 
 export async function getMetadataResources(): Promise<unknown> {
-  const session = await retsLogin();
+  const session = await createRetsSession();
   const body = await retsFetch(session, session.metadataUrl, {
     Type: "METADATA-RESOURCE", ID: "0", Format: "STANDARD-XML",
   });
@@ -329,7 +365,7 @@ export async function getMetadataResources(): Promise<unknown> {
 }
 
 export async function getMetadataClasses(resourceId: string): Promise<unknown> {
-  const session = await retsLogin();
+  const session = await createRetsSession();
   const body = await retsFetch(session, session.metadataUrl, {
     Type: "METADATA-CLASS", ID: resourceId, Format: "STANDARD-XML",
   });
@@ -337,7 +373,7 @@ export async function getMetadataClasses(resourceId: string): Promise<unknown> {
 }
 
 export async function getMetadataTable(resourceId: string, classId: string): Promise<unknown> {
-  const session = await retsLogin();
+  const session = await createRetsSession();
   const body = await retsFetch(session, session.metadataUrl, {
     Type: "METADATA-TABLE", ID: `${resourceId}:${classId}`, Format: "STANDARD-XML",
   });
@@ -465,12 +501,11 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
   };
 }
 
-export async function searchActiveListings(
+export async function searchActiveListingsWithSession(
+  session: RetsSession,
   offset: number = 0,
   limit: number = 2500,
 ): Promise<{ records: MlsListingData[]; hasMore: boolean; count: number }> {
-  const session = await retsLogin();
-
   const body = await retsFetch(session, session.searchUrl, {
     SearchType: "Property",
     Class: "RESI",
@@ -496,12 +531,20 @@ export async function searchActiveListings(
   };
 }
 
+export async function searchActiveListings(
+  offset: number = 0,
+  limit: number = 2500,
+): Promise<{ records: MlsListingData[]; hasMore: boolean; count: number }> {
+  const session = await createRetsSession();
+  return searchActiveListingsWithSession(session, offset, limit);
+}
+
 export async function searchListingsSince(
   since: Date,
   offset: number = 0,
   limit: number = 2500,
 ): Promise<{ records: MlsListingData[]; hasMore: boolean }> {
-  const session = await retsLogin();
+  const session = await createRetsSession();
   const ts = since.toISOString().replace("T", " ").slice(0, 19);
 
   const body = await retsFetch(session, session.searchUrl, {
