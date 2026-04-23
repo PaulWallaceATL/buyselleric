@@ -18,6 +18,7 @@ type PhotoChunk = {
   errorSamples?: string[];
   message?: string;
   used_rpc?: boolean;
+  hint?: string;
 };
 
 export function AdminMlsPhotosButton() {
@@ -108,6 +109,7 @@ export function AdminMlsPhotosButton() {
           `Round ${i}: checked ${data.checked ?? 0}, updated ${data.updated ?? 0}, zero ${data.fetchedZero ?? 0}, errors ${data.errors ?? 0}${data.used_rpc === false ? " (fallback scan)" : ""}`,
         );
         if (data.message) lines.push(`  → ${data.message}`);
+        if (data.hint) lines.push(`  → ${data.hint}`);
 
         if (data.done) {
           lines.push(

@@ -108,9 +108,24 @@ export async function POST(request: Request) {
     let rows: { id: string; mls_id: string }[] = [];
     let usedRpc = false;
 
-    if (!rpcError && rpcRows && (rpcRows as unknown[]).length > 0) {
-      rows = rpcRows as { id: string; mls_id: string }[];
-      usedRpc = true;
+    if (!rpcError && Array.isArray(rpcRows)) {
+      if (rpcRows.length > 0) {
+        rows = rpcRows as { id: string; mls_id: string }[];
+        usedRpc = true;
+      } else {
+        return NextResponse.json({
+          ok: true,
+          done: true,
+          after_id: afterId,
+          checked: 0,
+          updated: 0,
+          fetchedZero: 0,
+          errors: 0,
+          errorSamples: [] as string[],
+          used_rpc: true,
+          message: "No listings missing photos (RPC).",
+        });
+      }
     } else {
       let scan = client
         .from("mls_listings")
@@ -193,8 +208,13 @@ export async function POST(request: Request) {
             .from("mls_listings")
             .update({ image_urls: [MLS_NO_PHOTOS_SENTINEL] })
             .eq("id", row.id);
-          if (markErr && errorSamples.length < 4) {
-            errorSamples.push(`${row.mls_id}: sentinel update: ${markErr.message}`);
+          if (markErr) {
+            errors++;
+            if (errorSamples.length < 4) {
+              errorSamples.push(`${row.mls_id}: sentinel update: ${markErr.message}`);
+            }
+          } else {
+            updated++;
           }
           continue;
         }
@@ -214,7 +234,10 @@ export async function POST(request: Request) {
     }
 
     const lastId = rows[rows.length - 1]!.id;
-    const done = rows.length < processLimit;
+    // RPC returns the next N truly-missing rows; a short batch means the queue is exhausted.
+    // Fallback scans only 600 ids per request — a short batch usually means "sparse empties in
+    // this window", not end of DB; never set done from row count alone (was stopping after ~1–2 rounds).
+    const done = usedRpc && rows.length < processLimit;
 
     return NextResponse.json({
       ok: true,
@@ -226,6 +249,7 @@ export async function POST(request: Request) {
       errors,
       errorSamples,
       used_rpc: usedRpc,
+      hint: usedRpc ? undefined : "Using id-window scan (RPC missing?). Run supabase/mls-listings-missing-photos-rpc.sql for faster, reliable paging.",
     });
   } catch (err) {
     return NextResponse.json(
