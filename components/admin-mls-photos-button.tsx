@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 /** Keep each request under server time limits (RETS round-trip per listing). */
@@ -22,6 +23,7 @@ type PhotoChunk = {
 };
 
 export function AdminMlsPhotosButton() {
+  const router = useRouter();
   const [running, setRunning] = useState(false);
   const [runningAll, setRunningAll] = useState(false);
   const [runningDebug, setRunningDebug] = useState(false);
@@ -55,7 +57,11 @@ export function AdminMlsPhotosButton() {
 
     try {
       for (let i = 1; i <= MAX_PHOTO_ROUNDS; i++) {
-        setResult(`Photo batch ${i}… (cursor ${afterId || "start"})`);
+        setResult(
+          lines.length
+            ? `${lines.join("\n")}\n\n⏳ Photo batch ${i}… (cursor ${afterId || "start"})`
+            : `Photo batch ${i}… (cursor ${afterId || "start"})`,
+        );
 
         const res = await fetch("/api/admin/mls/photos", {
           method: "POST",
@@ -114,11 +120,22 @@ export function AdminMlsPhotosButton() {
         if (data.done) {
           lines.push(
             `—`,
-            `Finished after ${i} round(s). Updated ~${sumUpdated} listings, ${sumChecked} rows examined in last rounds.`,
+            `Finished after ${i} round(s). Cumulative: ${sumUpdated} listing rows updated in this run, ${sumChecked} rows checked.`,
           );
           setResult(lines.join("\n"));
+          router.refresh();
           return;
         }
+
+        // Each HTTP round already committed to Supabase; show log + totals so far (no need to wait for the full run).
+        setResult(
+          [
+            ...lines,
+            `—`,
+            `Running… cumulative ${sumUpdated} updates, ${sumChecked} checked (this batch is saved; refresh site listings as you go).`,
+          ].join("\n"),
+        );
+        router.refresh();
 
         await new Promise((r) => setTimeout(r, 150));
       }
@@ -126,6 +143,7 @@ export function AdminMlsPhotosButton() {
       setResult(
         `${lines.join("\n")}\n—\nStopped after ${MAX_PHOTO_ROUNDS} rounds (safety). Cursor id: ${afterId}. Click again to continue.`,
       );
+      router.refresh();
     } catch (err) {
       setResult(`Network error: ${err instanceof Error ? err.message : "Unknown"}`);
     } finally {
@@ -176,8 +194,9 @@ export function AdminMlsPhotosButton() {
         </button>
       </div>
       <p className="max-w-xl text-sm text-muted-foreground">
-        Each server request uses one RETS session and processes up to {PHOTO_BATCH} listings without images (longer
-        timeout on Vercel). Listings with no RETS media are marked so the queue can advance. Run{" "}
+        Each round is its own request: rows are written to the database as soon as that round returns (you do not wait
+        until the whole run finishes). The log below updates after every round; totals at the top of the page refresh
+        too. Up to {PHOTO_BATCH} listings per round. Run{" "}
         <code className="rounded bg-muted px-1 text-xs">supabase/mls-listings-missing-photos-rpc.sql</code> in Supabase
         for fastest paging.
       </p>
