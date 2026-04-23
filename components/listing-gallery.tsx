@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { filterDisplayImageUrls } from "@/lib/listing-urls";
 
 export function ListingGallery({ urls }: { urls: string[] }) {
-  const clean = urls.filter(Boolean);
+  const clean = filterDisplayImageUrls(urls);
   const [active, setActive] = useState(0);
   const safeIndex = clean.length === 0 ? 0 : Math.min(active, clean.length - 1);
   const main = clean[safeIndex];

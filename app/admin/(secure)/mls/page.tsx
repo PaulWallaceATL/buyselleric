@@ -1,5 +1,6 @@
 import { AdminMlsPhotosButton } from "@/components/admin-mls-photos-button";
 import { AdminMlsSyncButton } from "@/components/admin-mls-sync-button";
+import { mlsSyncStaleCutoffIso } from "@/lib/mls-sync-stale";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { MlsSyncLogRow } from "@/lib/types/db";
 import type { ReactNode } from "react";
@@ -12,7 +13,11 @@ export default async function AdminMlsPage(): Promise<ReactNode> {
   let recentSyncs: MlsSyncLogRow[] = [];
 
   if (client) {
-    const staleCutoff = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    const staleMinutes = Math.min(
+      24 * 60,
+      Math.max(30, Number.parseInt(process.env.MLS_SYNC_STALE_MINUTES ?? "240", 10)),
+    );
+    const staleCutoff = mlsSyncStaleCutoffIso(staleMinutes);
     const { error: staleErr } = await client
       .from("mls_sync_log")
       .update({

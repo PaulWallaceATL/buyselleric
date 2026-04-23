@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { listingDetailHref } from "@/lib/listing-urls";
 import type { UnifiedListing } from "@/lib/listings-queries";
 
 const ListingsMap = dynamic(() => import("@/components/listings-map"), {
@@ -24,7 +25,7 @@ export function ListingsMapView({ listings }: { listings: UnifiedListing[] }) {
       lat: l.latitude!,
       lng: l.longitude!,
       price_cents: l.price_cents,
-      slug: l.slug ?? l.mls_id ?? l.id,
+      href: listingDetailHref(l),
       city: l.city,
       state: l.state,
       bedrooms: l.bedrooms,

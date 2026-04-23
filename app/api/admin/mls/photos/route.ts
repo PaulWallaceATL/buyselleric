@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
+import { MLS_NO_PHOTOS_SENTINEL } from "@/lib/listing-urls";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-export const maxDuration = 120;
+/** Photo batches call RETS per listing; keep under Vercel ceiling. */
+export const maxDuration = 300;
 
 type PhotoBody = {
   after_id?: string;
@@ -12,8 +14,8 @@ type PhotoBody = {
 };
 
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
-const DEFAULT_PROCESS = 35;
-const MAX_PROCESS = 80;
+const DEFAULT_PROCESS = 28;
+const MAX_PROCESS = 55;
 
 function parseAfterUuid(raw: string | undefined): string {
   if (!raw || raw === ZERO_UUID) return ZERO_UUID;
@@ -187,6 +189,13 @@ export async function POST(request: Request) {
         const urls = await fetchPhotoUrlsWithSession(session, row.mls_id, MLS_MEDIA_MAX_URLS);
         if (urls.length === 0) {
           fetchedZero++;
+          const { error: markErr } = await client
+            .from("mls_listings")
+            .update({ image_urls: [MLS_NO_PHOTOS_SENTINEL] })
+            .eq("id", row.id);
+          if (markErr && errorSamples.length < 4) {
+            errorSamples.push(`${row.mls_id}: sentinel update: ${markErr.message}`);
+          }
           continue;
         }
         const { error } = await client.from("mls_listings").update({ image_urls: urls }).eq("id", row.id);

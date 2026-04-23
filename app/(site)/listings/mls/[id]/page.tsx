@@ -4,6 +4,7 @@ import { ListingGallery } from "@/components/listing-gallery";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
+import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getMlsListingById } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
 import { siteContainer } from "@/lib/ui";
@@ -35,7 +36,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   const location = [listing.address_line, listing.city, listing.state, listing.postal_code]
     .filter(Boolean)
     .join(", ");
-  const galleryUrls = listing.image_urls ?? [];
+  const galleryUrls = filterDisplayImageUrls(listing.image_urls);
 
   return (
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background pb-24 pt-32 sm:pb-28 sm:pt-36 lg:pt-40">

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-const PHOTO_BATCH = 40;
+/** Keep each request under server time limits (RETS round-trip per listing). */
+const PHOTO_BATCH = 28;
 const MAX_PHOTO_ROUNDS = 2000;
 
 type PhotoChunk = {
@@ -66,6 +67,35 @@ export function AdminMlsPhotosButton() {
         const data = (await res.json()) as PhotoChunk;
 
         if (!data.ok) {
+          const retriable = res.status === 504 || res.status === 502 || res.status === 503;
+          if (retriable && i < MAX_PHOTO_ROUNDS) {
+            lines.push(`Round ${i}: HTTP ${res.status}, retrying once after pause…`);
+            await new Promise((r) => setTimeout(r, 4000));
+            const retry = await fetch("/api/admin/mls/photos", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...(afterId ? { after_id: afterId } : {}),
+                batch_size: PHOTO_BATCH,
+              }),
+            });
+            const retryData = (await retry.json()) as PhotoChunk;
+            if (retryData.ok) {
+              sumUpdated += Number(retryData.updated ?? 0);
+              sumChecked += Number(retryData.checked ?? 0);
+              afterId = typeof retryData.after_id === "string" ? retryData.after_id : afterId;
+              lines.push(
+                `Round ${i} (retry): checked ${retryData.checked ?? 0}, updated ${retryData.updated ?? 0}, done ${String(retryData.done)}`,
+              );
+              if (retryData.done) {
+                lines.push(`—`, `Finished after retry on round ${i}.`);
+                setResult(lines.join("\n"));
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 400));
+              continue;
+            }
+          }
           setResult(`Failed on round ${i}: ${data.error ?? "Unknown"}\n${lines.join("\n")}`);
           return;
         }
@@ -144,8 +174,8 @@ export function AdminMlsPhotosButton() {
         </button>
       </div>
       <p className="max-w-xl text-sm text-muted-foreground">
-        Each server request uses one RETS session and processes up to {PHOTO_BATCH} listings without images (~2 min
-        limit). Run{" "}
+        Each server request uses one RETS session and processes up to {PHOTO_BATCH} listings without images (longer
+        timeout on Vercel). Listings with no RETS media are marked so the queue can advance. Run{" "}
         <code className="rounded bg-muted px-1 text-xs">supabase/mls-listings-missing-photos-rpc.sql</code> in Supabase
         for fastest paging.
       </p>

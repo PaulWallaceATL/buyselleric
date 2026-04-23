@@ -22,7 +22,7 @@ export interface MapPin {
   lat: number;
   lng: number;
   price_cents: number;
-  slug: string;
+  href: string;
   city: string;
   state: string;
   bedrooms: number;
@@ -56,7 +56,7 @@ export default function ListingsMap({ pins }: { pins: MapPin[] }) {
                 {pin.bedrooms} bd · {pin.bathrooms} ba · {pin.city}, {pin.state}
               </p>
               <Link
-                href={`/listings/${pin.slug}`}
+                href={pin.href}
                 className="mt-2 inline-block text-xs font-semibold text-blue-600 underline underline-offset-2"
               >
                 View details →

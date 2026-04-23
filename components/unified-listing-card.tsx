@@ -1,16 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatPriceUsd } from "@/lib/format";
+import { filterDisplayImageUrls, listingDetailHref } from "@/lib/listing-urls";
 import type { UnifiedListing } from "@/lib/listings-queries";
 
 export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
-  const img = listing.image_urls[0] ?? null;
+  const imgs = filterDisplayImageUrls(listing.image_urls);
+  const img = imgs[0] ?? null;
   const location = [listing.city, listing.state].filter(Boolean).join(", ");
 
-  const href =
-    listing.source === "manual" && listing.slug
-      ? `/listings/${listing.slug}`
-      : `/listings/mls/${listing.mls_id}`;
+  const href = listingDetailHref(listing);
 
   return (
     <Link
