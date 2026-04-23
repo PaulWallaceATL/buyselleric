@@ -18,56 +18,91 @@ export async function POST(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const limit = Math.min(500, Number(searchParams.get("limit") || "200"));
+  const limit = Math.min(500, Number(searchParams.get("limit") || "50"));
 
   try {
     const { fetchPhotoUrls } = await import("@/lib/rets-client");
 
-    const { data: listings } = await client
+    // Fetch all active listings, filter in JS to avoid RLS/filter quirks
+    const { data: allListings, error: fetchError } = await client
       .from("mls_listings")
       .select("id, mls_id, image_urls")
       .eq("status", "active")
-      .or("image_urls.is.null,image_urls.eq.{}")
-      .limit(limit);
+      .limit(500);
 
-    if (!listings || listings.length === 0) {
-      return NextResponse.json({ ok: true, message: "No listings need photos", updated: 0 });
+    if (fetchError) {
+      return NextResponse.json({ ok: false, error: `DB fetch: ${fetchError.message}` }, { status: 500 });
+    }
+
+    const needsPhotos = (allListings ?? [])
+      .filter((l) => !l.image_urls || l.image_urls.length === 0)
+      .slice(0, limit);
+
+    if (needsPhotos.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        message: "No listings need photos",
+        totalListings: allListings?.length ?? 0,
+        withPhotos: (allListings ?? []).filter((l) => l.image_urls && l.image_urls.length > 0).length,
+        updated: 0,
+      });
     }
 
     let updated = 0;
     let errors = 0;
-    const batchSize = 20;
+    let fetchedZero = 0;
+    const errorSamples: string[] = [];
+    const batchSize = 10;
 
-    for (let i = 0; i < listings.length; i += batchSize) {
-      const batch = listings.slice(i, i + batchSize);
+    for (let i = 0; i < needsPhotos.length; i += batchSize) {
+      const batch = needsPhotos.slice(i, i + batchSize);
       const results = await Promise.all(
         batch.map(async (l) => {
           try {
-            const urls = await fetchPhotoUrls(l.mls_id, 10);
-            return { id: l.id, urls };
-          } catch {
-            return { id: l.id, urls: [] };
+            const urls = await fetchPhotoUrls(l.mls_id, 30);
+            return { id: l.id, mls_id: l.mls_id, urls, error: null };
+          } catch (err) {
+            return {
+              id: l.id,
+              mls_id: l.mls_id,
+              urls: [],
+              error: err instanceof Error ? err.message : String(err),
+            };
           }
         }),
       );
 
       for (const r of results) {
-        if (r.urls.length > 0) {
-          const { error } = await client
-            .from("mls_listings")
-            .update({ image_urls: r.urls })
-            .eq("id", r.id);
-          if (error) errors++;
-          else updated++;
+        if (r.error) {
+          errors++;
+          if (errorSamples.length < 3) errorSamples.push(`${r.mls_id}: ${r.error}`);
+          continue;
+        }
+        if (r.urls.length === 0) {
+          fetchedZero++;
+          continue;
+        }
+        const { error } = await client
+          .from("mls_listings")
+          .update({ image_urls: r.urls })
+          .eq("id", r.id);
+        if (error) {
+          errors++;
+          if (errorSamples.length < 3) errorSamples.push(`${r.mls_id} update: ${error.message}`);
+        } else {
+          updated++;
         }
       }
     }
 
     return NextResponse.json({
       ok: true,
-      checked: listings.length,
+      totalListings: allListings?.length ?? 0,
+      checked: needsPhotos.length,
       updated,
+      fetchedZero,
       errors,
+      errorSamples,
     });
   } catch (err) {
     return NextResponse.json({
