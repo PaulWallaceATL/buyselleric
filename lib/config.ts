@@ -34,12 +34,6 @@ export const features = {
   darkMode: true,
 } as const;
 
-/** Hero background loop (muted, lazy). Replace files in `public/hero/` to customize. */
-export const heroVideoConfig = {
-  mp4Src: "/hero/hero-bg.mp4",
-  posterSrc: "/hero/poster.jpg",
-} as const;
-
 export const themeConfig = {
   defaultTheme: "dark" as const,
   enableSystem: true,

@@ -55,6 +55,16 @@ function manualToUnified(l: ListingRow): UnifiedListing {
   };
 }
 
+/** "Atlanta, GA" → city contains Atlanta AND state contains GA (comma searches failed with single %term%). */
+function splitCityStateQuery(q: string): { city: string; state: string } | null {
+  const m = q.trim().match(/^(.+?),\s*(.+)$/);
+  if (!m?.[1] || !m[2]) return null;
+  const city = m[1].trim();
+  const state = m[2].trim();
+  if (!city || !state || city.length > 120 || state.length > 40) return null;
+  return { city, state };
+}
+
 function mlsToUnified(m: MlsListingRow): UnifiedListing {
   return {
     id: m.id, slug: null, mls_id: m.mls_id,
@@ -82,10 +92,16 @@ export async function searchWithFilters(filters: ListingFilters): Promise<Pagina
   // Query manual listings
   let manualQuery = supabase.from("listings").select("*");
   if (filters.q) {
-    const term = `%${filters.q}%`;
-    manualQuery = manualQuery.or(
-      `address_line.ilike.${term},city.ilike.${term},state.ilike.${term},postal_code.ilike.${term},title.ilike.${term}`,
-    );
+    const trimmed = filters.q.trim();
+    const cityState = splitCityStateQuery(trimmed);
+    if (cityState) {
+      manualQuery = manualQuery.ilike("city", `%${cityState.city}%`).ilike("state", `%${cityState.state}%`);
+    } else {
+      const term = `%${trimmed}%`;
+      manualQuery = manualQuery.or(
+        `address_line.ilike.${term},city.ilike.${term},state.ilike.${term},postal_code.ilike.${term},title.ilike.${term}`,
+      );
+    }
   }
   if (filters.minPrice) manualQuery = manualQuery.gte("price_cents", filters.minPrice * 100);
   if (filters.maxPrice) manualQuery = manualQuery.lte("price_cents", filters.maxPrice * 100);
@@ -101,10 +117,16 @@ export async function searchWithFilters(filters: ListingFilters): Promise<Pagina
   // Query MLS listings
   let mlsQuery = supabase.from("mls_listings").select("*").eq("status", "active");
   if (filters.q) {
-    const term = `%${filters.q}%`;
-    mlsQuery = mlsQuery.or(
-      `address_line.ilike.${term},city.ilike.${term},postal_code.ilike.${term},title.ilike.${term}`,
-    );
+    const trimmed = filters.q.trim();
+    const cityState = splitCityStateQuery(trimmed);
+    if (cityState) {
+      mlsQuery = mlsQuery.ilike("city", `%${cityState.city}%`).ilike("state", `%${cityState.state}%`);
+    } else {
+      const term = `%${trimmed}%`;
+      mlsQuery = mlsQuery.or(
+        `address_line.ilike.${term},city.ilike.${term},state.ilike.${term},postal_code.ilike.${term},title.ilike.${term}`,
+      );
+    }
   }
   if (filters.minPrice) mlsQuery = mlsQuery.gte("price_cents", filters.minPrice * 100);
   if (filters.maxPrice) mlsQuery = mlsQuery.lte("price_cents", filters.maxPrice * 100);

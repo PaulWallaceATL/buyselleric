@@ -1,6 +1,5 @@
 "use client";
 
-import { HeroBackgroundVideo } from "@/components/hero-background-video";
 import { HeroSearch } from "@/components/hero-search";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
@@ -22,10 +21,24 @@ function HeroFallback({ showGradient }: { showGradient?: boolean }) {
       className="hero relative min-h-dvh min-h-screen w-full bg-background supports-[height:100dvh]:min-h-[100dvh]"
     >
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <HeroBackgroundVideo tintGradient={Boolean(showGradient)} />
+        {showGradient && <CSSGradientBackground />}
       </div>
       <HeroContent />
     </section>
+  );
+}
+
+function CSSGradientBackground() {
+  return (
+    <div
+      className="absolute inset-0 z-0 opacity-40 saturate-125 md:opacity-70"
+      style={{
+        background:
+          "linear-gradient(-55deg, #b8d4e6, #88b8a8, #7a9ab8, #3d5a78, #4a6b55, #5a8fa0)",
+        backgroundSize: "300% 300%",
+        animation: "heroGradient 12s ease infinite",
+      }}
+    />
   );
 }
 
