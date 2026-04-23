@@ -33,7 +33,8 @@ export function SearchSuggestionsList({
     <ul
       role="listbox"
       aria-label="Search suggestions"
-      className="absolute left-0 right-0 top-full z-[60] mt-2 max-h-[min(70vh,22rem)] overflow-y-auto rounded-2xl border border-border bg-background py-1 shadow-xl"
+      data-lenis-prevent
+      className="absolute left-0 right-0 top-full z-[60] mt-2 max-h-[min(70vh,22rem)] overflow-y-auto overscroll-y-contain rounded-2xl border border-border bg-background py-1 shadow-xl [-webkit-overflow-scrolling:touch]"
     >
       {loading && items.length === 0 && (
         <li className={`px-4 ${pad} ${textSub} text-muted-foreground`} role="presentation">
