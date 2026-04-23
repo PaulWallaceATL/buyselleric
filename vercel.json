@@ -3,6 +3,10 @@
     {
       "path": "/api/mls/sync",
       "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/mls-photo-backfill",
+      "schedule": "*/3 * * * *"
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { AdminMlsPhotoBackfillPanel } from "@/components/admin-mls-photo-backfill-panel";
 import { AdminMlsPhotosButton } from "@/components/admin-mls-photos-button";
 import { AdminMlsSyncButton } from "@/components/admin-mls-sync-button";
 import { mlsSyncStaleCutoffIso } from "@/lib/mls-sync-stale";
@@ -58,6 +59,10 @@ export default async function AdminMlsPage(): Promise<ReactNode> {
           <AdminMlsSyncButton />
           <AdminMlsPhotosButton />
         </div>
+      </div>
+
+      <div className="mt-8 max-w-2xl">
+        <AdminMlsPhotoBackfillPanel />
       </div>
 
       {!hasRetsConfig && (
