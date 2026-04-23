@@ -12,11 +12,7 @@ export function AdminMlsPhotosButton() {
     try {
       const res = await fetch("/api/admin/mls/photos?limit=200", { method: "POST" });
       const data = await res.json();
-      if (data.ok) {
-        setResult(`Photos: checked ${data.checked} listings, updated ${data.updated}, errors ${data.errors}`);
-      } else {
-        setResult(`Error: ${data.error}`);
-      }
+      setResult(JSON.stringify(data, null, 2));
     } catch (err) {
       setResult(`Network error: ${err instanceof Error ? err.message : "Unknown"}`);
     } finally {
