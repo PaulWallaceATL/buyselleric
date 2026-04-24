@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1a2d42"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Home">
+  <rect width="32" height="32" rx="8" fill="#1a2d42"/>
+  <!-- Filled house: readable at 16–32px favicon size -->
   <path
-    fill="none"
-    stroke="#f6f4ef"
-    stroke-width="1.75"
-    stroke-linejoin="round"
-    d="M6 14 16 7l10 7v11h-7v-7H13v7H6V14z"
+    fill="#f6f4ef"
+    d="M16 5.5 4.5 16.25h2.75v9.25h6.75v-6h4v6h6.75v-9.25H27.5L16 5.5z"
   />
+  <rect x="13.25" y="19.5" width="5.5" height="6" rx="0.75" fill="#1a2d42"/>
 </svg>

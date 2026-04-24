@@ -61,11 +61,7 @@ export const baseMetadata: Metadata = {
     description: siteConfig.description,
     images: ["/og-image.png"],
   },
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon-16x16.png",
-    apple: "/apple-icon.png",
-  },
+  /** Tab + PWA icons: use `app/icon.svg` (house). Do not point at missing /favicon.ico — browsers then show a generic triangle. */
   manifest: "/site.webmanifest",
 };
 
