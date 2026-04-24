@@ -2,6 +2,18 @@
  * Site configuration — buyselleric · Eric Adams
  */
 
+/** Canonical site URL for metadata, OG tags, sitemap, and robots (not the preview hostname). */
+function resolveSiteUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  if (explicit) {
+    return explicit;
+  }
+  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return "https://buyselleric.com";
+}
+
 export const siteConfig = {
   brandSlug: "buyselleric",
   name: "BuySellEric",
@@ -9,8 +21,8 @@ export const siteConfig = {
   tagline: "Buy with clarity. Sell with confidence.",
   description:
     "Eric Adams helps buyers find the right home and sellers move with a plan—from pricing and prep to negotiation and closing.",
-  /** Set NEXT_PUBLIC_SITE_URL on Vercel to your production domain */
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://buyselleric.vercel.app",
+  /** Override on Vercel with NEXT_PUBLIC_SITE_URL (e.g. https://www.buyselleric.com). */
+  url: resolveSiteUrl(),
   email: "eric@buyselleric.com",
   phoneDisplay: "478-456-6650",
   phoneTel: "+14784566650",
