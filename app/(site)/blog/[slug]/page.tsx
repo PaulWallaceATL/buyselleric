@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BlogCoverImage } from "@/components/blog-cover-image";
 import { BlogViewTracker } from "@/components/blog-view-tracker";
 import { siteConfig } from "@/lib/config";
+import { defaultSocialImage } from "@/lib/metadata";
 import { getPublishedPostBySlug } from "@/lib/blog-queries";
 import { siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
@@ -33,13 +34,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "article",
       publishedTime: post.published_at ?? undefined,
       authors: [post.author],
-      ...(post.cover_image_url ? { images: [{ url: post.cover_image_url, width: 1200, height: 630 }] } : {}),
+      images: post.cover_image_url
+        ? [{ url: post.cover_image_url, width: 1200, height: 630, alt: post.title }]
+        : [{ ...defaultSocialImage, alt: post.title }],
     },
     twitter: {
-      card: post.cover_image_url ? "summary_large_image" : "summary",
+      card: "summary_large_image",
       title: post.title,
       description,
-      ...(post.cover_image_url ? { images: [post.cover_image_url] } : {}),
+      images: [post.cover_image_url ?? defaultSocialImage.url],
     },
     alternates: {
       canonical: url,

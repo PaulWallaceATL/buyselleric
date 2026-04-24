@@ -3,6 +3,13 @@ import { siteConfig } from "@/lib/config";
 
 export { siteConfig };
 
+/** Always set in meta tags — `app/opengraph-image.tsx` serves the PNG (icon + Buy/Sell/Eric). */
+export const defaultSocialImage = {
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+} as const;
+
 export const seoKeywords = [
   "real estate",
   "homes for sale",
@@ -46,12 +53,13 @@ export const baseMetadata: Metadata = {
     title: `${siteConfig.name} · ${siteConfig.agentName}`,
     description: siteConfig.description,
     siteName: siteConfig.name,
-    /** Default image: `app/opengraph-image.tsx` (house icon + “Buy / Sell / Eric”). */
+    images: [{ ...defaultSocialImage, alt: siteConfig.name }],
   },
   twitter: {
     card: "summary_large_image",
     title: `${siteConfig.name} · ${siteConfig.agentName}`,
     description: siteConfig.description,
+    images: [defaultSocialImage.url],
   },
   /** Tab + PWA: `app/icon.svg` + `app/apple-icon.svg` (house). Do not add `app/favicon.ico` — the default is the Vercel triangle and it is listed before SVG in `<head>`. */
   manifest: "/site.webmanifest",
@@ -81,22 +89,15 @@ export function createMetadata({
       title: title ?? siteConfig.name,
       description: description ?? siteConfig.description,
       url,
-      ...(image && {
-        images: [
-          {
-            url: image,
-            width: 1200,
-            height: 630,
-            alt: title ?? siteConfig.name,
-          },
-        ],
-      }),
+      images: image
+        ? [{ url: image, width: 1200, height: 630, alt: title ?? siteConfig.name }]
+        : [{ ...defaultSocialImage, alt: title ?? siteConfig.name }],
     },
     twitter: {
       card: "summary_large_image",
       title: title ?? siteConfig.name,
       description: description ?? siteConfig.description,
-      ...(image && { images: [image] }),
+      images: [image ?? defaultSocialImage.url],
     },
     ...(noIndex && {
       robots: {
