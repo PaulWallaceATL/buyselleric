@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { BlogCoverImage } from "@/components/blog-cover-image";
 import { siteConfig } from "@/lib/config";
 import { getPublishedPosts } from "@/lib/blog-queries";
 import { ctaPrimary } from "@/lib/cta-styles";
@@ -46,15 +46,12 @@ export default async function BlogPage(): Promise<ReactNode> {
                 href={`/blog/${post.slug}`}
                 className="group block overflow-hidden rounded-2xl border border-border/90 bg-muted/20 shadow-sm transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg sm:rounded-3xl"
               >
-                {post.cover_image_url ? (
+                {post.cover_image_url?.trim() ? (
                   <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
-                    <Image
+                    <BlogCoverImage
                       src={post.cover_image_url}
                       alt=""
-                      fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                      loading="lazy"
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     />
                   </div>
                 ) : (

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
+import { BlogCoverImage } from "@/components/blog-cover-image";
 import { BlogViewTracker } from "@/components/blog-view-tracker";
 import { siteConfig } from "@/lib/config";
 import { getPublishedPostBySlug } from "@/lib/blog-queries";
@@ -109,18 +109,16 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
           </div>
         )}
 
-        {post.cover_image_url && (
+        {post.cover_image_url?.trim() ? (
           <div className="relative mt-8 aspect-[21/9] w-full overflow-hidden rounded-2xl bg-muted sm:rounded-3xl">
-            <Image
+            <BlogCoverImage
               src={post.cover_image_url}
               alt=""
-              fill
-              sizes="(max-width: 768px) 100vw, 720px"
-              className="object-cover"
+              className="absolute inset-0 h-full w-full object-cover"
               priority
             />
           </div>
-        )}
+        ) : null}
 
         <div
           className="prose prose-lg prose-foreground mt-10 max-w-none dark:prose-invert prose-headings:tracking-tight prose-a:text-ring prose-a:underline-offset-4"
