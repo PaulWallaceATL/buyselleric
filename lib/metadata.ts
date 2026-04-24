@@ -61,7 +61,7 @@ export const baseMetadata: Metadata = {
     description: siteConfig.description,
     images: ["/og-image.png"],
   },
-  /** Tab + PWA icons: use `app/icon.svg` (house). Do not point at missing /favicon.ico — browsers then show a generic triangle. */
+  /** Tab + PWA: `app/icon.svg` + `app/apple-icon.svg` (house). Do not add `app/favicon.ico` — the default is the Vercel triangle and it is listed before SVG in `<head>`. */
   manifest: "/site.webmanifest",
 };
 

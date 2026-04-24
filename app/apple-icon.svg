@@ -1,4 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
-  <rect width="180" height="180" rx="40" fill="#0066FF"/>
-  <path d="M40 60h100M40 90h100M40 120h70" stroke="white" stroke-width="12" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="BuySellEric">
+  <rect width="180" height="180" rx="40" fill="#1a2d42"/>
+  <g transform="translate(26 26) scale(4)">
+    <path
+      fill="#f6f4ef"
+      d="M16 5.5 4.5 16.25h2.75v9.25h6.75v-6h4v6h6.75v-9.25H27.5L16 5.5z"
+    />
+    <rect x="13.25" y="19.5" width="5.5" height="6" rx="0.75" fill="#1a2d42"/>
+  </g>
 </svg>
