@@ -46,20 +46,12 @@ export const baseMetadata: Metadata = {
     title: `${siteConfig.name} · ${siteConfig.agentName}`,
     description: siteConfig.description,
     siteName: siteConfig.name,
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: siteConfig.name,
-      },
-    ],
+    /** Default image: `app/opengraph-image.tsx` (house icon + “Buy / Sell / Eric”). */
   },
   twitter: {
     card: "summary_large_image",
     title: `${siteConfig.name} · ${siteConfig.agentName}`,
     description: siteConfig.description,
-    images: ["/og-image.png"],
   },
   /** Tab + PWA: `app/icon.svg` + `app/apple-icon.svg` (house). Do not add `app/favicon.ico` — the default is the Vercel triangle and it is listed before SVG in `<head>`. */
   manifest: "/site.webmanifest",
@@ -79,8 +71,6 @@ export function createMetadata({
   noIndex?: boolean;
 }): Metadata {
   const url = `${siteConfig.url}${path}`;
-  const ogImage = image ?? "/og-image.png";
-
   return {
     title,
     description,
@@ -91,19 +81,22 @@ export function createMetadata({
       title: title ?? siteConfig.name,
       description: description ?? siteConfig.description,
       url,
-      images: [
-        {
-          url: ogImage,
-          width: 1200,
-          height: 630,
-          alt: title ?? siteConfig.name,
-        },
-      ],
+      ...(image && {
+        images: [
+          {
+            url: image,
+            width: 1200,
+            height: 630,
+            alt: title ?? siteConfig.name,
+          },
+        ],
+      }),
     },
     twitter: {
+      card: "summary_large_image",
       title: title ?? siteConfig.name,
       description: description ?? siteConfig.description,
-      images: [ogImage],
+      ...(image && { images: [image] }),
     },
     ...(noIndex && {
       robots: {
