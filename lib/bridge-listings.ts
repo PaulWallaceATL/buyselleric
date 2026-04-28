@@ -112,13 +112,6 @@ function rowToMlsListingRow(row: Record<string, unknown>, mapOpts?: BridgeProper
 const SELECT_GRID =
   "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp";
 
-/**
- * Detail page: broad housing + remarks fields, no inline Media (full gallery via `Media` entity).
- * Override with BRIDGE_PROPERTY_SELECT_DETAIL if your MLS rejects unknown columns.
- */
-const SELECT_DETAIL_DEFAULT =
-  `${SELECT_GRID.replace(",Media,", ",")},YearBuilt,LotSizeSquareFeet,LotSizeAcres,StoriesTotal,GarageSpaces,ParkingTotal,PoolPrivateYN,SpaYN,CountyOrParish,DaysOnMarket,OnMarketDate,Heating,Cooling,View,Appliances,InteriorFeatures,ExteriorFeatures,ArchitecturalStyle,AssociationFee,AssociationFeeFrequency,AssociationName,Zoning,PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`;
-
 /** gamls2 IDX rejects these on $select (see Bridge 400). Strip from env overrides too. */
 const GAMLS_BLOCKED_SELECT_FIELDS = new Set([
   "Unit",
@@ -140,15 +133,52 @@ function sanitizeBridgePropertySelect(select: string): string {
     .join(",");
 }
 
-/** Minimal detail if the full $select still fails (unknown IDX restrictions). */
-const SELECT_DETAIL_FALLBACK = sanitizeBridgePropertySelect(
+/**
+ * Detail page: same field set as search (minus inline Media) + remarks.
+ * gamls2 often rejects extra RESO columns — add more only via BRIDGE_PROPERTY_SELECT_DETAIL.
+ */
+const SELECT_DETAIL_SAFE = sanitizeBridgePropertySelect(
   `${SELECT_GRID.replace(",Media,", ",")},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`,
+);
+
+/** Last-resort $select if IDX still rejects remarks or other optional fields. */
+const SELECT_DETAIL_SPARSE = sanitizeBridgePropertySelect(
+  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,ModificationTimestamp",
+);
+
+/** If ModificationTimestamp or subdivision is blocked on $select for some rows. */
+const SELECT_DETAIL_MINIMAL = sanitizeBridgePropertySelect(
+  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus",
 );
 
 function selectDetail(): string {
   const override = process.env.BRIDGE_PROPERTY_SELECT_DETAIL?.trim();
-  const raw = override || SELECT_DETAIL_DEFAULT;
+  const raw = override || SELECT_DETAIL_SAFE;
   return sanitizeBridgePropertySelect(raw);
+}
+
+/** Ordered $select lists to try for GET-by-id (safest last). */
+function detailSelectCandidates(): string[] {
+  const primary = selectDetail();
+  const uniq = [primary, SELECT_DETAIL_SAFE, SELECT_DETAIL_SPARSE, SELECT_DETAIL_MINIMAL];
+  return [...new Set(uniq)];
+}
+
+/** ListingId may be typed as integer in OData; try quoted + unquoted + active/no-active. */
+function listingIdFilterVariants(rawId: string, esc: string): string[] {
+  const quoted = `(ListingId eq '${esc}' or ListingKey eq '${esc}')`;
+  const out: string[] = [`${ACTIVE} and ${quoted}`, quoted];
+  if (/^\d+$/.test(rawId)) {
+    const n = rawId;
+    const intish = `(ListingId eq ${n} or ListingKey eq ${n} or ListingKey eq '${esc}')`;
+    out.push(`${ACTIVE} and ${intish}`, intish);
+  }
+  // Some feeds use a string ListingKey that embeds the display MLS number (e.g. prefix + id).
+  if (/^\d{6,}$/.test(rawId)) {
+    const sub = `(contains(ListingKey, '${esc}'))`;
+    out.push(`${ACTIVE} and ${sub}`, sub);
+  }
+  return [...new Set(out)];
 }
 
 function buildFilter(filters: ListingFilters): string {
@@ -392,51 +422,49 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
   if (!id) return null;
 
   const esc = escapeODataString(id);
-  const primarySelect = selectDetail();
 
-  async function loadRow(select: string): Promise<Record<string, unknown> | null> {
+  async function fetchRow(filter: string, select: string): Promise<Record<string, unknown> | null> {
     const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(client, {
-      $filter: `${ACTIVE} and (ListingId eq '${esc}' or ListingKey eq '${esc}')`,
+      $filter: filter,
       $select: select,
       $top: "1",
     });
     return data.value?.[0] ?? null;
   }
 
-  try {
-    let row = await loadRow(primarySelect);
-    if (!row && primarySelect !== SELECT_DETAIL_FALLBACK) {
-      console.warn("bridgeGetMlsListingById: no row with primary $select, retrying minimal select");
-      row = await loadRow(SELECT_DETAIL_FALLBACK);
-    }
-    if (!row) return null;
-
+  async function finalize(row: Record<string, unknown>): Promise<MlsListingRow> {
     const listingKey = String(row.ListingKey ?? "").trim();
     const listingId = String(row.ListingId ?? "").trim();
-    const mediaUrls =
-      listingKey || listingId
-        ? await fetchBridgeMediaUrlsForListing(client, listingKey || listingId, listingId || listingKey)
-        : [];
+    let mediaUrls: string[] = [];
+    if (listingKey || listingId) {
+      try {
+        mediaUrls = await fetchBridgeMediaUrlsForListing(
+          client,
+          listingKey || listingId,
+          listingId || listingKey,
+        );
+      } catch (e) {
+        console.warn("bridgeGetMlsListingById: media fetch failed (page still loads)", e);
+      }
+    }
     const mapOpts: BridgePropertyMapOptions =
       mediaUrls.length > 0 ? { supplementalImageUrls: mediaUrls } : {};
     return rowToMlsListingRow(row, mapOpts);
-  } catch (e) {
-    console.warn("bridgeGetMlsListingById primary failed", e);
-    try {
-      const row = await loadRow(SELECT_DETAIL_FALLBACK);
-      if (!row) return null;
-      const listingKey = String(row.ListingKey ?? "").trim();
-      const listingId = String(row.ListingId ?? "").trim();
-      const mediaUrls =
-        listingKey || listingId
-          ? await fetchBridgeMediaUrlsForListing(client, listingKey || listingId, listingId || listingKey)
-          : [];
-      const mapOpts: BridgePropertyMapOptions =
-        mediaUrls.length > 0 ? { supplementalImageUrls: mediaUrls } : {};
-      return rowToMlsListingRow(row, mapOpts);
-    } catch (e2) {
-      console.error("bridgeGetMlsListingById", e2);
-      return null;
+  }
+
+  for (const filter of listingIdFilterVariants(id, esc)) {
+    for (const select of detailSelectCandidates()) {
+      try {
+        const row = await fetchRow(filter, select);
+        if (row) return await finalize(row);
+      } catch (e) {
+        console.warn(
+          `bridgeGetMlsListingById: attempt failed filter=${filter.slice(0, 100)}… selectFields=${select.split(",").length}`,
+          e,
+        );
+      }
     }
   }
+
+  return null;
 }
