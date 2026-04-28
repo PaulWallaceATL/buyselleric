@@ -1,4 +1,5 @@
 import { bridgeGetMlsListingById, bridgeSearchWithFilters, isBridgeListingsEnabled } from "@/lib/bridge-listings";
+import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
 
@@ -56,16 +57,6 @@ function manualToUnified(l: ListingRow): UnifiedListing {
   };
 }
 
-/** "Atlanta, GA" → city contains Atlanta AND state contains GA (comma searches failed with single %term%). */
-function splitCityStateQuery(q: string): { city: string; state: string } | null {
-  const m = q.trim().match(/^(.+?),\s*(.+)$/);
-  if (!m?.[1] || !m[2]) return null;
-  const city = m[1].trim();
-  const state = m[2].trim();
-  if (!city || !state || city.length > 120 || state.length > 40) return null;
-  return { city, state };
-}
-
 function mlsToUnified(m: MlsListingRow): UnifiedListing {
   return {
     id: m.id, slug: null, mls_id: m.mls_id,
@@ -98,7 +89,7 @@ export async function searchWithFilters(filters: ListingFilters): Promise<Pagina
   let manualQuery = supabase.from("listings").select("*");
   if (filters.q) {
     const trimmed = filters.q.trim();
-    const cityState = splitCityStateQuery(trimmed);
+    const cityState = parseCityStateSearchQuery(trimmed);
     if (cityState) {
       manualQuery = manualQuery.ilike("city", `%${cityState.city}%`).ilike("state", `%${cityState.state}%`);
     } else {
@@ -123,7 +114,7 @@ export async function searchWithFilters(filters: ListingFilters): Promise<Pagina
   let mlsQuery = supabase.from("mls_listings").select("*").eq("status", "active");
   if (filters.q) {
     const trimmed = filters.q.trim();
-    const cityState = splitCityStateQuery(trimmed);
+    const cityState = parseCityStateSearchQuery(trimmed);
     if (cityState) {
       mlsQuery = mlsQuery.ilike("city", `%${cityState.city}%`).ilike("state", `%${cityState.state}%`);
     } else {

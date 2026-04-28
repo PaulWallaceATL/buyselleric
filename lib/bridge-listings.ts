@@ -9,10 +9,13 @@ import {
   type BridgeODataValueResponse,
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
+import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import type { ListingFilters, PaginatedResult, UnifiedListing } from "@/lib/listings-queries";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 
-const ACTIVE = "(tolower(StandardStatus) eq 'active' or tolower(MlsStatus) eq 'active')";
+/** Active-ish listings; avoids `tolower(null)` edge cases on some feeds. */
+const ACTIVE =
+  "((StandardStatus eq 'Active') or (tolower(StandardStatus) eq 'active') or (MlsStatus eq 'Active') or (tolower(MlsStatus) eq 'active'))";
 
 function buildAddressLine(row: Record<string, unknown>): string {
   const core = bridgePropertyToCoreFields(row);
@@ -78,9 +81,12 @@ function rowToMlsListingRow(row: Record<string, unknown>, mapOpts?: BridgeProper
   };
 }
 
-/** Search/grid: card + map fields + inline Media (first-page thumbs). */
+/**
+ * Search/grid: fields needed for cards + map + filters + Media.
+ * Kept conservative so feeds that omit optional RESO columns still return 200 (suggest uses a tiny $select).
+ */
 const SELECT_GRID =
-  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,Unit,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,BathroomsTotal,LivingArea,BuildingAreaTotal,Latitude,Longitude,ListAgentFullName,ListAgent,CoListAgentFullName,CoListAgent,ListOfficeName,ListOffice,ListOfficePhone,PublicRemarks,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp";
+  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,Unit,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,BathroomsTotal,LivingArea,Latitude,Longitude,ListAgentFullName,ListAgent,ListOfficeName,ListOffice,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp";
 
 /**
  * Detail page: broad housing + remarks fields, no inline Media (full gallery via `Media` entity).
@@ -113,10 +119,10 @@ function buildFilter(filters: ListingFilters): string {
 
   const q = filters.q?.trim();
   if (q) {
-    const cityState = q.match(/^(.+?),\s*(.+)$/);
-    if (cityState?.[1] && cityState[2]) {
-      const city = escapeODataString(cityState[1].trim().toLowerCase());
-      const st = escapeODataString(cityState[2].trim().toLowerCase());
+    const cityState = parseCityStateSearchQuery(q);
+    if (cityState) {
+      const city = escapeODataString(cityState.city.toLowerCase());
+      const st = escapeODataString(cityState.state.toLowerCase());
       parts.push(`contains(tolower(City), '${city}')`);
       parts.push(`contains(tolower(StateOrProvince), '${st}')`);
     } else {
