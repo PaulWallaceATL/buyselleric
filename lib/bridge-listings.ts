@@ -125,31 +125,39 @@ const GAMLS_BLOCKED_SELECT_FIELDS = new Set([
 ]);
 
 function sanitizeBridgePropertySelect(select: string): string {
-  return select
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const f of select
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((f) => !GAMLS_BLOCKED_SELECT_FIELDS.has(f))
-    .join(",");
+    .filter((field) => !GAMLS_BLOCKED_SELECT_FIELDS.has(field))) {
+    if (seen.has(f)) continue;
+    seen.add(f);
+    out.push(f);
+  }
+  return out.join(",");
 }
 
 /**
- * Detail page: same field set as search (minus inline Media) + remarks.
+ * Detail page: same fields as search (including inline `Media` for photos) + remarks.
  * gamls2 often rejects extra RESO columns — add more only via BRIDGE_PROPERTY_SELECT_DETAIL.
  */
 const SELECT_DETAIL_SAFE = sanitizeBridgePropertySelect(
-  `${SELECT_GRID.replace(",Media,", ",")},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`,
+  `${SELECT_GRID},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`,
 );
 
-/** Last-resort $select if IDX still rejects remarks or other optional fields. */
+/** Lighter detail if SAFE fails; keep `Media` so gallery can load without a separate Media query. */
 const SELECT_DETAIL_SPARSE = sanitizeBridgePropertySelect(
-  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,ModificationTimestamp",
+  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,ModificationTimestamp,Media",
 );
 
 /** If ModificationTimestamp or subdivision is blocked on $select for some rows. */
 const SELECT_DETAIL_MINIMAL = sanitizeBridgePropertySelect(
   "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus",
 );
+
+const SELECT_DETAIL_MINIMAL_WITH_MEDIA = sanitizeBridgePropertySelect(`${SELECT_DETAIL_MINIMAL},Media`);
 
 function selectDetail(): string {
   const override = process.env.BRIDGE_PROPERTY_SELECT_DETAIL?.trim();
@@ -160,7 +168,13 @@ function selectDetail(): string {
 /** Ordered $select lists to try for GET-by-id (safest last). */
 function detailSelectCandidates(): string[] {
   const primary = selectDetail();
-  const uniq = [primary, SELECT_DETAIL_SAFE, SELECT_DETAIL_SPARSE, SELECT_DETAIL_MINIMAL];
+  const uniq = [
+    primary,
+    SELECT_DETAIL_SAFE,
+    SELECT_DETAIL_SPARSE,
+    SELECT_DETAIL_MINIMAL_WITH_MEDIA,
+    SELECT_DETAIL_MINIMAL,
+  ];
   return [...new Set(uniq)];
 }
 

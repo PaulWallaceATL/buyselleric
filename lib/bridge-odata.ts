@@ -200,6 +200,17 @@ function isLikelyImageUrl(u: string): boolean {
   return /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(u) || /format=(webp|jpeg|jpg|png)/i.test(u);
 }
 
+/** CDN/signed URLs often omit extensions; still treat as photos unless clearly documents/video. */
+function isProbablyDisplayablePhotoUrl(u: string): boolean {
+  const t = u.trim();
+  if (!/^https?:\/\//i.test(t)) return false;
+  if (isLikelyImageUrl(t)) return true;
+  if (/\.(pdf|docx?|xlsx?|zip|mp4|mov|webm|m4v|wmv)(\?|$)/i.test(t)) return false;
+  if (/photo|image|img|pictures|resize|thumbnail|cdn|cloudfront|bridgedataoutput|mlspin|brightmls/i.test(t))
+    return true;
+  return false;
+}
+
 /**
  * Load all photo URLs for a listing from the OData `Media` entity (paginated),
  * using the same linkage patterns as our RETS/GAMLS media probe.
@@ -221,30 +232,50 @@ export async function fetchBridgeMediaUrlsForListing(
       `(MediaListingKey eq '${e}')`,
       `(ListingId eq '${e}')`,
     );
+    if (/^\d+$/.test(s)) {
+      orClauses.push(`(ListingId eq ${s})`, `(ListingKey eq ${s})`);
+    }
   }
   const keyFilter = `(${orClauses.join(" or ")})`;
   const photoFilter = `(tolower(MediaCategory) eq 'photo')`;
   const tryFilters = [`${keyFilter} and ${photoFilter}`, keyFilter];
 
+  const orderByVariants = ["Order asc,MediaOrder asc", "MediaOrder asc", "Order asc"];
+
   for (const filter of tryFilters) {
+    for (const ob of orderByVariants) {
+      try {
+        const u = new URL(odataResourceCollectionUrl(cfg, defaultMediaEntityPath()));
+        u.searchParams.set("$filter", filter);
+        u.searchParams.set("$orderby", ob);
+        u.searchParams.set("$top", "200");
+
+        const rows = await bridgeODataFetchAllValueRows(cfg, u);
+        let urls = extractOrderedPhotoUrlsFromMediaRows(rows);
+        if (urls.length === 0 && rows.length > 0) {
+          urls = extractOrderedPhotoUrlsFromMediaRows(
+            rows.filter((r) => {
+              const u0 = bestPhotoUrlFromMediaRow(r);
+              return !u0 || isLikelyImageUrl(u0);
+            }),
+          );
+        }
+        const strict = urls.filter(isLikelyImageUrl);
+        const loose = strict.length > 0 ? strict : urls.filter(isProbablyDisplayablePhotoUrl);
+        if (loose.length > 0) return dedupeUrlsPreserveOrder(loose).slice(0, BRIDGE_MEDIA_MAX_URLS);
+      } catch {
+        /* try next orderBy / filter variant */
+      }
+    }
     try {
       const u = new URL(odataResourceCollectionUrl(cfg, defaultMediaEntityPath()));
       u.searchParams.set("$filter", filter);
-      u.searchParams.set("$orderby", "Order asc,MediaOrder asc");
       u.searchParams.set("$top", "200");
-
       const rows = await bridgeODataFetchAllValueRows(cfg, u);
       let urls = extractOrderedPhotoUrlsFromMediaRows(rows);
-      if (urls.length === 0 && rows.length > 0) {
-        urls = extractOrderedPhotoUrlsFromMediaRows(
-          rows.filter((r) => {
-            const u0 = bestPhotoUrlFromMediaRow(r);
-            return !u0 || isLikelyImageUrl(u0);
-          }),
-        );
-      }
-      urls = urls.filter(isLikelyImageUrl);
-      if (urls.length > 0) return dedupeUrlsPreserveOrder(urls).slice(0, BRIDGE_MEDIA_MAX_URLS);
+      const strict = urls.filter(isLikelyImageUrl);
+      const loose = strict.length > 0 ? strict : urls.filter(isProbablyDisplayablePhotoUrl);
+      if (loose.length > 0) return dedupeUrlsPreserveOrder(loose).slice(0, BRIDGE_MEDIA_MAX_URLS);
     } catch {
       /* try next filter variant */
     }
@@ -283,6 +314,10 @@ function parseBathroomsTotal(row: Record<string, unknown>): number {
   if (ti > 0) return ti;
   const tot = num(row.BathroomsTotal);
   if (tot > 0) return tot;
+  const comm = num(row.BathroomsTotalCommercial);
+  if (comm > 0) return comm;
+  const bldg = num(row.BuildingBathroomsTotal);
+  if (bldg > 0) return bldg;
   return 0;
 }
 
@@ -358,7 +393,12 @@ function buildDescription(row: Record<string, unknown>): string {
   const pub = str(row.PublicRemarks);
   const sup = str(row.SupplementalPublicRemarks);
   const priv = str(row.PrivateRemarks);
-  const body = [pub, sup, priv].filter(Boolean).join("\n\n");
+  const biz = str(row.BusinessRemarks);
+  const synd = str(row.SyndicationRemarks);
+  const taxLegal = str(row.TaxLegalDescription);
+  const directions = str(row.Directions);
+  const disclosures = str(row.Disclosures);
+  const body = [pub, sup, priv, biz, synd, taxLegal, directions, disclosures].filter(Boolean).join("\n\n");
   return ((body || "") + housingFactsAppendix(row)).trim();
 }
 
