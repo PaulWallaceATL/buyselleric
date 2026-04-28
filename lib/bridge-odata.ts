@@ -400,7 +400,7 @@ export function bridgePropertyToCoreFields(
   const streetName = str(row.StreetName);
   const streetSuffix = str(row.StreetSuffix);
   const streetDirSuf = str(row.StreetDirSuffix);
-  const unit = str(row.UnitNumber) || str(row.Unit);
+  const unit = str(row.UnitNumber) || str(row.UnitOther) || str(row.Unit);
 
   let address_line = unparsed;
   if (!address_line) {
@@ -422,10 +422,19 @@ export function bridgePropertyToCoreFields(
   const extra = options?.supplementalImageUrls ?? [];
   const image_urls = mergeImageLists(extra, inlinePhotos).slice(0, BRIDGE_MEDIA_MAX_URLS);
 
+  const listAgentFirstLast = [str(row.ListAgentFirstName), str(row.ListAgentLastName)].filter(Boolean).join(" ").trim();
+  const coFirstLast = [str(row.CoListAgentFirstName), str(row.CoListAgentLastName)].filter(Boolean).join(" ").trim();
   const listing_agent =
-    str(row.ListAgentFullName) || str(row.ListAgent) || str(row.CoListAgentFullName) || str(row.CoListAgent);
-  const officePhone = str(row.ListOfficePhone);
-  const officeName = str(row.ListOfficeName) || str(row.ListOffice);
+    str(row.ListAgentFullName) ||
+    str(row.ListAgent) ||
+    listAgentFirstLast ||
+    str(row.CoListAgentFullName) ||
+    str(row.CoListAgent) ||
+    coFirstLast;
+
+  const officePhone = str(row.ListOfficePhone) || str(row.ListOfficeFax);
+  const officeName =
+    str(row.ListOfficeName) || str(row.ListOffice) || str(row.ListCompany) || str(row.ListBrokerageName);
   const listing_office = officePhone && officeName ? `${officeName} · ${officePhone}` : officeName || officePhone;
 
   return {

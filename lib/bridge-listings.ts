@@ -107,10 +107,10 @@ function rowToMlsListingRow(row: Record<string, unknown>, mapOpts?: BridgeProper
 
 /**
  * Search/grid: fields needed for cards + map + filters + Media.
- * Kept conservative so feeds that omit optional RESO columns still return 200 (suggest uses a tiny $select).
+ * `gamls2` (IDX) rejects several standard RESO fields on $select — omit anything Bridge returns 400 for.
  */
 const SELECT_GRID =
-  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,Unit,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,BathroomsTotal,LivingArea,Latitude,Longitude,ListAgentFullName,ListAgent,ListOfficeName,ListOffice,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp";
+  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp";
 
 /**
  * Detail page: broad housing + remarks fields, no inline Media (full gallery via `Media` entity).
