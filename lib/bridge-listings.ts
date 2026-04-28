@@ -117,11 +117,38 @@ const SELECT_GRID =
  * Override with BRIDGE_PROPERTY_SELECT_DETAIL if your MLS rejects unknown columns.
  */
 const SELECT_DETAIL_DEFAULT =
-  `${SELECT_GRID.replace(",Media,", ",")},YearBuilt,LotSizeSquareFeet,LotSizeAcres,StoriesTotal,GarageSpaces,ParkingTotal,PoolPrivateYN,SpaYN,CountyOrParish,DaysOnMarket,OnMarketDate,Heating,Cooling,View,Appliances,InteriorFeatures,ExteriorFeatures,ArchitecturalStyle,AssociationFee,AssociationFeeFrequency,AssociationName,Zoning,SupplementalPublicRemarks,PrivateRemarks`;
+  `${SELECT_GRID.replace(",Media,", ",")},YearBuilt,LotSizeSquareFeet,LotSizeAcres,StoriesTotal,GarageSpaces,ParkingTotal,PoolPrivateYN,SpaYN,CountyOrParish,DaysOnMarket,OnMarketDate,Heating,Cooling,View,Appliances,InteriorFeatures,ExteriorFeatures,ArchitecturalStyle,AssociationFee,AssociationFeeFrequency,AssociationName,Zoning,PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`;
+
+/** gamls2 IDX rejects these on $select (see Bridge 400). Strip from env overrides too. */
+const GAMLS_BLOCKED_SELECT_FIELDS = new Set([
+  "Unit",
+  "BathroomsTotal",
+  "Latitude",
+  "Longitude",
+  "ListAgentFullName",
+  "ListAgent",
+  "ListOfficeName",
+  "ListOffice",
+]);
+
+function sanitizeBridgePropertySelect(select: string): string {
+  return select
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((f) => !GAMLS_BLOCKED_SELECT_FIELDS.has(f))
+    .join(",");
+}
+
+/** Minimal detail if the full $select still fails (unknown IDX restrictions). */
+const SELECT_DETAIL_FALLBACK = sanitizeBridgePropertySelect(
+  `${SELECT_GRID.replace(",Media,", ",")},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`,
+);
 
 function selectDetail(): string {
   const override = process.env.BRIDGE_PROPERTY_SELECT_DETAIL?.trim();
-  return override || SELECT_DETAIL_DEFAULT;
+  const raw = override || SELECT_DETAIL_DEFAULT;
+  return sanitizeBridgePropertySelect(raw);
 }
 
 function buildFilter(filters: ListingFilters): string {
@@ -191,7 +218,7 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
 
   const baseQuery: Record<string, string> = {
     $filter: buildFilter(filters),
-    $select: SELECT_GRID,
+    $select: sanitizeBridgePropertySelect(SELECT_GRID),
     $top: String(perPage),
     $skip: String(skip),
     $orderby: orderByClause(filters.sort),
@@ -359,32 +386,57 @@ export async function bridgeGetSearchSuggestions(raw: string): Promise<SearchSug
 export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListingRow | null> {
   const cfg = getBridgeODataConfig();
   if (!cfg) return null;
+  const client: BridgeODataConfig = cfg;
 
   const id = mlsId.trim();
   if (!id) return null;
 
   const esc = escapeODataString(id);
-  const query: Record<string, string> = {
-    $filter: `${ACTIVE} and (ListingId eq '${esc}' or ListingKey eq '${esc}')`,
-    $select: selectDetail(),
-    $top: "1",
-  };
+  const primarySelect = selectDetail();
+
+  async function loadRow(select: string): Promise<Record<string, unknown> | null> {
+    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(client, {
+      $filter: `${ACTIVE} and (ListingId eq '${esc}' or ListingKey eq '${esc}')`,
+      $select: select,
+      $top: "1",
+    });
+    return data.value?.[0] ?? null;
+  }
 
   try {
-    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, query);
-    const row = data.value?.[0];
+    let row = await loadRow(primarySelect);
+    if (!row && primarySelect !== SELECT_DETAIL_FALLBACK) {
+      console.warn("bridgeGetMlsListingById: no row with primary $select, retrying minimal select");
+      row = await loadRow(SELECT_DETAIL_FALLBACK);
+    }
     if (!row) return null;
+
     const listingKey = String(row.ListingKey ?? "").trim();
     const listingId = String(row.ListingId ?? "").trim();
     const mediaUrls =
       listingKey || listingId
-        ? await fetchBridgeMediaUrlsForListing(cfg, listingKey || listingId, listingId || listingKey)
+        ? await fetchBridgeMediaUrlsForListing(client, listingKey || listingId, listingId || listingKey)
         : [];
     const mapOpts: BridgePropertyMapOptions =
       mediaUrls.length > 0 ? { supplementalImageUrls: mediaUrls } : {};
     return rowToMlsListingRow(row, mapOpts);
   } catch (e) {
-    console.error("bridgeGetMlsListingById", e);
-    return null;
+    console.warn("bridgeGetMlsListingById primary failed", e);
+    try {
+      const row = await loadRow(SELECT_DETAIL_FALLBACK);
+      if (!row) return null;
+      const listingKey = String(row.ListingKey ?? "").trim();
+      const listingId = String(row.ListingId ?? "").trim();
+      const mediaUrls =
+        listingKey || listingId
+          ? await fetchBridgeMediaUrlsForListing(client, listingKey || listingId, listingId || listingKey)
+          : [];
+      const mapOpts: BridgePropertyMapOptions =
+        mediaUrls.length > 0 ? { supplementalImageUrls: mediaUrls } : {};
+      return rowToMlsListingRow(row, mapOpts);
+    } catch (e2) {
+      console.error("bridgeGetMlsListingById", e2);
+      return null;
+    }
   }
 }
