@@ -1,3 +1,4 @@
+import { bridgeGetMlsListingById, bridgeSearchWithFilters, isBridgeListingsEnabled } from "@/lib/bridge-listings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
 
@@ -79,6 +80,10 @@ function mlsToUnified(m: MlsListingRow): UnifiedListing {
 }
 
 export async function searchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
+  if (isBridgeListingsEnabled()) {
+    return bridgeSearchWithFilters(filters);
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { listings: [], total: 0, page: 1, perPage: 24, totalPages: 0 };
 
@@ -180,6 +185,11 @@ export async function getPublishedListingBySlug(slug: string): Promise<ListingRo
 }
 
 export async function getMlsListingById(mlsId: string): Promise<MlsListingRow | null> {
+  if (isBridgeListingsEnabled()) {
+    const fromBridge = await bridgeGetMlsListingById(mlsId);
+    if (fromBridge) return fromBridge;
+  }
+
   const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
   const client = createSupabaseAdminClient();
   if (!client) {

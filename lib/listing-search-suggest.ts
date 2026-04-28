@@ -1,3 +1,4 @@
+import { bridgeGetSearchSuggestions, isBridgeListingsEnabled } from "@/lib/bridge-listings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type SearchSuggestionType = "city" | "zip" | "address";
@@ -18,6 +19,10 @@ export function sanitizeSuggestQuery(raw: string): string {
 export async function getSearchSuggestions(raw: string): Promise<SearchSuggestion[]> {
   const q = sanitizeSuggestQuery(raw);
   if (q.length < 2) return [];
+
+  if (isBridgeListingsEnabled()) {
+    return bridgeGetSearchSuggestions(q);
+  }
 
   const term = `%${q}%`;
   const supabase = await createSupabaseServerClient();
