@@ -45,7 +45,12 @@ export async function bridgeODataGet<T>(cfg: BridgeODataConfig, query: Record<st
 
 /** Any OData URL under the same auth (Property, Media, @odata.nextLink, …). */
 export async function bridgeODataGetAbsolute<T>(cfg: BridgeODataConfig, requestUrl: string): Promise<T> {
-  const res = await fetch(requestUrl, {
+  const url = new URL(requestUrl);
+  if (!url.searchParams.has("access_token")) {
+    url.searchParams.set("access_token", cfg.serverToken);
+  }
+
+  const res = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${cfg.serverToken}`,
       Accept: "application/json",

@@ -22,9 +22,12 @@ const supabasePattern = supabaseStorageImagePattern();
 
 const nextConfig: NextConfig = {
   productionBrowserSourceMaps: false,
-  // Remove console.log in production
+  // Strip noisy logs in production, but keep error/warn for Vercel diagnostics and Bridge debugging.
   compiler: {
-    removeConsole: process.env.NODE_ENV === "production",
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? { exclude: ["error", "warn"] as ("error" | "warn")[] }
+        : false,
   },
   images: {
     formats: ["image/avif", "image/webp"],

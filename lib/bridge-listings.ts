@@ -189,21 +189,32 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
   const perPage = Math.min(200, Math.max(1, filters.perPage ?? 24));
   const skip = (page - 1) * perPage;
 
-  const query: Record<string, string> = {
+  const baseQuery: Record<string, string> = {
     $filter: buildFilter(filters),
     $select: SELECT_GRID,
     $top: String(perPage),
     $skip: String(skip),
     $orderby: orderByClause(filters.sort),
-    $count: "true",
   };
 
-  try {
-    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, query);
-    const rows = data.value ?? [];
-    const total = typeof data["@odata.count"] === "number" ? data["@odata.count"] : rows.length;
-    const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+  function totalFromResponse(
+    data: BridgeODataValueResponse<Record<string, unknown>>,
+    rowsLen: number,
+  ): number {
+    const c = data["@odata.count"];
+    if (typeof c === "number") return c;
+    if (rowsLen < perPage) return skip + rowsLen;
+    return skip + rowsLen + perPage;
+  }
 
+  try {
+    const withCount = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+      ...baseQuery,
+      $count: "true",
+    });
+    const rows = withCount.value ?? [];
+    const total = totalFromResponse(withCount, rows.length);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
     return {
       listings: rows.map((row) => rowToUnified(row)),
       total,
@@ -211,10 +222,25 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
       perPage,
       totalPages,
     };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("bridgeSearchWithFilters", msg, e);
-    return { listings: [], total: 0, page, perPage, totalPages: 0 };
+  } catch (e1) {
+    console.warn("bridgeSearchWithFilters: $count request failed, retrying without $count", e1);
+    try {
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, baseQuery);
+      const rows = data.value ?? [];
+      const total = totalFromResponse(data, rows.length);
+      const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+      return {
+        listings: rows.map((row) => rowToUnified(row)),
+        total,
+        page,
+        perPage,
+        totalPages,
+      };
+    } catch (e2) {
+      const msg = e2 instanceof Error ? e2.message : String(e2);
+      console.error("bridgeSearchWithFilters", msg, e2);
+      return { listings: [], total: 0, page, perPage, totalPages: 0 };
+    }
   }
 }
 
