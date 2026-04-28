@@ -12,10 +12,34 @@ import {
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import type { ListingFilters, PaginatedResult, UnifiedListing } from "@/lib/listings-queries";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
+import { US_STATE_ABBR_TO_NAME } from "@/lib/us-state-names";
 
 /** Active-ish listings; avoids `tolower(null)` edge cases on some feeds. */
 const ACTIVE =
   "((StandardStatus eq 'Active') or (tolower(StandardStatus) eq 'active') or (MlsStatus eq 'Active') or (tolower(MlsStatus) eq 'active'))";
+
+/** MLS often stores full state name ("Georgia") while users search "GA" — `contains` fails for that pair. */
+function stateOrProvinceODataClause(stateUser: string): string {
+  const s = stateUser.trim();
+  if (!s) return "(true)";
+  const parts: string[] = [];
+  const upper = s.toUpperCase();
+  if (/^[A-Za-z]{2}$/.test(s) && US_STATE_ABBR_TO_NAME[upper]) {
+    const abbr = s.toLowerCase();
+    const full = US_STATE_ABBR_TO_NAME[upper].toLowerCase();
+    parts.push(`tolower(StateOrProvince) eq '${escapeODataString(abbr)}'`);
+    parts.push(`contains(tolower(StateOrProvince), '${escapeODataString(full)}')`);
+  } else {
+    parts.push(`contains(tolower(StateOrProvince), '${escapeODataString(s.toLowerCase())}')`);
+    for (const [abbr, name] of Object.entries(US_STATE_ABBR_TO_NAME)) {
+      if (name.toLowerCase() === s.toLowerCase()) {
+        parts.push(`tolower(StateOrProvince) eq '${escapeODataString(abbr.toLowerCase())}'`);
+        break;
+      }
+    }
+  }
+  return `(${parts.join(" or ")})`;
+}
 
 function buildAddressLine(row: Record<string, unknown>): string {
   const core = bridgePropertyToCoreFields(row);
@@ -122,9 +146,8 @@ function buildFilter(filters: ListingFilters): string {
     const cityState = parseCityStateSearchQuery(q);
     if (cityState) {
       const city = escapeODataString(cityState.city.toLowerCase());
-      const st = escapeODataString(cityState.state.toLowerCase());
       parts.push(`contains(tolower(City), '${city}')`);
-      parts.push(`contains(tolower(StateOrProvince), '${st}')`);
+      parts.push(stateOrProvinceODataClause(cityState.state));
     } else {
       const t = escapeODataString(q.toLowerCase());
       const zipish = /^[\d-]+$/.test(q.replace(/\s/g, ""));
@@ -189,7 +212,8 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
       totalPages,
     };
   } catch (e) {
-    console.error("bridgeSearchWithFilters", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("bridgeSearchWithFilters", msg, e);
     return { listings: [], total: 0, page, perPage, totalPages: 0 };
   }
 }
@@ -212,18 +236,28 @@ export async function bridgeGetSearchSuggestions(raw: string): Promise<SearchSug
   const cfg = getBridgeODataConfig();
   if (!cfg) return [];
 
-  const q = raw.replace(/[%_,]/g, " ").replace(/\s+/g, " ").trim().slice(0, 64).toLowerCase();
+  const rawClean = raw.replace(/[%_,]/g, " ").replace(/\s+/g, " ").trim().slice(0, 64);
+  const q = rawClean.toLowerCase();
   if (q.length < 2) return [];
 
   const esc = escapeODataString(q);
   const zipish = /^[\d-]+$/.test(q.replace(/\s/g, ""));
+  const cityState = parseCityStateSearchQuery(rawClean);
+
+  const cityFilter = cityState
+    ? `contains(tolower(City), '${escapeODataString(cityState.city.toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)}`
+    : `contains(tolower(City), '${esc}')`;
+
+  const addrFilter = cityState
+    ? `(contains(tolower(UnparsedAddress), '${escapeODataString(cityState.city.toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)})`
+    : `contains(tolower(UnparsedAddress), '${esc}')`;
 
   const [cityRows, zipRows, addrRows] = await Promise.all([
-    suggestQuery(cfg, `contains(tolower(City), '${esc}')`, 28),
+    suggestQuery(cfg, cityFilter, 28),
     zipish
       ? suggestQuery(cfg, `startswith(PostalCode, '${escapeODataString(q.replace(/\s/g, ""))}')`, 24)
       : suggestQuery(cfg, `contains(PostalCode, '${esc}')`, 20),
-    suggestQuery(cfg, `contains(tolower(UnparsedAddress), '${esc}')`, 14),
+    suggestQuery(cfg, addrFilter, 14),
   ]);
 
   const out: SearchSuggestion[] = [];
