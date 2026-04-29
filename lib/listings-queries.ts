@@ -48,6 +48,8 @@ export interface PaginatedResult {
   page: number;
   perPage: number;
   totalPages: number;
+  /** Bridge: OData bbox returned nothing (often null coords in MLS); we widened to text filters + ZIP-centroid match inside the draw. */
+  mapPolygonWideFetch?: boolean | undefined;
 }
 
 function manualToUnified(l: ListingRow): UnifiedListing {

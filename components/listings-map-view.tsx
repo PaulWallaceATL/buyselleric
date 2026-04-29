@@ -28,11 +28,13 @@ export function ListingsMapView({
   baseParams,
   appliedPolygon,
   fallbackCenter,
+  mapPolygonWideFetch,
 }: {
   listings: UnifiedListing[];
   baseParams: Record<string, string>;
   appliedPolygon?: ReadonlyArray<MapPolygonVertex> | null;
   fallbackCenter: { lat: number; lng: number };
+  mapPolygonWideFetch?: boolean | undefined;
 }) {
   const router = useRouter();
   const [drawActive, setDrawActive] = useState(false);
@@ -80,23 +82,28 @@ export function ListingsMapView({
     }));
 
   const missingPins = listings.length > 0 && pins.length === 0;
-  const bboxOnlyOutline = !!appliedPolygon && appliedPolygon.length >= 3 && missingPins;
+  const hasPoly = !!appliedPolygon && appliedPolygon.length >= 3;
+  const zipApproxNoPins = hasPoly && !!mapPolygonWideFetch && missingPins;
 
   return (
     <div>
-      {bboxOnlyOutline && (
+      {zipApproxNoPins && (
         <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-          Your outline is applied, but this MLS feed does not allow latitude/longitude in search results, so we
-          filter to the <strong className="text-foreground">bounding rectangle</strong> around your shape (not the
-          exact inner outline) and <strong className="text-foreground">pins stay off</strong>. Cards below should
-          still sit inside that rectangle plus your text filters.
+          Your outline is applied using <strong className="text-foreground">ZIP centroids</strong> (this MLS often
+          omits coordinates on search). The list should follow your shape at ZIP-level accuracy;{" "}
+          <strong className="text-foreground">map pins stay off</strong> when no coordinates are returned.
         </p>
       )}
-      {missingPins && !bboxOnlyOutline && (
+      {missingPins && hasPoly && !zipApproxNoPins && (
+        <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          These matches don&apos;t include coordinates in the feed response, so pins are hidden. Results still use
+          your drawn area where we can place each listing (coordinates or ZIP).
+        </p>
+      )}
+      {missingPins && !hasPoly && (
         <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           These listings don&apos;t have map coordinates yet, so pins are hidden. The map is centered on your
-          search — use <strong className="text-foreground">Draw search area</strong> to outline a region; only
-          listings with latitude and longitude can match.
+          search — use <strong className="text-foreground">Draw search area</strong> to outline a region.
         </p>
       )}
       <div className="mb-3 flex flex-wrap items-center gap-2">

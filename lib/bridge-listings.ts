@@ -10,8 +10,10 @@ import {
   type BridgeODataValueResponse,
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
+import { gaZipCentroid, normalizeUsZip5 } from "@/lib/ga-zip-centroids";
 import { pointInPolygon } from "@/lib/geo";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
+import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import type { ListingFilters, PaginatedResult, UnifiedListing } from "@/lib/listings-queries";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 import { US_STATE_ABBR_TO_NAME } from "@/lib/us-state-names";
@@ -340,20 +342,30 @@ const MAP_POLYGON_MAX_ROWS_PRIMARY = Math.min(
   Math.max(200, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS?.trim() ?? "600", 10) || 600),
 );
 
-function applyMapPolygonResultFilter(
-  filters: ListingFilters,
+function omitMapPolygon(filters: ListingFilters): ListingFilters {
+  const { mapPolygon: _drop, ...rest } = filters;
+  return rest;
+}
+
+/**
+ * Keep listings inside the drawn polygon: exact coords when present, else ZIP centroid vs polygon;
+ * when `trustODataBboxWhenNoCoords` (narrow OData bbox pass), keep rows that matched bbox but lack ZIP/centroid.
+ */
+function filterUnifiedListingsToDrawnPolygon(
   unified: UnifiedListing[],
-  applyPip: boolean,
+  poly: ReadonlyArray<MapPolygonVertex> | undefined,
+  trustODataBboxWhenNoCoords: boolean,
 ): UnifiedListing[] {
-  const poly = filters.mapPolygon;
   if (!poly || poly.length < 3) return unified;
-  if (!applyPip) return unified;
-  return unified.filter(
-    (u) =>
-      u.latitude != null &&
-      u.longitude != null &&
-      pointInPolygon(u.latitude, u.longitude, poly),
-  );
+  return unified.filter((u) => {
+    if (u.latitude != null && u.longitude != null) {
+      return pointInPolygon(u.latitude, u.longitude, poly);
+    }
+    const zip = normalizeUsZip5(u.postal_code);
+    const c = zip ? gaZipCentroid(zip) : null;
+    if (c) return pointInPolygon(c.lat, c.lng, poly);
+    return trustODataBboxWhenNoCoords;
+  });
 }
 
 /** Repeated OData pages with `$top` ≤ BRIDGE_PROPERTY_PAGE_SIZE until `maxRows` or no more data. */
@@ -399,23 +411,23 @@ async function fetchMapPolygonRowsWithSelectFallback(
   selectNoGeo: string,
   orderBy: string,
   maxRows: number,
-): Promise<{ rows: Record<string, unknown>[]; applyPip: boolean }> {
+): Promise<{ rows: Record<string, unknown>[] }> {
   const tryGeoFirst = process.env.BRIDGE_MAP_POLYGON_TRY_GEO_SELECT?.trim() === "true";
   if (!tryGeoFirst) {
     const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectNoGeo, orderBy, maxRows);
-    return { rows, applyPip: false };
+    return { rows };
   }
   try {
     const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectGeo, orderBy, maxRows);
-    return { rows, applyPip: true };
+    return { rows };
   } catch (e) {
     if (!isODataCannotSelectLatLngError(e)) throw e;
     const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectNoGeo, orderBy, maxRows);
-    return { rows, applyPip: false };
+    return { rows };
   }
 }
 
-/** Map polygon: OData bbox on Lat/Lng; PIP when IDX returns coordinates, else bbox-only. */
+/** Map polygon: OData bbox on Lat/Lng first; in-memory PIP / ZIP centroid; widen query if bbox is empty or strict filter yields no rows. */
 async function bridgeSearchWithMapPolygon(
   cfg: BridgeODataConfig,
   filters: ListingFilters,
@@ -429,9 +441,10 @@ async function bridgeSearchWithMapPolygon(
   const orderBy = orderByClause(filters.sort);
 
   const primaryFilter = buildFilter(filters);
+  const poly = filters.mapPolygon;
 
   let rows: Record<string, unknown>[] = [];
-  let applyPip = true;
+  let wideFetch = false;
 
   try {
     const r = await fetchMapPolygonRowsWithSelectFallback(
@@ -443,21 +456,50 @@ async function bridgeSearchWithMapPolygon(
       MAP_POLYGON_MAX_ROWS_PRIMARY,
     );
     rows = r.rows;
-    applyPip = r.applyPip;
   } catch (e1) {
     console.warn("bridgeSearchWithMapPolygon: OData request failed", e1);
     return { listings: [], total: 0, page, perPage, totalPages: 0 };
   }
 
-  const unified = applyMapPolygonResultFilter(
-    filters,
-    rows.map((row) => rowToUnified(row)),
-    applyPip,
-  );
+  let unified = rows.map((row) => rowToUnified(row));
+  if (poly && poly.length >= 3) {
+    unified = filterUnifiedListingsToDrawnPolygon(unified, poly, true);
+  }
+
+  const needWide =
+    poly &&
+    poly.length >= 3 &&
+    unified.length === 0;
+
+  if (needWide) {
+    try {
+      const wideFilter = buildFilter(omitMapPolygon(filters));
+      rows = await fetchPropertyRowsForPolygon(
+        cfg,
+        wideFilter,
+        selectNoGeo,
+        orderBy,
+        MAP_POLYGON_MAX_ROWS_PRIMARY,
+      );
+      wideFetch = true;
+      unified = rows.map((row) => rowToUnified(row));
+      unified = filterUnifiedListingsToDrawnPolygon(unified, poly, false);
+    } catch (e2) {
+      console.warn("bridgeSearchWithMapPolygon: widened OData request failed", e2);
+      return { listings: [], total: 0, page, perPage, totalPages: 0 };
+    }
+  }
   const total = unified.length;
   const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
   const listings = unified.slice(skip, skip + perPage);
-  return { listings, total, page, perPage, totalPages };
+  return {
+    listings,
+    total,
+    page,
+    perPage,
+    totalPages,
+    mapPolygonWideFetch: wideFetch || undefined,
+  };
 }
 
 export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {

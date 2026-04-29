@@ -71,7 +71,8 @@ export default async function ListingsPage({
   };
 
   const view = typeof params.view === "string" ? params.view : "list";
-  const { listings, total, page, totalPages } = await searchWithFilters(filters);
+  const { listings, total, page, totalPages, mapPolygonWideFetch } =
+    await searchWithFilters(filters);
 
   const baseParams: Record<string, string> = {};
   if (filters.q) baseParams.q = filters.q;
@@ -111,7 +112,9 @@ export default async function ListingsPage({
         </h1>
         <p className={`${lead} mt-4`}>
           {appliedMapPolygon
-            ? "Showing homes with coordinates inside your drawn map outline (plus any other filters you set)."
+            ? mapPolygonWideFetch
+              ? "Your drawn outline is applied. This MLS often omits coordinates on search results—we matched homes using coordinates when present and Georgia ZIP centroids otherwise, then kept only what falls inside your shape."
+              : "Showing homes inside your drawn map outline (plus any other filters you set)."
             : filters.q
               ? `Showing homes matching "${filters.q}"`
               : "Browse homes across Georgia. Use filters to narrow your search."}
@@ -134,13 +137,16 @@ export default async function ListingsPage({
               baseParams={baseParams}
               appliedPolygon={appliedMapPolygon}
               fallbackCenter={mapFallbackCenter}
+              mapPolygonWideFetch={mapPolygonWideFetch}
             />
             {listings.length === 0 ? (
               <div className="mt-8 rounded-2xl border border-dashed border-border bg-muted/15 px-5 py-8 text-center sm:px-8">
                 <p className="font-medium text-foreground">No homes in this view</p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {appliedMapPolygon
-                    ? "Nothing with map coordinates fell inside that outline. Try a larger shape, use Clear drawn area above the map, or loosen your filters. Listings without coordinates never match map outlines."
+                    ? mapPolygonWideFetch
+                      ? "Nothing in this search fell inside that outline using coordinates and ZIP-based placement. Try a larger shape, clear the drawn area above the map, or loosen your filters."
+                      : "Nothing with map coordinates fell inside that outline. Try a larger shape, use Clear drawn area above the map, or loosen your filters. Listings without coordinates never match map outlines."
                     : hasFilters
                       ? "Try adjusting filters or switch to list view."
                       : "Try adjusting your search."}
