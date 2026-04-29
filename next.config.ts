@@ -72,6 +72,11 @@ const nextConfig: NextConfig = {
         hostname: "**.zillowstatic.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "**.cdninstagram.com",
+        pathname: "/**",
+      },
       ...(supabasePattern ? [supabasePattern] : []),
     ],
   },

@@ -24,7 +24,9 @@ export function filterDisplayImageUrls(urls: string[] | null | undefined): strin
 export function listingImagePreferUnoptimized(src: string): boolean {
   try {
     const h = new URL(src.trim()).hostname.toLowerCase();
-    return h === "zillowstatic.com" || h.endsWith(".zillowstatic.com");
+    if (h === "zillowstatic.com" || h.endsWith(".zillowstatic.com")) return true;
+    if (h.endsWith(".cdninstagram.com") || h.endsWith(".fbcdn.net")) return true;
+    return false;
   } catch {
     return false;
   }

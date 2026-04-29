@@ -83,7 +83,11 @@ export const siteConfig = {
     "Georgia real estate salesperson · License #447520",
     "Southern Classic Realty",
   ],
-  primaryMarket: "Your metro area",
+  primaryMarket: "All of Georgia",
+
+  /** Public profiles (About + optional links). */
+  instagramUrl: "https://www.instagram.com/buyselleric/",
+  georgiaMlsAgentUrl: "https://www.georgiamls.com/real-estate-agents/JA7014",
 
   /** CrossCountry Mortgage — application with Eric as referrer */
   mortgageApplicationUrl:

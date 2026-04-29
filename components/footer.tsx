@@ -20,6 +20,13 @@ const footerLinks = [
   { label: "List your home", href: "/sell" },
 ];
 
+const footerServiceLinks = [
+  { label: "Buyer tours & offers", href: "/services/buyer-representation" },
+  { label: "Listing prep & marketing", href: "/services/seller-marketing" },
+  { label: "Pricing strategy", href: "/services/pricing-negotiation" },
+  { label: "Contract to close", href: "/services/closing-coordination" },
+];
+
 export function Footer() {
   const mail = `mailto:${siteConfig.email}?subject=${encodeURIComponent("Real estate inquiry")}`;
 
@@ -83,10 +90,16 @@ export function Footer() {
             <div>
               <h4 className={`${colHeading} mb-6`}>Services</h4>
               <ul className="space-y-3">
-                <li className={listRow}>Buyer tours & offers</li>
-                <li className={listRow}>Listing prep & marketing</li>
-                <li className={listRow}>Pricing strategy</li>
-                <li className={listRow}>Contract to close</li>
+                {footerServiceLinks.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className={`${listRow} inline-flex py-0.5 underline-offset-4 hover:underline hover:text-background/90`}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
 

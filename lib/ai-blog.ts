@@ -20,7 +20,7 @@ export interface GeneratedBlogPost {
   seo_keywords: string[];
 }
 
-const SYSTEM_PROMPT = `You are a professional real estate blog writer for ${siteConfig.agentName} at ${siteConfig.name} (${siteConfig.brandSlug}), serving the ${siteConfig.primaryMarket} area and broader Georgia market.
+const SYSTEM_PROMPT = `You are a professional real estate blog writer for ${siteConfig.agentName} at ${siteConfig.name} (${siteConfig.brandSlug}), serving clients across ${siteConfig.primaryMarket}.
 
 Your writing style:
 - Professional but approachable — like a knowledgeable friend in the business
@@ -74,7 +74,7 @@ export async function generateFromUrl(url: string, extractedContent: string, _og
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Rewrite the following article as an original blog post for our real estate website. Do NOT plagiarize — create entirely new content inspired by the topic and key points. Adapt it to the ${siteConfig.primaryMarket} / Georgia market where relevant.
+        content: `Rewrite the following article as an original blog post for our real estate website. Do NOT plagiarize — create entirely new content inspired by the topic and key points. Adapt it to the ${siteConfig.primaryMarket} market where relevant.
 
 Source URL (for reference only): ${url}
 
