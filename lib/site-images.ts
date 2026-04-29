@@ -3,9 +3,11 @@
  * @see https://unsplash.com/license
  */
 export const siteImages = {
-  /** Eric Adams — professional headshot (Instagram CDN). */
-  ericHeadshot:
-    "https://scontent-atl3-2.cdninstagram.com/v/t51.82787-19/631152843_18557742748050808_6640856575991872186_n.jpg?stp=dst-jpg_s640x640_sh0.08&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby4xMDgwLmMyIn0&_nc_ht=scontent-atl3-2.cdninstagram.com&_nc_cat=104&_nc_oc=Q6cZ2gGCO-KzFrb-nTxwNY0BwZCA4v7uUeAUBwsICao0DPK_fWTaPsv4FJ0k_A0ke3kxrhA&_nc_ohc=HZ5pjT8xuE8Q7kNvwEHIcEc&_nc_gid=36YN_9fj9briFXY2KOmpcQ&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_Af2XENHHat-okTGZlbyD8IOTbi3mkfJGJqdysncu0r4yvQ&oe=69F737F8&_nc_sid=8b3546",
+  /**
+   * Eric’s headshot: add `public/eric-adams.jpg` (recommended). Instagram CDN URLs expire;
+   * the About section falls back to a monogram if this file is missing.
+   */
+  ericHeadshot: "/eric-adams.jpg",
 
   /** About section — wide exterior / curb appeal (secondary visual if needed) */
   aboutHero:

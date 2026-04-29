@@ -21,13 +21,13 @@ const sections = [
 
 const menuItems = [
   { label: "Home", href: "#" },
-  { label: "Homes", href: "#featured-listings" },
+  { label: "Homes", href: "/#featured-listings" },
   { label: "Listings", href: "/listings" },
   { label: "Sell", href: "/sell" },
   { label: "Blog", href: "/blog" },
-  { label: "Services", href: "/#services" },
-  { label: "About", href: "#about" },
-  { label: "Stories", href: "#social-proof" },
+  { label: "Services", href: "/#services-menu" },
+  { label: "About", href: "/#about" },
+  { label: "Stories", href: "/#social-proof" },
   { label: "Contact", href: "#contact" },
 ];
 

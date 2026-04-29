@@ -244,7 +244,7 @@ export function Services() {
     <section
       ref={sectionRef}
       id="services"
-      className="services relative bg-background overflow-hidden"
+      className="services relative scroll-mt-28 overflow-hidden bg-background sm:scroll-mt-32"
     >
       <div
         ref={contentRef}
@@ -258,7 +258,7 @@ export function Services() {
         </h2>
       </div>
 
-      <div id="services-menu" className="w-full pb-24">
+      <div id="services-menu" className="w-full scroll-mt-28 pb-24 sm:scroll-mt-32">
         <div className="w-full">
           {services.map((service, index) => (
             <ServiceItem

@@ -1,7 +1,16 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Handshake, Home, KeyRound, LineChart, Search, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  Handshake,
+  Home,
+  KeyRound,
+  LineChart,
+  Megaphone,
+  Search,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { siteConfig } from "@/lib/config";
@@ -19,8 +28,40 @@ const featureIcons: LucideIcon[] = [
   Sparkles,
 ];
 
+const serviceHeroIcon: Record<string, LucideIcon> = {
+  "buyer-representation": Search,
+  "seller-marketing": Megaphone,
+  "pricing-negotiation": LineChart,
+  "closing-coordination": KeyRound,
+};
+
 function iconFor(index: number): LucideIcon {
   return featureIcons[index % featureIcons.length] ?? Sparkles;
+}
+
+function ServiceIcon3D({
+  Icon,
+  size = "md",
+}: {
+  Icon: LucideIcon;
+  size?: "md" | "lg";
+}) {
+  const box = size === "lg" ? "h-36 w-36 sm:h-40 sm:w-40" : "h-[8.5rem] w-[8.5rem] sm:h-40 sm:w-40 md:h-44 md:w-44";
+  const iconScale = size === "lg" ? "h-[40%] w-[40%]" : "h-[42%] w-[42%]";
+  return (
+    <div className="shrink-0 [perspective:960px]" aria-hidden>
+      <div
+        className={`relative flex ${box} items-center justify-center rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-ring/30 via-muted/60 to-background shadow-[0_26px_60px_-22px_rgba(0,0,0,0.62)] transition-[transform,box-shadow] duration-500 ease-out will-change-transform [transform-style:preserve-3d] [transform:rotateX(10deg)_rotateY(-16deg)] hover:[transform:rotateX(5deg)_rotateY(-8deg)_translateZ(14px)] hover:shadow-[0_32px_70px_-24px_rgba(110,184,192,0.22)]`}
+      >
+        <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] bg-gradient-to-tr from-white/10 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-3 bottom-2 h-1/3 rounded-full bg-black/25 blur-2xl [transform:translateZ(-40px)_scale(1.1)]" />
+        <Icon
+          className={`relative z-[1] ${iconScale} text-ring drop-shadow-[0_8px_28px_rgba(110,184,192,0.38)]`}
+          strokeWidth={1.35}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function ServiceDetailView({ service }: { service: ServicePage }) {
@@ -28,6 +69,7 @@ export function ServiceDetailView({ service }: { service: ServicePage }) {
   const feature = service.features[active];
   if (!feature) return null;
   const Icon = iconFor(active);
+  const HeroIcon = serviceHeroIcon[service.slug] ?? Sparkles;
 
   return (
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background">
@@ -36,29 +78,37 @@ export function ServiceDetailView({ service }: { service: ServicePage }) {
           aria-hidden
           className="pointer-events-none absolute -right-32 top-20 h-96 w-96 rounded-full bg-ring/10 blur-3xl"
         />
-        <div className={`${siteContainer} relative max-w-4xl`}>
+        <div className={`${siteContainer} relative max-w-5xl`}>
           <Link
-            href="/#services"
+            href="/#services-menu"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             ← All services
           </Link>
-          <h1 className="mt-6 text-balance font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.75rem] lg:leading-[1.12]">
-            {service.headline}
-          </h1>
-          <p className="mt-6 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-            {service.intro}
-          </p>
-          <p className="mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground/90 sm:text-base">
-            {service.description}
-          </p>
-          <div className="mt-10 flex flex-row flex-wrap gap-3">
-            <Link href={service.ctaHref} className={ctaPrimary}>
-              {service.ctaText}
-            </Link>
-            <Link href="/#contact" className={ctaSecondary}>
-              Contact {siteConfig.agentName}
-            </Link>
+
+          <div className="mt-6 flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between lg:gap-14">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-balance font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.75rem] lg:leading-[1.12]">
+                {service.headline}
+              </h1>
+              <p className="mt-6 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+                {service.intro}
+              </p>
+              <p className="mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground/90 sm:text-base">
+                {service.description}
+              </p>
+              <div className="mt-10 flex flex-row flex-wrap gap-3">
+                <Link href={service.ctaHref} className={ctaPrimary}>
+                  {service.ctaText}
+                </Link>
+                <Link href="/#contact" className={ctaSecondary}>
+                  Contact {siteConfig.agentName}
+                </Link>
+              </div>
+            </div>
+            <div className="mx-auto flex justify-center lg:mx-0 lg:pt-2">
+              <ServiceIcon3D Icon={HeroIcon} size="lg" />
+            </div>
           </div>
         </div>
       </section>
@@ -70,8 +120,8 @@ export function ServiceDetailView({ service }: { service: ServicePage }) {
             Every pillar of this service—organized like your transaction actually runs.
           </h2>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Tap a focus area to explore how {siteConfig.agentName} supports Georgia buyers and sellers
-            end-to-end. Same substance as before—presented in a clearer, more scannable layout.
+            Tap a focus area to explore how {siteConfig.agentName} supports Georgia buyers and sellers end-to-end.
+            Same substance as before—presented in a clearer, more scannable layout.
           </p>
 
           <div className="mt-10 flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
@@ -102,19 +152,13 @@ export function ServiceDetailView({ service }: { service: ServicePage }) {
             })}
           </div>
 
-          <div className="mt-12 grid items-stretch gap-10 lg:grid-cols-2 lg:gap-14">
-            <div className="relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-[2rem] border border-border/70 bg-gradient-to-br from-ring/15 via-muted/30 to-background p-10 lg:min-h-[360px]">
-              <div
-                aria-hidden
-                className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-ring/10 blur-2xl"
-              />
-              <Icon className="relative z-[1] h-28 w-28 text-ring/35 sm:h-36 sm:w-36" strokeWidth={1} />
-              <p className="relative z-[1] mt-8 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                {service.title} · Step {active + 1} of {service.features.length}
+          <div className="mt-12 flex flex-col gap-10 md:flex-row md:items-start md:gap-12 lg:gap-16">
+            <ServiceIcon3D Icon={Icon} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ring/90">
+                {service.title} · {active + 1} / {service.features.length}
               </p>
-            </div>
-            <div className="flex flex-col justify-center">
-              <h3 className="font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              <h3 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                 {feature.title}
               </h3>
               <p className="mt-5 text-base leading-relaxed text-muted-foreground sm:text-lg">{feature.description}</p>

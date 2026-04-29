@@ -4,10 +4,9 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
-import { listingImagePreferUnoptimized } from "@/lib/listing-urls";
 import { siteImages } from "@/lib/site-images";
 import { sectionY, siteContainer } from "@/lib/ui";
 
@@ -19,6 +18,7 @@ export function About() {
   const sectionRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const ctaRef = useRef<HTMLAnchorElement>(null);
+  const [photoOk, setPhotoOk] = useState(true);
 
   useEffect(() => {
     if (!sectionRef.current || !contentRef.current) return;
@@ -65,7 +65,11 @@ export function About() {
   const headshot = siteImages.ericHeadshot;
 
   return (
-    <section ref={sectionRef} id="about" className={`bg-background ${sectionY}`}>
+    <section
+      ref={sectionRef}
+      id="about"
+      className={`scroll-mt-28 bg-background sm:scroll-mt-32 ${sectionY}`}
+    >
       <div className={`${siteContainer}`}>
         <div
           ref={contentRef}
@@ -73,15 +77,26 @@ export function About() {
         >
           <div className="lg:col-span-5">
             <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-[2rem] border border-border/80 bg-muted/30 shadow-xl shadow-foreground/5 lg:mx-0">
-              <Image
-                src={headshot}
-                alt={`${siteConfig.agentName}, real estate agent`}
-                fill
-                className="object-cover object-top"
-                sizes="(max-width: 1024px) 100vw, 420px"
-                loading="lazy"
-                unoptimized={listingImagePreferUnoptimized(headshot)}
-              />
+              {photoOk ? (
+                <Image
+                  src={headshot}
+                  alt={`${siteConfig.agentName}, real estate agent`}
+                  fill
+                  className="object-cover object-top"
+                  sizes="(max-width: 1024px) 100vw, 420px"
+                  loading="lazy"
+                  onError={() => setPhotoOk(false)}
+                />
+              ) : null}
+              {!photoOk ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-muted via-background to-muted p-8 text-center">
+                  <span className="font-serif text-6xl font-semibold tracking-tight text-ring sm:text-7xl">EA</span>
+                  <p className="mt-4 max-w-[14rem] text-sm leading-snug text-muted-foreground">
+                    Add your headshot as <code className="text-foreground">public/eric-adams.jpg</code> so it loads
+                    reliably (social CDN links expire).
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
 

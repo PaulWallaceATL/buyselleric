@@ -23,15 +23,10 @@ export default function HomePage(): ReactNode {
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background">
       <HeroLoader />
       <FeaturedListings />
-      <LazySection>
-        <Services />
-      </LazySection>
-      <LazySection>
-        <About />
-      </LazySection>
-      <LazySection>
-        <SocialProof />
-      </LazySection>
+      {/* Eager mount: hash links (#services, #about) must exist on first paint for scroll + Lenis. */}
+      <Services />
+      <About />
+      <SocialProof />
       <LazySection>
         <Faq />
       </LazySection>

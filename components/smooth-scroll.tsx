@@ -35,34 +35,65 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
         }
         requestAnimationFrame(raf);
 
+        const HEADER_OFFSET = -120;
+
+        function scrollToHashIfPresent() {
+          const h = window.location.hash;
+          if (!h || h === "#") return;
+          const el = document.querySelector(h);
+          if (el) lenis.scrollTo(el as HTMLElement, { offset: HEADER_OFFSET });
+        }
+
+        /** Same-origin in-page anchors, including `/#section` on the homepage. */
         function handleAnchorClick(e: MouseEvent) {
-          const target = e.target as HTMLElement;
-          const anchor = target.closest('a[href^="#"]');
-          if (!anchor) return;
+          const a = (e.target as HTMLElement | null)?.closest("a");
+          if (!a || a.tagName !== "A") return;
+          const raw = a.getAttribute("href");
+          if (!raw) return;
 
-          const href = anchor.getAttribute("href");
-          if (!href) return;
-
-          e.preventDefault();
-
-          if (href === "#") {
+          if (raw === "#") {
+            e.preventDefault();
             lenis.scrollTo(0, { offset: 0 });
+            history.replaceState(null, "", window.location.pathname);
             return;
           }
 
-          if (href === "#contact") {
+          if (raw === "#contact") {
+            e.preventDefault();
             const contact = document.getElementById("contact");
-            if (contact) {
-              lenis.scrollTo(contact, { offset: -24 });
+            if (contact) lenis.scrollTo(contact, { offset: -24 });
+            else lenis.scrollTo("bottom", { offset: 0 });
+            return;
+          }
+
+          let hash = "";
+          if (raw.startsWith("#")) {
+            hash = raw;
+          } else if (raw.startsWith("/#")) {
+            hash = raw.slice(1);
+          } else {
+            try {
+              const u = new URL(raw, window.location.origin);
+              if (u.origin !== window.location.origin) return;
+              if (u.pathname !== "/" || !u.hash) return;
+              hash = u.hash;
+            } catch {
               return;
             }
-            lenis.scrollTo("bottom", { offset: 0 });
+          }
+
+          if (!hash || hash === "#") return;
+
+          if (window.location.pathname !== "/") {
             return;
           }
 
-          const element = document.querySelector(href);
+          const element = document.querySelector(hash);
           if (!element) return;
-          lenis.scrollTo(element as HTMLElement, { offset: -100 });
+
+          e.preventDefault();
+          lenis.scrollTo(element as HTMLElement, { offset: HEADER_OFFSET });
+          history.replaceState(null, "", `${window.location.pathname}${hash}`);
         }
 
         document.addEventListener("click", handleAnchorClick);
@@ -71,8 +102,15 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
           document.removeEventListener("click", handleAnchorClick);
           lenis.destroy();
         };
+
+        [0, 50, 150, 400, 900, 1800].forEach((ms) => {
+          setTimeout(() => {
+            if (cancelled) return;
+            scrollToHashIfPresent();
+          }, ms);
+        });
       });
-    }, 2000);
+    }, 200);
 
     return () => {
       cancelled = true;
