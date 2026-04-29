@@ -2,10 +2,11 @@
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { useCallback, useEffect, useRef } from "react";
-import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { MapContainer, Marker, Polygon, Popup, TileLayer, useMap } from "react-leaflet";
 import Link from "next/link";
 import { formatPriceUsd } from "@/lib/format";
+import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 
 const icon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -17,8 +18,11 @@ const icon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-const MIN_DRAW_RADIUS_M = 150;
-const MAX_DRAW_RADIUS_M = 50_000;
+const MIN_SAMPLE_M = 6;
+const MIN_STROKE_M = 45;
+const MIN_VERTICES = 3;
+
+export type { MapPolygonVertex };
 
 export interface MapPin {
   id: string;
@@ -33,24 +37,36 @@ export interface MapPin {
   bathrooms: number;
 }
 
-export interface MapSearchCircle {
-  lat: number;
-  lng: number;
-  radiusM: number;
+function strokeLengthM(map: L.Map, ring: L.LatLng[]): number {
+  let s = 0;
+  for (let i = 1; i < ring.length; i++) s += map.distance(ring[i - 1]!, ring[i]!);
+  return s;
 }
 
-/** Circle from a diameter: press = one end of the span, drag = opposite end, release = apply. */
-function MapCircleDrawer({
+function appendIfFar(map: L.Map, ring: L.LatLng[], ll: L.LatLng) {
+  const last = ring[ring.length - 1];
+  if (!last || map.distance(last, ll) >= MIN_SAMPLE_M) ring.push(ll);
+}
+
+function screenEventToLatLng(map: L.Map, e: MouseEvent): L.LatLng {
+  const c = map.getContainer();
+  const r = c.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  return map.containerPointToLatLng(L.point(x, y));
+}
+
+/** Freehand stroke: pointer follows like a crayon; release to apply lasso. */
+function MapFreehandDrawer({
   active,
   onComplete,
 }: {
   active: boolean;
-  onComplete: (lat: number, lng: number, radiusM: number) => void;
+  onComplete: (ring: MapPolygonVertex[]) => void;
 }) {
   const map = useMap();
-  const previewRef = useRef<L.Circle | null>(null);
-  const pointARef = useRef<L.LatLng | null>(null);
-  const pointBRef = useRef<L.LatLng | null>(null);
+  const previewRef = useRef<L.Polyline | null>(null);
+  const ringRef = useRef<L.LatLng[]>([]);
   const draggingRef = useRef(false);
 
   useEffect(() => {
@@ -59,141 +75,133 @@ function MapCircleDrawer({
         map.removeLayer(previewRef.current);
         previewRef.current = null;
       }
-      pointARef.current = null;
-      pointBRef.current = null;
+      ringRef.current = [];
       draggingRef.current = false;
       map.dragging.enable();
       map.getContainer().classList.remove("cursor-crosshair");
       return;
     }
 
-    map.getContainer().classList.add("cursor-crosshair");
+    const container = map.getContainer();
+    container.classList.add("cursor-crosshair");
 
-    const circleStyle = {
+    const lineStyle = {
       color: "#6eb8c0",
-      fillColor: "#6eb8c0",
-      fillOpacity: 0.12,
-      weight: 2,
+      weight: 3,
+      opacity: 0.95,
     } as const;
 
-    const cleanupPreview = () => {
-      if (previewRef.current) {
-        map.removeLayer(previewRef.current);
-        previewRef.current = null;
-      }
-      pointARef.current = null;
-      pointBRef.current = null;
-      draggingRef.current = false;
-      map.dragging.enable();
-    };
-
-    const updatePreviewFromAB = (a: L.LatLng, b: L.LatLng) => {
-      const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
-      const halfChord = map.distance(a, b) / 2;
-      const r = Math.min(MAX_DRAW_RADIUS_M, Math.max(MIN_DRAW_RADIUS_M, halfChord));
-      if (!previewRef.current) {
-        previewRef.current = L.circle(mid, { radius: r, ...circleStyle }).addTo(map);
-      } else {
-        previewRef.current.setLatLng(mid);
-        previewRef.current.setRadius(r);
-      }
-    };
-
-    const onDown = (e: L.LeafletMouseEvent) => {
-      if (e.originalEvent.button !== 0) return;
-      const t = e.originalEvent.target as HTMLElement | null;
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const t = e.target as HTMLElement | null;
+      if (!container.contains(t)) return;
       if (t?.closest?.(".leaflet-marker-icon,.leaflet-popup")) return;
 
-      pointARef.current = e.latlng;
-      pointBRef.current = e.latlng;
+      e.preventDefault();
       draggingRef.current = true;
+      const ll = screenEventToLatLng(map, e);
+      ringRef.current = [ll];
       if (previewRef.current) map.removeLayer(previewRef.current);
-      previewRef.current = null;
+      previewRef.current = L.polyline([[ll.lat, ll.lng]], lineStyle).addTo(map);
       map.dragging.disable();
-      L.DomEvent.stopPropagation(e.originalEvent);
     };
 
-    const onMove = (e: L.LeafletMouseEvent) => {
-      if (!draggingRef.current || !pointARef.current) return;
-      pointBRef.current = e.latlng;
-      updatePreviewFromAB(pointARef.current, pointBRef.current);
+    const onMove = (e: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const ll = screenEventToLatLng(map, e);
+      appendIfFar(map, ringRef.current, ll);
+      previewRef.current?.setLatLngs(ringRef.current.map((p) => [p.lat, p.lng]));
     };
 
     const finish = () => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
       map.dragging.enable();
-      const a = pointARef.current;
-      const b = pointBRef.current ?? a;
-      if (!a || !b) {
-        cleanupPreview();
-        return;
-      }
-      const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
-      const r = Math.min(MAX_DRAW_RADIUS_M, Math.max(MIN_DRAW_RADIUS_M, map.distance(a, b) / 2));
+      const raw = ringRef.current;
       if (previewRef.current) {
         map.removeLayer(previewRef.current);
         previewRef.current = null;
       }
-      pointARef.current = null;
-      pointBRef.current = null;
-      onComplete(mid.lat, mid.lng, r);
+      ringRef.current = [];
+
+      if (raw.length < MIN_VERTICES || strokeLengthM(map, raw) < MIN_STROKE_M) return;
+
+      const out: MapPolygonVertex[] = raw.map((p) => ({ lat: p.lat, lng: p.lng }));
+      const first = out[0]!;
+      const last = out[out.length - 1]!;
+      if (last.lat !== first.lat || last.lng !== first.lng) out.push({ ...first });
+      onComplete(out);
     };
 
-    map.on("mousedown", onDown);
-    map.on("mousemove", onMove);
-    map.on("mouseup", finish);
-    map.on("mouseleave", finish);
+    container.addEventListener("mousedown", onDown);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", finish);
 
     return () => {
-      map.off("mousedown", onDown);
-      map.off("mousemove", onMove);
-      map.off("mouseup", finish);
-      map.off("mouseleave", finish);
+      container.removeEventListener("mousedown", onDown);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", finish);
       if (previewRef.current) {
         map.removeLayer(previewRef.current);
         previewRef.current = null;
       }
-      pointARef.current = null;
-      pointBRef.current = null;
+      ringRef.current = [];
       draggingRef.current = false;
       map.dragging.enable();
-      map.getContainer().classList.remove("cursor-crosshair");
+      container.classList.remove("cursor-crosshair");
     };
   }, [active, map, onComplete]);
 
   return null;
 }
 
+function FitAppliedPolygon({ positions }: { positions: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (positions.length < 2) return;
+    const b = L.latLngBounds(positions);
+    map.fitBounds(b, { padding: [28, 28], maxZoom: 15, animate: true });
+  }, [map, positions]);
+  return null;
+}
+
 export default function ListingsMap({
   pins,
   fallbackCenter,
-  appliedCircle,
+  appliedPolygon,
   drawActive,
-  onApplyCircle,
+  onApplyPolygon,
 }: {
   pins: MapPin[];
-  /** Used when no pins have coordinates so the basemap still loads. */
   fallbackCenter: { lat: number; lng: number };
-  appliedCircle?: MapSearchCircle | null;
+  appliedPolygon?: ReadonlyArray<MapPolygonVertex> | null;
   drawActive: boolean;
-  onApplyCircle: (lat: number, lng: number, radiusM: number) => void;
+  onApplyPolygon: (ring: MapPolygonVertex[]) => void;
 }) {
   const avgLat = pins.length > 0 ? pins.reduce((s, p) => s + p.lat, 0) / pins.length : fallbackCenter.lat;
   const avgLng = pins.length > 0 ? pins.reduce((s, p) => s + p.lng, 0) / pins.length : fallbackCenter.lng;
 
-  const center: [number, number] = appliedCircle
-    ? [appliedCircle.lat, appliedCircle.lng]
-    : [avgLat, avgLng];
+  const polyPositions = useMemo((): [number, number][] => {
+    if (!appliedPolygon || appliedPolygon.length < 3) return [];
+    return appliedPolygon.map((p) => [p.lat, p.lng] as [number, number]);
+  }, [appliedPolygon]);
+
+  const center: [number, number] =
+    polyPositions.length >= 2
+      ? [
+          polyPositions.reduce((s, p) => s + p[0], 0) / polyPositions.length,
+          polyPositions.reduce((s, p) => s + p[1], 0) / polyPositions.length,
+        ]
+      : [avgLat, avgLng];
 
   const onComplete = useCallback(
-    (lat: number, lng: number, radiusM: number) => {
-      onApplyCircle(lat, lng, radiusM);
+    (ring: MapPolygonVertex[]) => {
+      onApplyPolygon(ring);
     },
-    [onApplyCircle],
+    [onApplyPolygon],
   );
 
-  const zoom = appliedCircle ? 12 : pins.length > 0 ? 10 : 9;
+  const zoom = polyPositions.length >= 2 ? 12 : pins.length > 0 ? 10 : 9;
 
   return (
     <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
@@ -201,19 +209,21 @@ export default function ListingsMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {appliedCircle && (
-        <Circle
-          center={[appliedCircle.lat, appliedCircle.lng]}
-          radius={appliedCircle.radiusM}
-          pathOptions={{
-            color: "#6eb8c0",
-            fillColor: "#6eb8c0",
-            fillOpacity: 0.1,
-            weight: 2,
-          }}
-        />
+      {polyPositions.length >= 3 && (
+        <>
+          <Polygon
+            positions={polyPositions}
+            pathOptions={{
+              color: "#6eb8c0",
+              fillColor: "#6eb8c0",
+              fillOpacity: 0.12,
+              weight: 2,
+            }}
+          />
+          <FitAppliedPolygon positions={polyPositions} />
+        </>
       )}
-      <MapCircleDrawer active={drawActive} onComplete={onComplete} />
+      <MapFreehandDrawer active={drawActive} onComplete={onComplete} />
       {pins.map((pin) => (
         <Marker key={pin.id} position={[pin.lat, pin.lng]} icon={icon}>
           <Popup>

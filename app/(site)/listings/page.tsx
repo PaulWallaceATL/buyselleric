@@ -8,6 +8,11 @@ import { ListingsSearchBar } from "@/components/listings-search-bar";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
 import { mapFallbackCenterFromSearchQ } from "@/lib/listing-query-text";
+import {
+  decodeMapPolygonQuery,
+  encodeMapPolygonQuery,
+  MAP_POLYGON_QUERY_KEY,
+} from "@/lib/map-polygon-query";
 import { searchWithFilters, type ListingFilters } from "@/lib/listings-queries";
 import { eyebrow, innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
@@ -28,14 +33,12 @@ function parseNum(val: string | string[] | undefined): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-function parseMapCoord(val: string | string[] | undefined): number | undefined {
-  if (typeof val !== "string") return undefined;
-  const n = Number(val);
-  return Number.isFinite(n) ? n : undefined;
+function mapPolyRaw(params: Record<string, string | string[] | undefined>): string | undefined {
+  const v = params.mapPoly;
+  if (typeof v === "string") return v;
+  if (Array.isArray(v) && typeof v[0] === "string") return v[0];
+  return undefined;
 }
-
-const MAP_RADIUS_MIN_M = 150;
-const MAP_RADIUS_MAX_M = 50_000;
 
 export default async function ListingsPage({
   searchParams,
@@ -44,13 +47,10 @@ export default async function ListingsPage({
 }): Promise<ReactNode> {
   const params = await searchParams;
 
-  const ml = parseMapCoord(params.mapLat);
-  const mlg = parseMapCoord(params.mapLng);
-  const mr = parseMapCoord(params.mapRadiusM);
-  const mapCircleOk = ml != null && mlg != null && mr != null && mr > 0;
-  const mapLat = mapCircleOk ? ml : undefined;
-  const mapLng = mapCircleOk ? mlg : undefined;
-  const mapRadiusM = mapCircleOk ? Math.min(MAP_RADIUS_MAX_M, Math.max(MAP_RADIUS_MIN_M, mr)) : undefined;
+  const decodedPoly = decodeMapPolygonQuery(mapPolyRaw(params));
+  const mapPolygon =
+    decodedPoly && decodedPoly.length >= 3 ? decodedPoly : undefined;
+  const mapPolyEncoded = mapPolygon ? encodeMapPolygonQuery(mapPolygon) : undefined;
 
   const filters: ListingFilters = {
     q: typeof params.q === "string" ? params.q.trim() : undefined,
@@ -64,9 +64,7 @@ export default async function ListingsPage({
     sort: (typeof params.sort === "string" ? params.sort : "price_desc") as ListingFilters["sort"],
     page: parseNum(params.page) ?? 1,
     perPage: 24,
-    mapLat,
-    mapLng,
-    mapRadiusM,
+    mapPolygon,
   };
 
   const view = typeof params.view === "string" ? params.view : "list";
@@ -82,11 +80,7 @@ export default async function ListingsPage({
   if (filters.maxSqft) baseParams.maxSqft = String(filters.maxSqft);
   if (filters.sort && filters.sort !== "price_desc") baseParams.sort = filters.sort;
   if (view !== "list") baseParams.view = view;
-  if (mapLat != null && mapLng != null && mapRadiusM != null) {
-    baseParams.mapLat = String(mapLat);
-    baseParams.mapLng = String(mapLng);
-    baseParams.mapRadiusM = String(mapRadiusM);
-  }
+  if (mapPolyEncoded) baseParams[MAP_POLYGON_QUERY_KEY] = mapPolyEncoded;
 
   const hasFilters = !!(
     filters.q ||
@@ -96,13 +90,11 @@ export default async function ListingsPage({
     filters.minBaths ||
     filters.minSqft ||
     filters.maxSqft ||
-    mapCircleOk
+    (mapPolygon && mapPolygon.length >= 3)
   );
 
-  const appliedMapCircle =
-    mapLat != null && mapLng != null && mapRadiusM != null
-      ? { lat: mapLat, lng: mapLng, radiusM: mapRadiusM }
-      : null;
+  const appliedMapPolygon =
+    mapPolygon && mapPolygon.length >= 3 ? mapPolygon : null;
 
   const mapFallbackCenter = mapFallbackCenterFromSearchQ(filters.q);
 
@@ -114,8 +106,8 @@ export default async function ListingsPage({
           {hasFilters ? "Search results" : "Available homes"}
         </h1>
         <p className={`${lead} mt-4`}>
-          {appliedMapCircle
-            ? "Showing homes inside your drawn map area (and any other filters you set)."
+          {appliedMapPolygon
+            ? "Showing homes with coordinates inside your drawn map outline (plus any other filters you set)."
             : filters.q
               ? `Showing homes matching "${filters.q}"`
               : "Browse homes across Georgia. Use filters to narrow your search."}
@@ -131,22 +123,35 @@ export default async function ListingsPage({
           </Suspense>
         </div>
 
-        {listings.length === 0 ? (
-          <EmptyState hasFilters={hasFilters} query={filters.q} />
-        ) : view === "map" ? (
+        {view === "map" ? (
           <div className="mt-8">
             <ListingsMapView
               listings={listings}
               baseParams={baseParams}
-              appliedCircle={appliedMapCircle}
+              appliedPolygon={appliedMapPolygon}
               fallbackCenter={mapFallbackCenter}
             />
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {listings.map((l) => (
-                <UnifiedListingCard key={l.id} listing={l} />
-              ))}
-            </div>
+            {listings.length === 0 ? (
+              <div className="mt-8 rounded-2xl border border-dashed border-border bg-muted/15 px-5 py-8 text-center sm:px-8">
+                <p className="font-medium text-foreground">No homes in this view</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {appliedMapPolygon
+                    ? "Nothing with map coordinates fell inside that outline. Try a larger shape, use Clear drawn area above the map, or loosen your filters. Listings without coordinates never match map outlines."
+                    : hasFilters
+                      ? "Try adjusting filters or switch to list view."
+                      : "Try adjusting your search."}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {listings.map((l) => (
+                  <UnifiedListingCard key={l.id} listing={l} />
+                ))}
+              </div>
+            )}
           </div>
+        ) : listings.length === 0 ? (
+          <EmptyState hasFilters={hasFilters} query={filters.q} />
         ) : (
           <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {listings.map((l) => (

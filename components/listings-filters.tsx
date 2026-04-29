@@ -69,9 +69,7 @@ export function ListingsFilters() {
     maxSqft: searchParams.get("maxSqft") ?? "",
     sort: searchParams.get("sort") ?? "price_desc",
     view: searchParams.get("view") ?? "list",
-    mapLat: searchParams.get("mapLat") ?? "",
-    mapLng: searchParams.get("mapLng") ?? "",
-    mapRadiusM: searchParams.get("mapRadiusM") ?? "",
+    mapPoly: searchParams.get("mapPoly") ?? "",
   };
 
   const activeFilterCount = [

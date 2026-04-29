@@ -4,7 +4,8 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { listingDetailHref } from "@/lib/listing-urls";
-import type { MapSearchCircle } from "@/components/listings-map";
+import type { MapPolygonVertex } from "@/lib/map-polygon-query";
+import { encodeMapPolygonQuery, MAP_POLYGON_QUERY_KEY } from "@/lib/map-polygon-query";
 import type { UnifiedListing } from "@/lib/listings-queries";
 
 const ListingsMap = dynamic(() => import("@/components/listings-map"), {
@@ -25,23 +26,21 @@ const ListingsMap = dynamic(() => import("@/components/listings-map"), {
 export function ListingsMapView({
   listings,
   baseParams,
-  appliedCircle,
+  appliedPolygon,
   fallbackCenter,
 }: {
   listings: UnifiedListing[];
   baseParams: Record<string, string>;
-  appliedCircle?: MapSearchCircle | null;
+  appliedPolygon?: ReadonlyArray<MapPolygonVertex> | null;
   fallbackCenter: { lat: number; lng: number };
 }) {
   const router = useRouter();
   const [drawActive, setDrawActive] = useState(false);
 
-  const applyCircle = useCallback(
-    (lat: number, lng: number, radiusM: number) => {
+  const applyPolygon = useCallback(
+    (ring: MapPolygonVertex[]) => {
       const p = new URLSearchParams(baseParams);
-      p.set("mapLat", String(lat));
-      p.set("mapLng", String(lng));
-      p.set("mapRadiusM", String(Math.round(radiusM)));
+      p.set(MAP_POLYGON_QUERY_KEY, encodeMapPolygonQuery(ring));
       p.delete("page");
       p.set("view", "map");
       setDrawActive(false);
@@ -50,11 +49,9 @@ export function ListingsMapView({
     [baseParams, router],
   );
 
-  const clearCircle = useCallback(() => {
+  const clearPolygon = useCallback(() => {
     const p = new URLSearchParams(baseParams);
-    p.delete("mapLat");
-    p.delete("mapLng");
-    p.delete("mapRadiusM");
+    p.delete(MAP_POLYGON_QUERY_KEY);
     p.delete("page");
     p.set("view", "map");
     setDrawActive(false);
@@ -83,7 +80,8 @@ export function ListingsMapView({
       {missingPins && (
         <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           These listings don&apos;t have map coordinates yet, so pins are hidden. The map is centered on your
-          search — use <strong className="text-foreground">Draw search area</strong> to find homes inside a circle.
+          search — use <strong className="text-foreground">Draw search area</strong> to outline a region; only
+          listings with latitude and longitude can match.
         </p>
       )}
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -105,10 +103,10 @@ export function ListingsMapView({
           </svg>
           {drawActive ? "Cancel drawing" : "Draw search area"}
         </button>
-        {appliedCircle && (
+        {appliedPolygon && appliedPolygon.length >= 3 && (
           <button
             type="button"
-            onClick={clearCircle}
+            onClick={clearPolygon}
             className="inline-flex min-h-[40px] items-center rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/30"
           >
             Clear drawn area
@@ -116,8 +114,8 @@ export function ListingsMapView({
         )}
         {drawActive && (
           <p className="w-full text-sm text-muted-foreground sm:w-auto">
-            Press where one side of the area should be, drag to the opposite side (like pulling a diameter), then
-            release to search homes inside that circle.
+            Hold the mouse button and trace a closed shape (like a crayon). Release to search inside the outline.
+            Draw at least a small loop so the area is recognizable.
           </p>
         )}
       </div>
@@ -128,9 +126,9 @@ export function ListingsMapView({
         <ListingsMap
           pins={pins}
           fallbackCenter={fallbackCenter}
-          appliedCircle={appliedCircle ?? null}
+          appliedPolygon={appliedPolygon ?? null}
           drawActive={drawActive}
-          onApplyCircle={applyCircle}
+          onApplyPolygon={applyPolygon}
         />
       </div>
     </div>

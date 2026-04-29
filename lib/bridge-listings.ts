@@ -10,7 +10,7 @@ import {
   type BridgeODataValueResponse,
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
-import { haversineDistanceMeters } from "@/lib/geo";
+import { pointInPolygon } from "@/lib/geo";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import type { ListingFilters, PaginatedResult, UnifiedListing } from "@/lib/listings-queries";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
@@ -270,14 +270,16 @@ function buildFilter(filters: ListingFilters): string {
     }
   }
 
-  const { mapLat, mapLng, mapRadiusM } = filters;
-  if (mapLat != null && mapLng != null && mapRadiusM != null && mapRadiusM > 0) {
-    const latRad = (mapLat * Math.PI) / 180;
-    const latDelta = mapRadiusM / 111_320;
-    const cosLat = Math.cos(latRad);
-    const lngDelta = cosLat > 0.01 ? mapRadiusM / (111_320 * cosLat) : 180;
-    parts.push(`Latitude ge ${mapLat - latDelta} and Latitude le ${mapLat + latDelta}`);
-    parts.push(`Longitude ge ${mapLng - lngDelta} and Longitude le ${mapLng + lngDelta}`);
+  const poly = filters.mapPolygon;
+  if (poly && poly.length >= 3) {
+    const lats = poly.map((p) => p.lat);
+    const lngs = poly.map((p) => p.lng);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    parts.push(`Latitude ge ${minLat} and Latitude le ${maxLat}`);
+    parts.push(`Longitude ge ${minLng} and Longitude le ${maxLng}`);
   }
 
   return parts.join(" and ");
@@ -298,27 +300,26 @@ function orderByClause(sort: ListingFilters["sort"]): string {
 }
 
 function gridSelectForFilters(filters: ListingFilters): string {
-  const wantsCoords =
-    filters.mapLat != null && filters.mapLng != null && filters.mapRadiusM != null && filters.mapRadiusM > 0;
+  const wantsCoords = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
   const raw = wantsCoords ? `${SELECT_GRID},Latitude,Longitude` : SELECT_GRID;
   return sanitizeBridgePropertySelect(raw);
 }
 
-const MAP_CIRCLE_FETCH_CAP = 2_000;
+const MAP_POLYGON_FETCH_CAP = 2_000;
 
-function filterUnifiedInCircle(filters: ListingFilters, rows: UnifiedListing[]): UnifiedListing[] {
-  const { mapLat, mapLng, mapRadiusM } = filters;
-  if (mapLat == null || mapLng == null || mapRadiusM == null || mapRadiusM <= 0) return rows;
+function filterUnifiedInPolygon(filters: ListingFilters, rows: UnifiedListing[]): UnifiedListing[] {
+  const poly = filters.mapPolygon;
+  if (!poly || poly.length < 3) return rows;
   return rows.filter(
     (u) =>
       u.latitude != null &&
       u.longitude != null &&
-      haversineDistanceMeters(u.latitude, u.longitude, mapLat, mapLng) <= mapRadiusM,
+      pointInPolygon(u.latitude, u.longitude, poly),
   );
 }
 
-/** Map circle: fetch a capped window in the bbox, strict haversine filter, then paginate in memory. */
-async function bridgeSearchWithMapCircle(
+/** Map polygon: fetch a capped bbox window, strict point-in-polygon, then paginate in memory. */
+async function bridgeSearchWithMapPolygon(
   cfg: BridgeODataConfig,
   filters: ListingFilters,
 ): Promise<PaginatedResult> {
@@ -326,20 +327,20 @@ async function bridgeSearchWithMapCircle(
   const perPage = Math.min(200, Math.max(1, filters.perPage ?? 24));
   const skip = (page - 1) * perPage;
 
-  const circleQuery: Record<string, string> = {
+  const polyQuery: Record<string, string> = {
     $filter: buildFilter(filters),
     $select: gridSelectForFilters(filters),
-    $top: String(MAP_CIRCLE_FETCH_CAP),
+    $top: String(MAP_POLYGON_FETCH_CAP),
     $skip: "0",
     $orderby: orderByClause(filters.sort),
   };
 
   try {
     const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
-      ...circleQuery,
+      ...polyQuery,
       $count: "true",
     });
-    const unified = filterUnifiedInCircle(
+    const unified = filterUnifiedInPolygon(
       filters,
       (data.value ?? []).map((row) => rowToUnified(row)),
     );
@@ -348,10 +349,10 @@ async function bridgeSearchWithMapCircle(
     const listings = unified.slice(skip, skip + perPage);
     return { listings, total, page, perPage, totalPages };
   } catch (e1) {
-    console.warn("bridgeSearchWithMapCircle: $count failed, retrying without $count", e1);
+    console.warn("bridgeSearchWithMapPolygon: $count failed, retrying without $count", e1);
     try {
-      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, circleQuery);
-      const unified = filterUnifiedInCircle(
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, polyQuery);
+      const unified = filterUnifiedInPolygon(
         filters,
         (data.value ?? []).map((row) => rowToUnified(row)),
       );
@@ -361,7 +362,7 @@ async function bridgeSearchWithMapCircle(
       return { listings, total, page, perPage, totalPages };
     } catch (e2) {
       const msg = e2 instanceof Error ? e2.message : String(e2);
-      console.error("bridgeSearchWithMapCircle", msg, e2);
+      console.error("bridgeSearchWithMapPolygon", msg, e2);
       return { listings: [], total: 0, page, perPage, totalPages: 0 };
     }
   }
@@ -373,14 +374,10 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
     return { listings: [], total: 0, page: 1, perPage: 24, totalPages: 0 };
   }
 
-  const hasMapCircle =
-    filters.mapLat != null &&
-    filters.mapLng != null &&
-    filters.mapRadiusM != null &&
-    filters.mapRadiusM > 0;
+  const hasMapPolygon = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
 
-  if (hasMapCircle) {
-    return bridgeSearchWithMapCircle(cfg, filters);
+  if (hasMapPolygon) {
+    return bridgeSearchWithMapPolygon(cfg, filters);
   }
 
   const page = Math.max(1, filters.page ?? 1);

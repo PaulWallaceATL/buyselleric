@@ -1,5 +1,6 @@
 import { bridgeGetMlsListingById, bridgeSearchWithFilters, isBridgeListingsEnabled } from "@/lib/bridge-listings";
-import { haversineDistanceMeters } from "@/lib/geo";
+import { pointInPolygon } from "@/lib/geo";
+import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
@@ -37,10 +38,8 @@ export interface ListingFilters {
   sort?: "price_asc" | "price_desc" | "newest" | "sqft_desc" | undefined;
   page?: number | undefined;
   perPage?: number | undefined;
-  /** Map draw: center + radius (meters) to filter listings inside the circle. */
-  mapLat?: number | undefined;
-  mapLng?: number | undefined;
-  mapRadiusM?: number | undefined;
+  /** Map draw: closed or open ring (≥3 vertices); listings must fall inside polygon. */
+  mapPolygon?: ReadonlyArray<MapPolygonVertex> | undefined;
 }
 
 export interface PaginatedResult {
@@ -141,14 +140,11 @@ export async function searchWithFilters(filters: ListingFilters): Promise<Pagina
   const mls = ((mlsResult.data ?? []) as MlsListingRow[]).map(mlsToUnified);
   allListings.push(...mls);
 
-  const { mapLat, mapLng, mapRadiusM } = filters;
-  if (mapLat != null && mapLng != null && mapRadiusM != null && mapRadiusM > 0) {
-    const r = mapRadiusM;
-    const lat = mapLat;
-    const lng = mapLng;
+  const poly = filters.mapPolygon;
+  if (poly && poly.length >= 3) {
     const filtered = allListings.filter((l) => {
       if (l.latitude == null || l.longitude == null) return false;
-      return haversineDistanceMeters(l.latitude, l.longitude, lat, lng) <= r;
+      return pointInPolygon(l.latitude, l.longitude, poly);
     });
     allListings.length = 0;
     allListings.push(...filtered);
