@@ -266,7 +266,10 @@ function buildFilter(filters: ListingFilters): string {
     const cityState = parseCityStateSearchQuery(q);
     if (cityState) {
       const city = escapeODataString(cityState.city.toLowerCase());
-      parts.push(`contains(tolower(City), '${city}')`);
+      // Many feeds leave City blank but repeat locality in UnparsedAddress — match both like the generic branch.
+      parts.push(
+        `(contains(tolower(City), '${city}') or contains(tolower(UnparsedAddress), '${city}'))`,
+      );
       parts.push(stateOrProvinceODataClause(cityState.state));
     } else {
       const t = escapeODataString(q.toLowerCase());
@@ -339,7 +342,7 @@ const BRIDGE_PROPERTY_PAGE_SIZE = Math.min(
  */
 const MAP_POLYGON_MAX_ROWS_PRIMARY = Math.min(
   2_000,
-  Math.max(200, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS?.trim() ?? "600", 10) || 600),
+  Math.max(200, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS?.trim() ?? "1600", 10) || 1600),
 );
 
 function omitMapPolygon(filters: ListingFilters): ListingFilters {
@@ -457,8 +460,10 @@ async function bridgeSearchWithMapPolygon(
     );
     rows = r.rows;
   } catch (e1) {
-    console.warn("bridgeSearchWithMapPolygon: OData request failed", e1);
-    return { listings: [], total: 0, page, perPage, totalPages: 0 };
+    // Some IDX feeds reject Latitude/Longitude in $filter (or return 400 for other reasons).
+    // Do not return yet — widened search without the map bbox still respects q + filters + in-memory polygon.
+    console.warn("bridgeSearchWithMapPolygon: primary OData failed; trying widened search without map bbox", e1);
+    rows = [];
   }
 
   let unified = rows.map((row) => rowToUnified(row));

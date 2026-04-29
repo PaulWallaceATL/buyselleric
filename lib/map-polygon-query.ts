@@ -21,6 +21,14 @@ export function encodeMapPolygonQuery(ring: ReadonlyArray<MapPolygonVertex>): st
   }
 }
 
+/** If a pair was stored lng,lat (common mistake), swap for continental US–style coordinates. */
+function normalizeDecodedLatLngPair(a: number, b: number): { lat: number; lng: number } {
+  const looksLikeLngLat =
+    a < -55 && a > -130 && b > 22 && b < 50 && !(b < -55 && b > -130 && a > 22 && a < 50);
+  if (looksLikeLngLat) return { lat: b, lng: a };
+  return { lat: a, lng: b };
+}
+
 export function decodeMapPolygonQuery(val: string | string[] | undefined): MapPolygonVertex[] | undefined {
   if (typeof val !== "string" || val.length < 5 || val.length > MAX_ENCODED_LEN) return undefined;
   const parts = val.split("|").map((s) => s.trim()).filter(Boolean);
@@ -32,8 +40,9 @@ export function decodeMapPolygonQuery(val: string | string[] | undefined): MapPo
     const b = bits[1];
     if (a === undefined || b === undefined) return undefined;
     if (!Number.isFinite(a) || !Number.isFinite(b)) return undefined;
-    if (a < -90 || a > 90 || b < -180 || b > 180) return undefined;
-    ring.push({ lat: a, lng: b });
+    const { lat, lng } = normalizeDecodedLatLngPair(a, b);
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return undefined;
+    ring.push({ lat, lng });
   }
   if (ring.length < 3) return undefined;
   return ring;
