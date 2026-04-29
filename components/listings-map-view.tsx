@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { startTransition, useCallback, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { listingDetailHref } from "@/lib/listing-urls";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { encodeMapPolygonQuery, MAP_POLYGON_QUERY_KEY } from "@/lib/map-polygon-query";
@@ -38,6 +38,24 @@ export function ListingsMapView({
 }) {
   const router = useRouter();
   const [drawActive, setDrawActive] = useState(false);
+  const [drawHint, setDrawHint] = useState<string | null>(null);
+  const drawHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashDrawHint = useCallback((msg: string) => {
+    if (drawHintTimer.current) clearTimeout(drawHintTimer.current);
+    setDrawHint(msg);
+    drawHintTimer.current = setTimeout(() => {
+      setDrawHint(null);
+      drawHintTimer.current = null;
+    }, 6000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (drawHintTimer.current) clearTimeout(drawHintTimer.current);
+    },
+    [],
+  );
 
   const applyPolygon = useCallback(
     (ring: MapPolygonVertex[]) => {
@@ -45,14 +63,20 @@ export function ListingsMapView({
       p.set(MAP_POLYGON_QUERY_KEY, encodeMapPolygonQuery(ring));
       p.delete("page");
       p.set("view", "map");
-      setDrawActive(false);
       const href = `/listings?${p.toString()}`;
       startTransition(() => {
         router.push(href);
       });
+      queueMicrotask(() => setDrawActive(false));
     },
     [baseParams, router],
   );
+
+  const onStrokeRejected = useCallback(() => {
+    flashDrawHint(
+      "That outline was too small to search. Hold the mouse button and draw a slightly bigger closed loop, then release.",
+    );
+  }, [flashDrawHint]);
 
   const clearPolygon = useCallback(() => {
     const p = new URLSearchParams(baseParams);
@@ -137,7 +161,12 @@ export function ListingsMapView({
         {drawActive && (
           <p className="w-full text-sm text-muted-foreground sm:w-auto">
             Hold the mouse button and trace a closed shape (like a crayon). Release to search inside the outline.
-            Draw at least a small loop so the area is recognizable.
+            Draw a loop big enough to cover a neighborhood (very tiny scribbles are ignored).
+          </p>
+        )}
+        {drawHint && (
+          <p className="w-full text-sm text-amber-700 dark:text-amber-400/90" role="status">
+            {drawHint}
           </p>
         )}
       </div>
@@ -151,6 +180,7 @@ export function ListingsMapView({
           appliedPolygon={appliedPolygon ?? null}
           drawActive={drawActive}
           onApplyPolygon={applyPolygon}
+          onStrokeRejected={onStrokeRejected}
         />
       </div>
     </div>

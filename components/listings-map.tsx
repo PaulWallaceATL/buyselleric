@@ -18,9 +18,9 @@ const icon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-const MIN_SAMPLE_M = 5;
-/** Short scribbles were rejected silently (preview cleared, no navigation). */
-const MIN_STROKE_M = 22;
+const MIN_SAMPLE_M = 3;
+/** Short scribbles were rejected silently (preview cleared, no navigation). Keep low for city-scale maps. */
+const MIN_STROKE_M = 6;
 const MIN_VERTICES = 3;
 
 export type { MapPolygonVertex };
@@ -61,9 +61,11 @@ function screenEventToLatLng(map: L.Map, e: MouseEvent): L.LatLng {
 function MapFreehandDrawer({
   active,
   onComplete,
+  onStrokeRejected,
 }: {
   active: boolean;
   onComplete: (ring: MapPolygonVertex[]) => void;
+  onStrokeRejected?: (() => void) | undefined;
 }) {
   const map = useMap();
   const previewRef = useRef<L.Polyline | null>(null);
@@ -119,15 +121,27 @@ function MapFreehandDrawer({
       draggingRef.current = false;
       map.dragging.enable();
       const raw = ringRef.current;
+      ringRef.current = [];
+
+      const tooShort = raw.length < MIN_VERTICES || strokeLengthM(map, raw) < MIN_STROKE_M;
+
       if (previewRef.current) {
         map.removeLayer(previewRef.current);
         previewRef.current = null;
       }
-      ringRef.current = [];
 
-      if (raw.length < MIN_VERTICES || strokeLengthM(map, raw) < MIN_STROKE_M) return;
+      if (tooShort) {
+        onStrokeRejected?.();
+        return;
+      }
 
-      const out: MapPolygonVertex[] = raw.map((p) => ({ lat: p.lat, lng: p.lng }));
+      const out: MapPolygonVertex[] = raw
+        .map((p) => ({ lat: p.lat, lng: p.lng }))
+        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+      if (out.length < MIN_VERTICES) {
+        onStrokeRejected?.();
+        return;
+      }
       const first = out[0]!;
       const last = out[out.length - 1]!;
       if (last.lat !== first.lat || last.lng !== first.lng) out.push({ ...first });
@@ -151,7 +165,7 @@ function MapFreehandDrawer({
       map.dragging.enable();
       container.classList.remove("cursor-crosshair");
     };
-  }, [active, map, onComplete]);
+  }, [active, map, onComplete, onStrokeRejected]);
 
   return null;
 }
@@ -172,12 +186,14 @@ export default function ListingsMap({
   appliedPolygon,
   drawActive,
   onApplyPolygon,
+  onStrokeRejected,
 }: {
   pins: MapPin[];
   fallbackCenter: { lat: number; lng: number };
   appliedPolygon?: ReadonlyArray<MapPolygonVertex> | null;
   drawActive: boolean;
   onApplyPolygon: (ring: MapPolygonVertex[]) => void;
+  onStrokeRejected?: (() => void) | undefined;
 }) {
   const avgLat = pins.length > 0 ? pins.reduce((s, p) => s + p.lat, 0) / pins.length : fallbackCenter.lat;
   const avgLng = pins.length > 0 ? pins.reduce((s, p) => s + p.lng, 0) / pins.length : fallbackCenter.lng;
@@ -224,7 +240,11 @@ export default function ListingsMap({
           <FitAppliedPolygon positions={polyPositions} />
         </>
       )}
-      <MapFreehandDrawer active={drawActive} onComplete={onComplete} />
+      <MapFreehandDrawer
+        active={drawActive}
+        onComplete={onComplete}
+        onStrokeRejected={onStrokeRejected}
+      />
       {pins.map((pin) => (
         <Marker key={pin.id} position={[pin.lat, pin.lng]} icon={icon}>
           <Popup>

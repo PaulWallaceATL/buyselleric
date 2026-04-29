@@ -4,7 +4,8 @@ export const MAP_POLYGON_QUERY_KEY = "mapPoly";
 export type MapPolygonVertex = { lat: number; lng: number };
 
 const MAX_VERTICES = 40;
-const MAX_ENCODED_LEN = 2000;
+/** Keep in sync with decode — server rejects longer strings so the outline never “vanishes” after navigation. */
+const MAX_ENCODED_LEN = 3500;
 
 function roundCoord(n: number): number {
   return Math.round(n * 10_000) / 10_000;
@@ -16,8 +17,18 @@ export function encodeMapPolygonQuery(ring: ReadonlyArray<MapPolygonVertex>): st
   for (;;) {
     const simplified = simplifyRingForQuery(ring, maxPts);
     const encoded = simplified.map((p) => `${roundCoord(p.lat)},${roundCoord(p.lng)}`).join("|");
-    if (encoded.length <= MAX_ENCODED_LEN || maxPts <= 4) return encoded;
-    maxPts = Math.max(4, Math.floor(maxPts * 0.75));
+    if (encoded.length <= MAX_ENCODED_LEN) return encoded;
+    if (maxPts <= 3) {
+      // Last resort: drop vertices until the query fits (must never return oversized — decode would fail).
+      for (let m = simplified.length; m >= 3; m--) {
+        const tight = simplifyRingForQuery(ring, m);
+        const enc = tight.map((p) => `${roundCoord(p.lat)},${roundCoord(p.lng)}`).join("|");
+        if (enc.length <= MAX_ENCODED_LEN) return enc;
+      }
+      const tri = simplifyRingForQuery(ring, 3);
+      return tri.map((p) => `${roundCoord(p.lat)},${roundCoord(p.lng)}`).join("|");
+    }
+    maxPts = Math.max(3, Math.floor(maxPts * 0.75));
   }
 }
 
