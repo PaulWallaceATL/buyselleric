@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useOverlay } from "@/lib/overlay-context";
 import { siteConfig } from "@/lib/config";
 
@@ -11,7 +12,7 @@ const SCROLL_SHOW_TOP_THRESHOLD = 48;
 const SCROLL_DIRECTION_DELTA = 8;
 
 const sections = [
-  { id: "hero", label: "Search" },
+  { id: "hero", label: "Home" },
   { id: "featured-listings", label: "Search" },
   { id: "services", label: "Services" },
   { id: "about", label: "About" },
@@ -20,6 +21,7 @@ const sections = [
 ];
 
 const menuItems = [
+  { label: "Home", href: "/" },
   { label: "Search", href: "/listings" },
   { label: "Sell", href: "/sell" },
   { label: "Blog", href: "/blog" },
@@ -30,7 +32,8 @@ const menuItems = [
 ];
 
 export function Header() {
-  const [activeSection, setActiveSection] = useState("Search");
+  const pathname = usePathname();
+  const [activeSection, setActiveSection] = useState("Home");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hideOverFooter, setHideOverFooter] = useState(false);
@@ -75,7 +78,12 @@ export function Header() {
         }
       }
       if (sections[0]) {
-        setActiveSection(sections[0].label);
+        const path = window.location.pathname;
+        if (path === "/listings" || path.startsWith("/listings/")) {
+          setActiveSection("Search");
+        } else {
+          setActiveSection(sections[0].label);
+        }
       }
     };
 
@@ -83,6 +91,32 @@ export function Header() {
     handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  /** Homepage scroll owns “Home” vs “Search”; other routes set the pill from the path. */
+  useEffect(() => {
+    if (!pathname) return;
+    if (pathname.startsWith("/listings")) {
+      setActiveSection("Search");
+      return;
+    }
+    if (pathname === "/sell") {
+      setActiveSection("Sell");
+      return;
+    }
+    if (pathname.startsWith("/blog")) {
+      setActiveSection("Blog");
+      return;
+    }
+    if (pathname.startsWith("/services/")) {
+      setActiveSection("Services");
+      return;
+    }
+    if (pathname === "/") {
+      window.requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+    }
+  }, [pathname]);
 
   useEffect(() => {
     const footer = document.getElementById("contact");
