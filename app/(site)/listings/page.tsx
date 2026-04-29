@@ -7,6 +7,7 @@ import { ListingsPagination } from "@/components/listings-pagination";
 import { ListingsSearchBar } from "@/components/listings-search-bar";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
+import { mapFallbackCenterFromSearchQ } from "@/lib/listing-query-text";
 import { searchWithFilters, type ListingFilters } from "@/lib/listings-queries";
 import { eyebrow, innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
@@ -103,6 +104,8 @@ export default async function ListingsPage({
       ? { lat: mapLat, lng: mapLng, radiusM: mapRadiusM }
       : null;
 
+  const mapFallbackCenter = mapFallbackCenterFromSearchQ(filters.q);
+
   return (
     <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <div className={siteContainer}>
@@ -132,7 +135,12 @@ export default async function ListingsPage({
           <EmptyState hasFilters={hasFilters} query={filters.q} />
         ) : view === "map" ? (
           <div className="mt-8">
-            <ListingsMapView listings={listings} baseParams={baseParams} appliedCircle={appliedMapCircle} />
+            <ListingsMapView
+              listings={listings}
+              baseParams={baseParams}
+              appliedCircle={appliedMapCircle}
+              fallbackCenter={mapFallbackCenter}
+            />
             <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {listings.map((l) => (
                 <UnifiedListingCard key={l.id} listing={l} />

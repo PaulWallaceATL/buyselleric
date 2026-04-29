@@ -26,10 +26,12 @@ export function ListingsMapView({
   listings,
   baseParams,
   appliedCircle,
+  fallbackCenter,
 }: {
   listings: UnifiedListing[];
   baseParams: Record<string, string>;
   appliedCircle?: MapSearchCircle | null;
+  fallbackCenter: { lat: number; lng: number };
 }) {
   const router = useRouter();
   const [drawActive, setDrawActive] = useState(false);
@@ -74,37 +76,16 @@ export function ListingsMapView({
       bathrooms: l.bathrooms,
     }));
 
-  if (pins.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center rounded-2xl border border-dashed border-border bg-muted/10 p-10 text-center sm:rounded-3xl"
-        style={{ height: "min(50vh, 400px)" }}
-      >
-        <div>
-          <svg
-            className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-            />
-          </svg>
-          <p className="font-medium text-foreground">Map view coming soon</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Coordinates will be available once the MLS integration is connected.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const missingPins = listings.length > 0 && pins.length === 0;
 
   return (
     <div>
+      {missingPins && (
+        <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          These listings don&apos;t have map coordinates yet, so pins are hidden. The map is centered on your
+          search — use <strong className="text-foreground">Draw search area</strong> to find homes inside a circle.
+        </p>
+      )}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -145,6 +126,7 @@ export function ListingsMapView({
       >
         <ListingsMap
           pins={pins}
+          fallbackCenter={fallbackCenter}
           appliedCircle={appliedCircle ?? null}
           drawActive={drawActive}
           onApplyCircle={applyCircle}

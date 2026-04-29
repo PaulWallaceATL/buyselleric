@@ -136,19 +136,20 @@ function MapCircleDrawer({
 
 export default function ListingsMap({
   pins,
+  fallbackCenter,
   appliedCircle,
   drawActive,
   onApplyCircle,
 }: {
   pins: MapPin[];
+  /** Used when no pins have coordinates so the basemap still loads. */
+  fallbackCenter: { lat: number; lng: number };
   appliedCircle?: MapSearchCircle | null;
   drawActive: boolean;
   onApplyCircle: (lat: number, lng: number, radiusM: number) => void;
 }) {
-  if (pins.length === 0) return null;
-
-  const avgLat = pins.reduce((s, p) => s + p.lat, 0) / pins.length;
-  const avgLng = pins.reduce((s, p) => s + p.lng, 0) / pins.length;
+  const avgLat = pins.length > 0 ? pins.reduce((s, p) => s + p.lat, 0) / pins.length : fallbackCenter.lat;
+  const avgLng = pins.length > 0 ? pins.reduce((s, p) => s + p.lng, 0) / pins.length : fallbackCenter.lng;
 
   const center: [number, number] = appliedCircle
     ? [appliedCircle.lat, appliedCircle.lng]
@@ -161,8 +162,10 @@ export default function ListingsMap({
     [onApplyCircle],
   );
 
+  const zoom = appliedCircle ? 12 : pins.length > 0 ? 10 : 9;
+
   return (
-    <MapContainer center={center} zoom={appliedCircle ? 12 : 10} className="h-full w-full" scrollWheelZoom>
+    <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
