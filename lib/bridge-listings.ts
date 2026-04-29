@@ -10,6 +10,7 @@ import {
   type BridgeODataValueResponse,
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
+import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
 import { gaZipCentroid, normalizeUsZip5 } from "@/lib/ga-zip-centroids";
 import { pointInPolygon } from "@/lib/geo";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
@@ -395,6 +396,17 @@ async function enrichListingsPageWithLatLngFromBridge(
   }
 }
 
+/** Bridge keyed lat/lng when the MLS allows it, then Photon address geocode for remaining rows. */
+async function enrichListingsPageForMapPins(
+  cfg: BridgeODataConfig,
+  listings: UnifiedListing[],
+  polygon?: ReadonlyArray<MapPolygonVertex> | undefined,
+): Promise<UnifiedListing[]> {
+  let out = await enrichListingsPageWithLatLngFromBridge(cfg, listings);
+  out = await enrichListingsWithPhotonGeocode(out, { polygon });
+  return out;
+}
+
 /** GAMLS / many Bridge IDX feeds reject `$top` above 200 — page with `$skip` instead. */
 const BRIDGE_PROPERTY_PAGE_SIZE = Math.min(
   200,
@@ -582,7 +594,7 @@ async function bridgeSearchWithMapPolygon(
   const total = unified.length;
   const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
   let listings = unified.slice(skip, skip + perPage);
-  listings = await enrichListingsPageWithLatLngFromBridge(cfg, listings);
+  listings = await enrichListingsPageForMapPins(cfg, listings, poly);
   return {
     listings,
     total,
@@ -633,7 +645,8 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
       $count: "true",
     });
     const rows = withCount.value ?? [];
-    const listings = rows.map((row) => rowToUnified(row));
+    let listings = rows.map((row) => rowToUnified(row));
+    listings = await enrichListingsPageForMapPins(cfg, listings, undefined);
     const total = totalFromResponse(withCount, rows.length);
     const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
     return {
@@ -648,7 +661,8 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
     try {
       const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, baseQuery);
       const rows = data.value ?? [];
-      const listings = rows.map((row) => rowToUnified(row));
+      let listings = rows.map((row) => rowToUnified(row));
+      listings = await enrichListingsPageForMapPins(cfg, listings, undefined);
       const total = totalFromResponse(data, rows.length);
       const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
       return {

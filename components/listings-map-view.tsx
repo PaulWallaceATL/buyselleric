@@ -144,8 +144,9 @@ export function ListingsMapView({
       )}
       {missingPins && !hasPoly && (
         <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-          These listings don&apos;t have map coordinates yet, so pins are hidden. The map is centered on your
-          search — use <strong className="text-foreground">Draw search area</strong> to outline a region.
+          No map pins for this page yet: the MLS response often omits latitude/longitude. We try a keyed Bridge
+          lookup and address geocoding when possible. You can still use{" "}
+          <strong className="text-foreground">Draw search area</strong> to outline a region.
         </p>
       )}
       <div className="mb-3 flex flex-wrap items-center gap-2">
