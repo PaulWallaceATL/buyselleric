@@ -244,7 +244,15 @@ function listingIdFilterVariants(rawId: string, esc: string): string[] {
   return [...new Set(out)];
 }
 
-function buildFilter(filters: ListingFilters): string {
+type BuildFilterOptions = {
+  /**
+   * Map draw — pass 2: geography is the polygon; requiring "Atlanta" in City/address drops
+   * Woodstock, Canton, Marietta, etc. Keep state (and free-text / ZIP behaviour) only.
+   */
+  mapPolygonWide?: boolean | undefined;
+};
+
+function buildFilter(filters: ListingFilters, options?: BuildFilterOptions): string {
   const parts: string[] = [ACTIVE];
 
   if (filters.minPrice != null) parts.push(`ListPrice ge ${filters.minPrice}`);
@@ -264,7 +272,9 @@ function buildFilter(filters: ListingFilters): string {
   const q = filters.q?.trim();
   if (q) {
     const cityState = parseCityStateSearchQuery(q);
-    if (cityState) {
+    if (cityState && options?.mapPolygonWide) {
+      parts.push(stateOrProvinceODataClause(cityState.state));
+    } else if (cityState) {
       const city = escapeODataString(cityState.city.toLowerCase());
       // Many feeds leave City blank but repeat locality in UnparsedAddress — match both like the generic branch.
       parts.push(
@@ -345,19 +355,24 @@ const MAP_POLYGON_MAX_ROWS_PRIMARY = Math.min(
   Math.max(200, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS?.trim() ?? "1600", 10) || 1600),
 );
 
+/** Wider OData merge for map draw pass 2 — geography is the polygon, not the anchor city name. */
+const MAP_POLYGON_MAX_ROWS_WIDE = Math.min(
+  4_000,
+  Math.max(400, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS_WIDE?.trim() ?? "2400", 10) || 2400),
+);
+
 function omitMapPolygon(filters: ListingFilters): ListingFilters {
   const { mapPolygon: _drop, ...rest } = filters;
   return rest;
 }
 
 /**
- * Keep listings inside the drawn polygon: exact coords when present, else ZIP centroid vs polygon;
- * when `trustODataBboxWhenNoCoords` (narrow OData bbox pass), keep rows that matched bbox but lack ZIP/centroid.
+ * Keep listings inside the drawn polygon: exact coords when present, else ZIP centroid vs polygon.
+ * We do not keep "unknown location" rows — the MLS bbox is a rectangle, not the freehand outline.
  */
 function filterUnifiedListingsToDrawnPolygon(
   unified: UnifiedListing[],
   poly: ReadonlyArray<MapPolygonVertex> | undefined,
-  trustODataBboxWhenNoCoords: boolean,
 ): UnifiedListing[] {
   if (!poly || poly.length < 3) return unified;
   return unified.filter((u) => {
@@ -367,7 +382,7 @@ function filterUnifiedListingsToDrawnPolygon(
     const zip = normalizeUsZip5(u.postal_code);
     const c = zip ? gaZipCentroid(zip) : null;
     if (c) return pointInPolygon(c.lat, c.lng, poly);
-    return trustODataBboxWhenNoCoords;
+    return false;
   });
 }
 
@@ -468,7 +483,7 @@ async function bridgeSearchWithMapPolygon(
 
   let unified = rows.map((row) => rowToUnified(row));
   if (poly && poly.length >= 3) {
-    unified = filterUnifiedListingsToDrawnPolygon(unified, poly, true);
+    unified = filterUnifiedListingsToDrawnPolygon(unified, poly);
   }
 
   const needWide =
@@ -478,17 +493,32 @@ async function bridgeSearchWithMapPolygon(
 
   if (needWide) {
     try {
-      const wideFilter = buildFilter(omitMapPolygon(filters));
-      rows = await fetchPropertyRowsForPolygon(
-        cfg,
-        wideFilter,
-        selectNoGeo,
-        orderBy,
-        MAP_POLYGON_MAX_ROWS_PRIMARY,
-      );
+      const wideFilter = buildFilter(omitMapPolygon(filters), { mapPolygonWide: true });
+      const orderByWide = "ModificationTimestamp desc";
+      try {
+        rows = await fetchPropertyRowsForPolygon(
+          cfg,
+          wideFilter,
+          selectNoGeo,
+          orderByWide,
+          MAP_POLYGON_MAX_ROWS_WIDE,
+        );
+      } catch (eTs) {
+        console.warn(
+          "bridgeSearchWithMapPolygon: wide query $orderby ModificationTimestamp failed; retrying with list sort",
+          eTs,
+        );
+        rows = await fetchPropertyRowsForPolygon(
+          cfg,
+          wideFilter,
+          selectNoGeo,
+          orderBy,
+          MAP_POLYGON_MAX_ROWS_WIDE,
+        );
+      }
       wideFetch = true;
       unified = rows.map((row) => rowToUnified(row));
-      unified = filterUnifiedListingsToDrawnPolygon(unified, poly, false);
+      unified = filterUnifiedListingsToDrawnPolygon(unified, poly);
     } catch (e2) {
       console.warn("bridgeSearchWithMapPolygon: widened OData request failed", e2);
       return { listings: [], total: 0, page, perPage, totalPages: 0 };
