@@ -86,14 +86,7 @@ export function ServiceDetailView({ service }: { service: ServicePage }) {
           className="pointer-events-none absolute -right-32 top-20 h-96 w-96 rounded-full bg-ring/10 blur-3xl"
         />
         <div className={`${siteContainer} relative max-w-4xl`}>
-          <Link
-            href="/#services-menu"
-            className="inline-flex text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            ← All services
-          </Link>
-
-          <div className="mt-10 flex flex-col items-center gap-12 sm:gap-14">
+          <div className="flex flex-col items-center gap-12 sm:gap-14">
             <ServiceIcon3D Icon={HeroIcon} size="hero" />
             <div className="w-full text-center">
               <h1 className="mx-auto max-w-4xl text-balance font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.75rem] lg:leading-[1.12]">
