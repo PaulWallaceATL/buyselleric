@@ -127,7 +127,7 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
                   rel="noopener noreferrer"
                   className={`${ctaMortgage} lg:w-full`}
                 >
-                  Apply for financing
+                  Get pre-approved
                 </a>
               </div>
 

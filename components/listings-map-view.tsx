@@ -85,7 +85,7 @@ export function ListingsMapView({
 
   const onStrokeRejected = useCallback(() => {
     flashDrawHint(
-      "That outline was too small to search. Hold the mouse button and draw a slightly bigger closed loop, then release.",
+      "That outline was too small to search. Draw a slightly bigger closed loop with your finger or mouse, then release.",
     );
   }, [flashDrawHint]);
 

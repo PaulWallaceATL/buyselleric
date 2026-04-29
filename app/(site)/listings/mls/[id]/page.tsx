@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ListingGallery } from "@/components/listing-gallery";
 import { siteConfig } from "@/lib/config";
-import { ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
+import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
 import { buildMlsListingJsonLd } from "@/lib/jsonld-mls-listing";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
@@ -140,12 +140,20 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
           <p className="mt-2 text-base text-muted-foreground">
             Contact {siteConfig.agentName} for a private showing or more information about this property.
           </p>
-          <div className="mt-6 flex flex-row flex-wrap gap-3">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <a href={`mailto:${siteConfig.email}?subject=Inquiry about ${title}`} className={ctaPrimary}>
               Email {siteConfig.agentName}
             </a>
             <a href={`tel:${siteConfig.phoneTel}`} className={ctaSecondary}>
               Call {siteConfig.phoneDisplay}
+            </a>
+            <a
+              href={siteConfig.mortgageApplicationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={ctaMortgage}
+            >
+              Get pre-approved
             </a>
           </div>
         </div>

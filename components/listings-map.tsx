@@ -50,15 +50,34 @@ function appendIfFar(map: L.Map, ring: L.LatLng[], ll: L.LatLng) {
   if (!last || map.distance(last, ll) >= MIN_SAMPLE_M) ring.push(ll);
 }
 
-function screenEventToLatLng(map: L.Map, e: MouseEvent): L.LatLng {
+function clientPointToLatLng(map: L.Map, clientX: number, clientY: number): L.LatLng {
   const c = map.getContainer();
   const r = c.getBoundingClientRect();
-  const x = e.clientX - r.left;
-  const y = e.clientY - r.top;
+  const x = clientX - r.left;
+  const y = clientY - r.top;
   return map.containerPointToLatLng(L.point(x, y));
 }
 
-/** Freehand stroke: pointer follows like a crayon; release to apply lasso. */
+/** Prevent map pan / pinch-zoom from stealing touches while drawing (mobile + desktop). */
+function setMapGesturesEnabled(map: L.Map, enabled: boolean): void {
+  if (enabled) {
+    map.dragging.enable();
+    map.touchZoom?.enable();
+    map.doubleClickZoom?.enable();
+    map.scrollWheelZoom?.enable();
+    map.boxZoom?.enable();
+    map.keyboard?.enable();
+  } else {
+    map.dragging.disable();
+    map.touchZoom?.disable();
+    map.doubleClickZoom?.disable();
+    map.scrollWheelZoom?.disable();
+    map.boxZoom?.disable();
+    map.keyboard?.disable();
+  }
+}
+
+/** Freehand stroke: pointer/touch follows like a crayon; release to apply lasso. */
 function MapFreehandDrawer({
   active,
   onComplete,
@@ -72,6 +91,7 @@ function MapFreehandDrawer({
   const previewRef = useRef<L.Polyline | null>(null);
   const ringRef = useRef<L.LatLng[]>([]);
   const draggingRef = useRef(false);
+  const strokePointerId = useRef<number | null>(null);
 
   useEffect(() => {
     if (!active) {
@@ -81,13 +101,19 @@ function MapFreehandDrawer({
       }
       ringRef.current = [];
       draggingRef.current = false;
-      map.dragging.enable();
-      map.getContainer().classList.remove("cursor-crosshair");
+      strokePointerId.current = null;
+      setMapGesturesEnabled(map, true);
+      const el = map.getContainer();
+      el.classList.remove("cursor-crosshair");
+      el.style.touchAction = "";
       return;
     }
 
+    setMapGesturesEnabled(map, false);
+
     const container = map.getContainer();
     container.classList.add("cursor-crosshair");
+    container.style.touchAction = "none";
 
     const lineStyle = {
       color: "#6eb8c0",
@@ -95,32 +121,53 @@ function MapFreehandDrawer({
       opacity: 0.95,
     } as const;
 
-    const onDown = (e: MouseEvent) => {
-      if (e.button !== 0) return;
+    const ptrOpts: AddEventListenerOptions = { passive: false };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
       const t = e.target as HTMLElement | null;
       if (!container.contains(t)) return;
       if (t?.closest?.(".leaflet-marker-icon,.leaflet-popup")) return;
 
       e.preventDefault();
+      e.stopPropagation();
+
       draggingRef.current = true;
-      const ll = screenEventToLatLng(map, e);
+      strokePointerId.current = e.pointerId;
+      try {
+        container.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+
+      const ll = clientPointToLatLng(map, e.clientX, e.clientY);
       ringRef.current = [ll];
       if (previewRef.current) map.removeLayer(previewRef.current);
       previewRef.current = L.polyline([[ll.lat, ll.lng]], lineStyle).addTo(map);
-      map.dragging.disable();
     };
 
-    const onMove = (e: MouseEvent) => {
-      if (!draggingRef.current) return;
-      const ll = screenEventToLatLng(map, e);
+    const onPointerMove = (e: PointerEvent) => {
+      if (!draggingRef.current || strokePointerId.current !== e.pointerId) return;
+      e.preventDefault();
+      const ll = clientPointToLatLng(map, e.clientX, e.clientY);
       appendIfFar(map, ringRef.current, ll);
       previewRef.current?.setLatLngs(ringRef.current.map((p) => [p.lat, p.lng]));
     };
 
-    const finish = () => {
+    const finishStroke = (e: PointerEvent) => {
+      if (strokePointerId.current !== e.pointerId) return;
+      try {
+        if (container.hasPointerCapture?.(e.pointerId)) {
+          container.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        /* ignore */
+      }
+      strokePointerId.current = null;
+
       if (!draggingRef.current) return;
       draggingRef.current = false;
-      map.dragging.enable();
+
       const raw = ringRef.current;
       ringRef.current = [];
 
@@ -150,21 +197,25 @@ function MapFreehandDrawer({
       onComplete(out, { lat: c.lat, lng: c.lng, zoom: map.getZoom() });
     };
 
-    container.addEventListener("mousedown", onDown);
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", finish);
+    container.addEventListener("pointerdown", onPointerDown, ptrOpts);
+    container.addEventListener("pointermove", onPointerMove, ptrOpts);
+    container.addEventListener("pointerup", finishStroke, ptrOpts);
+    container.addEventListener("pointercancel", finishStroke, ptrOpts);
 
     return () => {
-      container.removeEventListener("mousedown", onDown);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", finish);
+      container.removeEventListener("pointerdown", onPointerDown, ptrOpts);
+      container.removeEventListener("pointermove", onPointerMove, ptrOpts);
+      container.removeEventListener("pointerup", finishStroke, ptrOpts);
+      container.removeEventListener("pointercancel", finishStroke, ptrOpts);
       if (previewRef.current) {
         map.removeLayer(previewRef.current);
         previewRef.current = null;
       }
       ringRef.current = [];
       draggingRef.current = false;
-      map.dragging.enable();
+      strokePointerId.current = null;
+      container.style.touchAction = "";
+      setMapGesturesEnabled(map, true);
       container.classList.remove("cursor-crosshair");
     };
   }, [active, map, onComplete, onStrokeRejected]);
