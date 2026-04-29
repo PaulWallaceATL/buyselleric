@@ -18,8 +18,9 @@ const icon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-const MIN_SAMPLE_M = 6;
-const MIN_STROKE_M = 45;
+const MIN_SAMPLE_M = 5;
+/** Short scribbles were rejected silently (preview cleared, no navigation). */
+const MIN_STROKE_M = 22;
 const MIN_VERTICES = 3;
 
 export type { MapPolygonVertex };

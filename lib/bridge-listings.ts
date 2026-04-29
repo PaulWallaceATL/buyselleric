@@ -350,9 +350,18 @@ const BRIDGE_PROPERTY_PAGE_SIZE = Math.min(
   Math.max(1, Number.parseInt(process.env.BRIDGE_ODATA_MAX_TOP?.trim() ?? "200", 10) || 200),
 );
 
-/** Max rows to merge in memory before point-in-polygon (several OData pages). */
-const MAP_POLYGON_MAX_ROWS_PRIMARY = 2_000;
-const MAP_POLYGON_MAX_ROWS_FALLBACK = 4_000;
+/**
+ * Max rows to merge in memory (each Bridge page is ≤200). Keep low to avoid Vercel serverless timeouts
+ * when the IDX needs a Lat/Lng-$select retry and multiple $skip pages.
+ */
+const MAP_POLYGON_MAX_ROWS_PRIMARY = Math.min(
+  2_000,
+  Math.max(200, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS?.trim() ?? "600", 10) || 600),
+);
+const MAP_POLYGON_MAX_ROWS_FALLBACK = Math.min(
+  4_000,
+  Math.max(400, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS_FALLBACK?.trim() ?? "1200", 10) || 1_200),
+);
 
 function applyMapPolygonResultFilter(
   filters: ListingFilters,
@@ -427,9 +436,6 @@ async function fetchMapPolygonRowsWithSelectFallback(
     return { rows, applyPip: true };
   } catch (e) {
     if (!isODataCannotSelectLatLngError(e)) throw e;
-    console.warn(
-      "bridgeSearchWithMapPolygon: IDX disallows Latitude/Longitude in $select; using OData bbox only (no lasso clip).",
-    );
     const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectNoGeo, orderBy, maxRows);
     return { rows, applyPip: false };
   }

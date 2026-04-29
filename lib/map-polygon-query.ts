@@ -4,16 +4,21 @@ export const MAP_POLYGON_QUERY_KEY = "mapPoly";
 export type MapPolygonVertex = { lat: number; lng: number };
 
 const MAX_VERTICES = 40;
-const MAX_ENCODED_LEN = 2400;
+const MAX_ENCODED_LEN = 2000;
 
 function roundCoord(n: number): number {
-  return Math.round(n * 100_000) / 100_000;
+  return Math.round(n * 10_000) / 10_000;
 }
 
 /** Serialize ring for `mapPoly` query (pipe-separated lat,lng pairs). */
 export function encodeMapPolygonQuery(ring: ReadonlyArray<MapPolygonVertex>): string {
-  const simplified = simplifyRingForQuery(ring, MAX_VERTICES);
-  return simplified.map((p) => `${roundCoord(p.lat)},${roundCoord(p.lng)}`).join("|");
+  let maxPts = MAX_VERTICES;
+  for (;;) {
+    const simplified = simplifyRingForQuery(ring, maxPts);
+    const encoded = simplified.map((p) => `${roundCoord(p.lat)},${roundCoord(p.lng)}`).join("|");
+    if (encoded.length <= MAX_ENCODED_LEN || maxPts <= 4) return encoded;
+    maxPts = Math.max(4, Math.floor(maxPts * 0.75));
+  }
 }
 
 export function decodeMapPolygonQuery(val: string | string[] | undefined): MapPolygonVertex[] | undefined {

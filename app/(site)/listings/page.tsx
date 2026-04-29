@@ -21,6 +21,9 @@ import type { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
 
+/** Map polygon search chains several Bridge OData pages; allow time on Vercel (plan limits still apply). */
+export const maxDuration = 60;
+
 export const metadata: Metadata = createMetadata({
   title: "Homes for sale",
   description: `Browse available homes with ${siteConfig.agentName}. Local expertise, clear guidance, and a smoother path to closing.`,

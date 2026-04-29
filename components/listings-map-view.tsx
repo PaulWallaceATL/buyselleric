@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { startTransition, useCallback, useState } from "react";
 import { listingDetailHref } from "@/lib/listing-urls";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { encodeMapPolygonQuery, MAP_POLYGON_QUERY_KEY } from "@/lib/map-polygon-query";
@@ -44,7 +44,10 @@ export function ListingsMapView({
       p.delete("page");
       p.set("view", "map");
       setDrawActive(false);
-      router.push(`/listings?${p.toString()}`);
+      const href = `/listings?${p.toString()}`;
+      startTransition(() => {
+        router.push(href);
+      });
     },
     [baseParams, router],
   );
@@ -55,7 +58,10 @@ export function ListingsMapView({
     p.delete("page");
     p.set("view", "map");
     setDrawActive(false);
-    router.push(`/listings?${p.toString()}`);
+    const href = `/listings?${p.toString()}`;
+    startTransition(() => {
+      router.push(href);
+    });
   }, [baseParams, router]);
 
   const pins = listings
