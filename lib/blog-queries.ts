@@ -8,6 +8,7 @@ export async function getPublishedPosts(): Promise<BlogPostRow[]> {
   const { data, error } = await supabase
     .from("blog_posts")
     .select("*")
+    .eq("is_published", true)
     .order("published_at", { ascending: false });
 
   if (error) {
@@ -25,6 +26,7 @@ export async function getPublishedPostBySlug(slug: string): Promise<BlogPostRow 
     .from("blog_posts")
     .select("*")
     .eq("slug", slug)
+    .eq("is_published", true)
     .maybeSingle();
 
   if (error) {

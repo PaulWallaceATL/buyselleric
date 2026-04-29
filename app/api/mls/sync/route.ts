@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { MlsListingData } from "@/lib/rets-client";
+import { insertPriceDropEventsForBatch } from "@/lib/mls-price-events";
 
 export const maxDuration = 300;
 
@@ -247,6 +248,8 @@ async function upsertBatch(
   const chunkSize = 500;
   for (let i = 0; i < records.length; i += chunkSize) {
     const chunk = records.slice(i, i + chunkSize);
+    await insertPriceDropEventsForBatch(client, chunk);
+
     const rows = chunk.map((r) => ({
       ...r,
       status: "active",

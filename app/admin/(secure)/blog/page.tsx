@@ -18,12 +18,20 @@ export default async function AdminBlogPage(): Promise<ReactNode> {
           <h1 className="text-2xl font-medium tracking-tight text-foreground">Blog posts</h1>
           <p className="mt-1 text-sm text-muted-foreground">Create, edit, and publish articles.</p>
         </div>
-        <Link
-          href="/admin/blog/new"
-          className="rounded-full bg-foreground px-5 py-2.5 text-sm font-medium text-background hover:opacity-90"
-        >
-          New post
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/blog/autogen"
+            className="rounded-full border border-border bg-muted/30 px-5 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50"
+          >
+            Listing blog queue
+          </Link>
+          <Link
+            href="/admin/blog/new"
+            className="rounded-full bg-foreground px-5 py-2.5 text-sm font-medium text-background hover:opacity-90"
+          >
+            New post
+          </Link>
+        </div>
       </div>
 
       {client && posts.length > 0 && (

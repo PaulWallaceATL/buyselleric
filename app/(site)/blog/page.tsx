@@ -18,9 +18,28 @@ export const metadata: Metadata = createMetadata({
 
 export default async function BlogPage(): Promise<ReactNode> {
   const posts = await getPublishedPosts();
+  const itemListJsonLd =
+    posts.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "ItemList",
+          itemListElement: posts.slice(0, 24).map((p, i) => ({
+            "@type": "ListItem",
+            position: i + 1,
+            url: `${siteConfig.url}/blog/${p.slug}`,
+            name: p.title,
+          })),
+        }
+      : null;
 
   return (
     <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
+      {itemListJsonLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+        />
+      ) : null}
       <div className={siteContainer}>
         <p className={eyebrow}>{siteConfig.brandSlug}</p>
         <h1 className={`${sectionTitle} mt-3`}>Blog</h1>
@@ -50,7 +69,7 @@ export default async function BlogPage(): Promise<ReactNode> {
                   <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
                     <BlogCoverImage
                       src={post.cover_image_url}
-                      alt=""
+                      alt={post.title}
                       className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     />
                   </div>

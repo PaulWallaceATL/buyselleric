@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
-import type { BlogPostRow, ListingRow, SellSubmissionRow } from "@/lib/types/db";
+import type { BlogPostKind, BlogPostRow, ListingRow, SellSubmissionRow } from "@/lib/types/db";
+
+const AUTOGEN_BLOG_KINDS: BlogPostKind[] = ["curated", "new_listing", "price_drop"];
 
 export function createSupabaseAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -55,4 +57,26 @@ export async function adminGetBlogPost(
   const { data, error } = await client.from("blog_posts").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return data as BlogPostRow | null;
+}
+
+/** Listing-driven drafts and posts (curated, new_listing, price_drop). */
+export async function adminListAutogenBlogPosts(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  opts?: { draftsOnly?: boolean },
+) {
+  let q = client
+    .from("blog_posts")
+    .select("*")
+    .in("post_kind", AUTOGEN_BLOG_KINDS)
+    .order("created_at", { ascending: false });
+  if (opts?.draftsOnly) {
+    q = q.eq("is_published", false);
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as BlogPostRow[];
+}
+
+export function isAutogenBlogKind(kind: string | null | undefined): kind is BlogPostKind {
+  return kind === "curated" || kind === "new_listing" || kind === "price_drop";
 }

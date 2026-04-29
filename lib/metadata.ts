@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { siteConfig } from "@/lib/config";
+import { absoluteResourceUrl, truncateMetaDescription } from "@/lib/seo";
 
 export { siteConfig };
 
@@ -79,25 +80,32 @@ export function createMetadata({
   noIndex?: boolean;
 }): Metadata {
   const url = `${siteConfig.url}${path}`;
+  const desc =
+    description != null && description !== ""
+      ? truncateMetaDescription(description)
+      : siteConfig.description;
+  const ogImageUrl = image
+    ? absoluteResourceUrl(siteConfig.url, image) ?? image
+    : absoluteResourceUrl(siteConfig.url, defaultSocialImage.url) ?? defaultSocialImage.url;
   return {
     title,
-    description,
+    description: desc,
     alternates: {
       canonical: path,
     },
     openGraph: {
       title: title ?? siteConfig.name,
-      description: description ?? siteConfig.description,
+      description: desc,
       url,
-      images: image
-        ? [{ url: image, width: 1200, height: 630, alt: title ?? siteConfig.name }]
+      images: ogImageUrl
+        ? [{ url: ogImageUrl, width: 1200, height: 630, alt: title ?? siteConfig.name }]
         : [{ ...defaultSocialImage, alt: title ?? siteConfig.name }],
     },
     twitter: {
       card: "summary_large_image",
       title: title ?? siteConfig.name,
-      description: description ?? siteConfig.description,
-      images: [image ?? defaultSocialImage.url],
+      description: desc,
+      images: [ogImageUrl],
     },
     ...(noIndex && {
       robots: {

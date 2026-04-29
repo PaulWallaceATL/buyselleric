@@ -4,9 +4,11 @@ import { ListingGallery } from "@/components/listing-gallery";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
+import { buildMlsListingJsonLd } from "@/lib/jsonld-mls-listing";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getMlsListingById } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
+import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
 import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -18,12 +20,24 @@ type Props = Readonly<{ params: Promise<{ id: string }> }>;
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const listing = await getMlsListingById(id);
-  if (!listing) return {};
+  if (!listing) {
+    return {
+      title: "Listing",
+      robots: { index: false, follow: false },
+    };
+  }
   const title = listing.title || `${listing.address_line}, ${listing.city}`;
+  const fallback = `${formatPriceUsd(listing.price_cents)} · ${listing.bedrooms} bd · ${listing.bathrooms} ba in ${listing.city}, ${listing.state}`;
+  const plain = stripHtmlLoose(listing.description || "");
+  const description = truncateMetaDescription(plain.length >= 45 ? plain : fallback);
+  const galleryUrls = filterDisplayImageUrls(listing.image_urls);
+  const firstImage = galleryUrls[0];
+
   return createMetadata({
     title,
-    description: `${formatPriceUsd(listing.price_cents)} · ${listing.bedrooms} bd · ${listing.bathrooms} ba in ${listing.city}, ${listing.state}`,
+    description,
     path: `/listings/mls/${id}`,
+    ...(firstImage ? { image: firstImage } : {}),
   });
 }
 
@@ -37,9 +51,15 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
     .filter(Boolean)
     .join(", ");
   const galleryUrls = filterDisplayImageUrls(listing.image_urls);
+  const pageUrl = `${siteConfig.url}/listings/mls/${id}`;
+  const jsonLd = buildMlsListingJsonLd(listing, pageUrl, siteConfig.url);
 
   return (
     <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className={`${siteContainer} max-w-4xl`}>
         <Link
           href="/listings"

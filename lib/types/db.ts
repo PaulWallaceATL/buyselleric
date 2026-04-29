@@ -24,6 +24,8 @@ export interface ListingRow {
   updated_at: string;
 }
 
+export type BlogPostKind = "manual" | "curated" | "new_listing" | "price_drop";
+
 export interface BlogPostRow {
   id: string;
   slug: string;
@@ -39,6 +41,8 @@ export interface BlogPostRow {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  source_mls_id: string | null;
+  post_kind: BlogPostKind;
 }
 
 export interface MlsListingRow {

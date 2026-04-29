@@ -64,8 +64,8 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
       if (data.seo_keywords?.length && keywordsRef.current) {
         keywordsRef.current.value = data.seo_keywords.join(", ");
       }
-      if (data.excerpt && metaRef.current) {
-        metaRef.current.value = data.excerpt;
+      if (metaRef.current) {
+        metaRef.current.value = (data.meta_description as string) || data.excerpt || "";
       }
 
       setMode("manual");

@@ -5,6 +5,7 @@ import { BlogViewTracker } from "@/components/blog-view-tracker";
 import { siteConfig } from "@/lib/config";
 import { defaultSocialImage } from "@/lib/metadata";
 import { getPublishedPostBySlug } from "@/lib/blog-queries";
+import { absoluteResourceUrl, truncateMetaDescription } from "@/lib/seo";
 import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -16,11 +17,21 @@ type Props = Readonly<{
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPublishedPostBySlug(slug);
-  if (!post) return {};
+  if (!post) {
+    return {
+      title: "Article",
+      robots: { index: false, follow: false },
+    };
+  }
 
-  const description = post.meta_description || post.excerpt || `Read "${post.title}" by ${post.author}`;
-  const keywords = post.seo_keywords?.length ? post.seo_keywords : undefined;
+  const rawDesc = post.meta_description?.trim() || post.excerpt || `Read "${post.title}" by ${post.author}`;
+  const description = truncateMetaDescription(rawDesc);
+  const keywords = post.seo_keywords?.length ? post.seo_keywords.slice(0, 24) : undefined;
   const url = `${siteConfig.url}/blog/${slug}`;
+  const ogFallback =
+    absoluteResourceUrl(siteConfig.url, defaultSocialImage.url) ?? `${siteConfig.url}${defaultSocialImage.url}`;
+  const ogImageUrl =
+    absoluteResourceUrl(siteConfig.url, post.cover_image_url?.trim() || null) ?? ogFallback;
 
   return {
     title: post.title,
@@ -33,16 +44,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url,
       type: "article",
       publishedTime: post.published_at ?? undefined,
+      modifiedTime: post.updated_at ?? undefined,
       authors: [post.author],
-      images: post.cover_image_url
-        ? [{ url: post.cover_image_url, width: 1200, height: 630, alt: post.title }]
+      images: ogImageUrl
+        ? [{ url: ogImageUrl, width: 1200, height: 630, alt: post.title }]
         : [{ ...defaultSocialImage, alt: post.title }],
     },
     twitter: {
       card: "summary_large_image",
       title: post.title,
       description,
-      images: [post.cover_image_url ?? defaultSocialImage.url],
+      images: [ogImageUrl],
     },
     alternates: {
       canonical: url,
@@ -55,18 +67,27 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
   const post = await getPublishedPostBySlug(slug);
   if (!post) notFound();
 
-  const jsonLd = {
+  const pageUrl = `${siteConfig.url}/blog/${slug}`;
+  const jsonLdDesc = truncateMetaDescription(post.meta_description?.trim() || post.excerpt || post.title);
+  const jsonLdImage = absoluteResourceUrl(siteConfig.url, post.cover_image_url?.trim() || null);
+
+  const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title,
-    description: post.meta_description || post.excerpt,
+    description: jsonLdDesc,
     author: { "@type": "Person", name: post.author },
-    publisher: { "@type": "Organization", name: siteConfig.name },
-    datePublished: post.published_at,
-    dateModified: post.updated_at,
-    url: `${siteConfig.url}/blog/${slug}`,
-    ...(post.cover_image_url ? { image: post.cover_image_url } : {}),
-    ...(post.seo_keywords?.length ? { keywords: post.seo_keywords.join(", ") } : {}),
+    publisher: {
+      "@type": "Organization",
+      name: siteConfig.name,
+      url: siteConfig.url,
+    },
+    url: pageUrl,
+    mainEntityOfPage: { "@type": "WebPage", "@id": pageUrl },
+    ...(post.published_at ? { datePublished: post.published_at } : {}),
+    ...(post.updated_at ? { dateModified: post.updated_at } : {}),
+    ...(jsonLdImage ? { image: jsonLdImage } : {}),
+    ...(post.seo_keywords?.length ? { keywords: post.seo_keywords.slice(0, 20).join(", ") } : {}),
   };
 
   return (
@@ -116,7 +137,7 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
           <div className="relative mt-8 aspect-[21/9] w-full overflow-hidden rounded-2xl bg-muted sm:rounded-3xl">
             <BlogCoverImage
               src={post.cover_image_url}
-              alt=""
+              alt={post.title}
               className="absolute inset-0 h-full w-full object-cover"
               priority
             />

@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/mls-photo-backfill",
       "schedule": "*/3 * * * *"
+    },
+    {
+      "path": "/api/cron/listing-blog",
+      "schedule": "15 14 * * *"
     }
   ]
 }

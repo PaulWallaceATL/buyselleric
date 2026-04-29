@@ -5,10 +5,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
 import { slugify } from "@/lib/format";
+import { truncateMetaDescription } from "@/lib/seo";
 import {
   adminGetBlogPost,
   adminListBlogPosts,
   createSupabaseAdminClient,
+  isAutogenBlogKind,
 } from "@/lib/supabase/admin";
 
 export type AdminBlogFormState = { ok: false; message: string } | null;
@@ -48,7 +50,8 @@ async function adminCreateBlogPost(
   const title = String(formData.get("title") ?? "").trim();
   let slug = String(formData.get("slug") ?? "").trim();
   const excerpt = String(formData.get("excerpt") ?? "").trim();
-  const meta_description = String(formData.get("meta_description") ?? "").trim();
+  const meta_description_raw = String(formData.get("meta_description") ?? "").trim();
+  const meta_description = truncateMetaDescription(meta_description_raw || excerpt);
   const seo_keywords_raw = String(formData.get("seo_keywords") ?? "").trim();
   const seo_keywords = seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [];
   const body = String(formData.get("body") ?? "").trim();
@@ -81,6 +84,8 @@ async function adminCreateBlogPost(
     author,
     is_published,
     published_at: is_published ? new Date().toISOString() : null,
+    source_mls_id: null,
+    post_kind: "manual",
   });
 
   if (error) {
@@ -113,7 +118,8 @@ async function adminUpdateBlogPost(
   const title = String(formData.get("title") ?? "").trim();
   let slug = String(formData.get("slug") ?? "").trim();
   const excerpt = String(formData.get("excerpt") ?? "").trim();
-  const meta_description = String(formData.get("meta_description") ?? "").trim();
+  const meta_description_raw = String(formData.get("meta_description") ?? "").trim();
+  const meta_description = truncateMetaDescription(meta_description_raw || excerpt);
   const seo_keywords_raw = String(formData.get("seo_keywords") ?? "").trim();
   const seo_keywords = seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [];
   const body = String(formData.get("body") ?? "").trim();
@@ -200,13 +206,15 @@ export async function adminDuplicateBlogPost(
     slug: finalSlug,
     title: `Copy — ${source.title}`,
     excerpt: source.excerpt,
-    meta_description: source.meta_description,
+    meta_description: truncateMetaDescription(source.meta_description || source.excerpt),
     seo_keywords: source.seo_keywords,
     body: source.body,
     cover_image_url: source.cover_image_url,
     author: source.author,
     is_published: false,
     published_at: null,
+    source_mls_id: null,
+    post_kind: "manual",
   });
 
   if (error) {
@@ -216,6 +224,86 @@ export async function adminDuplicateBlogPost(
 
   revalidatePath("/admin/blog");
   redirect("/admin/blog");
+}
+
+export async function adminApproveAutogenBlogPost(
+  _prev: AdminBlogFormState,
+  formData: FormData,
+): Promise<AdminBlogFormState> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { ok: false, message: "Missing post id." };
+
+  const client = createSupabaseAdminClient();
+  if (!client) return { ok: false, message: "Supabase admin is not configured." };
+
+  const post = await adminGetBlogPost(client, id);
+  if (!post) return { ok: false, message: "Post not found." };
+
+  if (!isAutogenBlogKind(post.post_kind)) {
+    return { ok: false, message: "This post is not an auto-generated listing article." };
+  }
+
+  if (post.is_published) {
+    return { ok: false, message: "That post is already published." };
+  }
+
+  const published_at = new Date().toISOString();
+  const { error } = await client.from("blog_posts").update({ is_published: true, published_at }).eq("id", id);
+
+  if (error) {
+    console.error("adminApproveAutogenBlogPost", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath("/blog");
+  revalidatePath(`/blog/${post.slug}`);
+  revalidatePath("/admin/blog");
+  revalidatePath("/admin/blog/autogen");
+  redirect("/admin/blog/autogen");
+}
+
+export async function adminRejectAutogenBlogPost(
+  _prev: AdminBlogFormState,
+  formData: FormData,
+): Promise<AdminBlogFormState> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { ok: false, message: "Missing post id." };
+
+  const client = createSupabaseAdminClient();
+  if (!client) return { ok: false, message: "Supabase admin is not configured." };
+
+  const post = await adminGetBlogPost(client, id);
+  if (!post) return { ok: false, message: "Post not found." };
+
+  if (!isAutogenBlogKind(post.post_kind)) {
+    return { ok: false, message: "This post is not an auto-generated listing article." };
+  }
+
+  const slug = post.slug;
+  const { error } = await client.from("blog_posts").delete().eq("id", id);
+
+  if (error) {
+    console.error("adminRejectAutogenBlogPost", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath("/blog");
+  revalidatePath(`/blog/${slug}`);
+  revalidatePath("/admin/blog");
+  revalidatePath("/admin/blog/autogen");
+  redirect("/admin/blog/autogen");
 }
 
 export async function adminDeleteBlogPost(id: string): Promise<AdminBlogFormState> {

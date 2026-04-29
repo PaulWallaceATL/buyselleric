@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { siteConfig } from "@/lib/config";
+import { truncateMetaDescription } from "@/lib/seo";
 
 let _client: OpenAI | null = null;
 
@@ -16,6 +17,8 @@ export interface GeneratedBlogPost {
   title: string;
   slug: string;
   excerpt: string;
+  /** SERP meta description; keep distinct from excerpt when possible (≤155 chars). */
+  meta_description: string;
   body: string;
   seo_keywords: string[];
 }
@@ -30,8 +33,9 @@ Your writing style:
 
 SEO requirements:
 - Title should be compelling and include target keywords naturally
-- Excerpt should be 1-2 sentences that work as a meta description (under 160 characters preferred)
-- Body in markdown with clear H2/H3 heading structure
+- Excerpt: 1-2 engaging sentences for the article card / intro (may be slightly longer than meta)
+- meta_description: dedicated SERP snippet ONLY — max 155 characters, primary keyword near the start, no trailing ellipsis unless you stay under the limit
+- Body in markdown with clear H2/H3 heading structure (one H1 in the body is OK if it matches the topic; prefer H2 for sections)
 - Naturally incorporate relevant real estate keywords throughout
 - Include a brief call-to-action mentioning ${siteConfig.agentName} near the end
 
@@ -39,7 +43,8 @@ Output format: Respond ONLY with valid JSON matching this exact schema:
 {
   "title": "string",
   "slug": "string (lowercase-kebab-case)",
-  "excerpt": "string (1-2 sentences, under 160 chars)",
+  "excerpt": "string (1-2 sentences for card/intro)",
+  "meta_description": "string (max 155 characters for Google snippet)",
   "body": "string (markdown)",
   "seo_keywords": ["array", "of", "keyword", "strings"]
 }
@@ -103,10 +108,14 @@ function parseAIResponse(text: string): GeneratedBlogPost {
     throw new Error("AI response missing required fields (title, body)");
   }
 
+  const excerpt = String(parsed.excerpt || "");
+  const metaRaw = String(parsed.meta_description || parsed.excerpt || "");
+
   return {
     title: String(parsed.title),
     slug: String(parsed.slug || ""),
-    excerpt: String(parsed.excerpt || ""),
+    excerpt,
+    meta_description: truncateMetaDescription(metaRaw),
     body: String(parsed.body),
     seo_keywords: Array.isArray(parsed.seo_keywords)
       ? parsed.seo_keywords.map(String)

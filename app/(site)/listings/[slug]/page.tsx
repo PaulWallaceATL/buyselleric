@@ -4,7 +4,9 @@ import { ListingGallery } from "@/components/listing-gallery";
 import { siteConfig } from "@/lib/config";
 import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
+import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getPublishedListingBySlug } from "@/lib/listings-queries";
+import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
 import { innerPageMainTopPadding, pageMain } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
@@ -26,13 +28,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       noIndex: true,
     });
   }
+  const plain = stripHtmlLoose(listing.description || "");
+  const summary = `${formatPriceUsd(listing.price_cents)} · ${listing.bedrooms} bd · ${listing.bathrooms} ba · ${listing.city}, ${listing.state}`;
+  const description = truncateMetaDescription(plain.length >= 40 ? plain : `${listing.title}. ${summary}`);
+  const images = filterDisplayImageUrls(listing.image_urls);
   return createMetadata({
     title: listing.title,
-    description:
-      listing.description.length > 160
-        ? `${listing.description.slice(0, 157)}…`
-        : listing.description,
+    description,
     path: `/listings/${listing.slug}`,
+    ...(images[0] ? { image: images[0] } : {}),
   });
 }
 
