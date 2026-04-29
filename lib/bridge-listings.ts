@@ -12,6 +12,7 @@ import {
 } from "@/lib/bridge-odata";
 import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
 import { gaZipCentroid, normalizeUsZip5 } from "@/lib/ga-zip-centroids";
+import { applyZipCentroidPinCoords } from "@/lib/map-pin-coords";
 import { pointInPolygon } from "@/lib/geo";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
@@ -404,6 +405,7 @@ async function enrichListingsPageForMapPins(
 ): Promise<UnifiedListing[]> {
   let out = await enrichListingsPageWithLatLngFromBridge(cfg, listings);
   out = await enrichListingsWithPhotonGeocode(out, { polygon });
+  out = applyZipCentroidPinCoords(out, polygon);
   return out;
 }
 
