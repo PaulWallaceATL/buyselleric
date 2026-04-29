@@ -145,7 +145,7 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
         ) : null}
 
         <div
-          className="prose prose-lg prose-foreground mt-10 max-w-none dark:prose-invert prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-a:text-ring prose-a:underline-offset-4 prose-p:mb-5 prose-p:mt-0 prose-p:last:mb-0 prose-ul:my-5 prose-ol:my-5 prose-li:my-1"
+          className="prose prose-lg prose-foreground mt-10 max-w-none space-y-6 dark:prose-invert prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-h2:mb-4 prose-h2:mt-10 prose-h3:mb-3 prose-h3:mt-8 prose-a:text-ring prose-a:underline-offset-4 prose-p:mb-4 prose-p:mt-0 prose-p:last:mb-0 prose-ul:my-4 prose-ol:my-4 prose-li:my-1"
           dangerouslySetInnerHTML={{ __html: renderMarkdown(post.body) }}
         />
 
@@ -159,17 +159,74 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
   );
 }
 
-function renderMarkdown(md: string): string {
-  return md
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+/** Inline emphasis / links (used after block structure is known). */
+function applyInlineMarkdown(text: string): string {
+  return text
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
-    .replace(/(<li>[\s\S]*<\/li>)/, "<ul>$1</ul>")
-    .replace(/\n{2,}/g, "</p><p>")
-    .replace(/^(?!<[hulo])(.+)$/gm, "<p>$1</p>")
-    .replace(/<p><\/p>/g, "");
+    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>');
+}
+
+/**
+ * Turn editor body into valid HTML: blank lines = new paragraphs; single newlines = &lt;br /&gt; inside one &lt;p&gt;.
+ * (The old regex inserted raw &lt;/p&gt;&lt;p&gt; then wrapped whole lines in &lt;p&gt;, producing invalid nested &lt;p&gt; and collapsed spacing in browsers.)
+ */
+function renderMarkdown(md: string): string {
+  const trimmed = md.trim();
+  if (!trimmed) return "";
+
+  const blocks = trimmed.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  const out: string[] = [];
+
+  for (const block of blocks) {
+    const nonEmpty = block.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    if (nonEmpty.length === 0) continue;
+
+    const first = nonEmpty[0]!;
+
+    const m3 = first.match(/^###\s+(.+)$/);
+    const m2 = first.match(/^##\s+(.+)$/);
+    const m1 = first.match(/^#\s+(.+)$/);
+
+    if (m3 && nonEmpty.length === 1) {
+      out.push(`<h3>${applyInlineMarkdown(m3[1]!)}</h3>`);
+      continue;
+    }
+    if (m2 && nonEmpty.length === 1) {
+      out.push(`<h2>${applyInlineMarkdown(m2[1]!)}</h2>`);
+      continue;
+    }
+    if (m1 && nonEmpty.length === 1) {
+      out.push(`<h1>${applyInlineMarkdown(m1[1]!)}</h1>`);
+      continue;
+    }
+
+    // Heading with following lines in the same block (no blank line after heading in source)
+    if (m3 && nonEmpty.length > 1) {
+      out.push(`<h3>${applyInlineMarkdown(m3[1]!)}</h3>`);
+      out.push(`<p>${nonEmpty.slice(1).map(applyInlineMarkdown).join("<br />")}</p>`);
+      continue;
+    }
+    if (m2 && nonEmpty.length > 1) {
+      out.push(`<h2>${applyInlineMarkdown(m2[1]!)}</h2>`);
+      out.push(`<p>${nonEmpty.slice(1).map(applyInlineMarkdown).join("<br />")}</p>`);
+      continue;
+    }
+    if (m1 && nonEmpty.length > 1) {
+      out.push(`<h1>${applyInlineMarkdown(m1[1]!)}</h1>`);
+      out.push(`<p>${nonEmpty.slice(1).map(applyInlineMarkdown).join("<br />")}</p>`);
+      continue;
+    }
+
+    const allBullets = nonEmpty.every((l) => l.startsWith("- "));
+    if (allBullets) {
+      const items = nonEmpty.map((l) => `<li>${applyInlineMarkdown(l.replace(/^-\s+/, ""))}</li>`).join("");
+      out.push(`<ul>${items}</ul>`);
+      continue;
+    }
+
+    out.push(`<p>${nonEmpty.map(applyInlineMarkdown).join("<br />")}</p>`);
+  }
+
+  return out.join("\n");
 }
