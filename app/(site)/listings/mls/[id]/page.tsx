@@ -7,7 +7,7 @@ import { formatPriceUsd } from "@/lib/format";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getMlsListingById } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
-import { siteContainer } from "@/lib/ui";
+import { pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -39,7 +39,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   const galleryUrls = filterDisplayImageUrls(listing.image_urls);
 
   return (
-    <main id="main-content" className="relative z-10 w-full flex-1 bg-background pb-24 pt-32 sm:pb-28 sm:pt-36 lg:pt-40">
+    <main id="main-content" className={pageMain}>
       <div className={`${siteContainer} max-w-4xl`}>
         <Link
           href="/listings"

@@ -16,9 +16,9 @@ export const eyebrow =
 export const sectionTitle =
   "text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl";
 
-/** Inner pages (<main>) — below fixed header (tall pill + menu), full-width column */
+/** Inner pages (<main>) — below fixed header; top spacing from `.inner-page-main` in globals.css */
 export const pageMain =
-  "relative z-10 w-full flex-1 bg-background px-6 pb-24 pt-52 sm:px-12 sm:pb-28 sm:pt-60 lg:px-24 lg:pt-72";
+  "inner-page-main relative z-10 w-full flex-1 bg-background px-6 pb-24 sm:px-12 sm:pb-28 lg:px-24";
 
 /** Muted body under titles */
 export const lead =

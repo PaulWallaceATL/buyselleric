@@ -60,6 +60,26 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/**
+ * Fixed header (brand pill + menu) sits above in-flow <main>. Reserve enough top
+ * padding so hero copy clears the bar, including safe-area on notched devices.
+ */
+.inner-page-main {
+  padding-top: max(11.5rem, calc(env(safe-area-inset-top, 0px) + 10rem));
+}
+
+@media (min-width: 40rem) {
+  .inner-page-main {
+    padding-top: max(13rem, calc(env(safe-area-inset-top, 0px) + 11.25rem));
+  }
+}
+
+@media (min-width: 64rem) {
+  .inner-page-main {
+    padding-top: max(15rem, calc(env(safe-area-inset-top, 0px) + 12.5rem));
+  }
+}
+
 ::selection {
   background-color: color-mix(in srgb, var(--ring) 35%, transparent);
   color: var(--foreground);
