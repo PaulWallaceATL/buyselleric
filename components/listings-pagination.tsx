@@ -39,6 +39,7 @@ export function ListingsPagination({
         {page > 1 && (
           <Link
             href={buildHref(page - 1)}
+            scroll={false}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
           >
             ← Prev
@@ -51,6 +52,7 @@ export function ListingsPagination({
             <Link
               key={p}
               href={buildHref(p)}
+              scroll={false}
               className={`inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 p === page
                   ? "bg-foreground text-background"
@@ -64,6 +66,7 @@ export function ListingsPagination({
         {page < totalPages && (
           <Link
             href={buildHref(page + 1)}
+            scroll={false}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
           >
             Next →

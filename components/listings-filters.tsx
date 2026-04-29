@@ -83,14 +83,14 @@ export function ListingsFilters() {
     for (const [k, v] of Object.entries(merged)) {
       if (v) params.set(k, v);
     }
-    router.push(`/listings?${params.toString()}`);
+    router.push(`/listings?${params.toString()}`, { scroll: false });
   }
 
   function clearFilters() {
     const params = new URLSearchParams();
     if (current.q) params.set("q", current.q);
     if (current.view !== "list") params.set("view", current.view);
-    router.push(`/listings?${params.toString()}`);
+    router.push(`/listings?${params.toString()}`, { scroll: false });
   }
 
   return (

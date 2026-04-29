@@ -56,7 +56,7 @@ export function ListingsSearchBar({
       else p.delete("q");
       p.delete("page");
       const qs = p.toString();
-      router.push(qs ? `/listings?${qs}` : "/listings");
+      router.push(qs ? `/listings?${qs}` : "/listings", { scroll: false });
     },
     [router, baseParams],
   );

@@ -76,7 +76,7 @@ export function ListingsMapView({
       p.set("view", "map");
       const href = `/listings?${p.toString()}`;
       startMapNav(() => {
-        router.push(href);
+        router.push(href, { scroll: false });
       });
       queueMicrotask(() => setDrawActive(false));
     },
@@ -102,7 +102,7 @@ export function ListingsMapView({
       /* ignore */
     }
     startMapNav(() => {
-      router.push(href);
+      router.push(href, { scroll: false });
     });
   }, [baseParams, router]);
 
