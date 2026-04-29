@@ -334,9 +334,15 @@ function gridSelectForFilters(filters: ListingFilters): string {
   return sanitizeBridgePropertySelect(raw, wantsCoords ? { allowGeoFieldsInSelect: true } : undefined);
 }
 
-const MAP_POLYGON_FETCH_CAP = 2_000;
-/** When OData bbox on Lat/Lng returns nothing or rows without coordinates, sample more rows in fallback state. */
-const MAP_POLYGON_FETCH_CAP_FALLBACK = 8_000;
+/** GAMLS / many Bridge IDX feeds reject `$top` above 200 — page with `$skip` instead. */
+const BRIDGE_PROPERTY_PAGE_SIZE = Math.min(
+  200,
+  Math.max(1, Number.parseInt(process.env.BRIDGE_ODATA_MAX_TOP?.trim() ?? "200", 10) || 200),
+);
+
+/** Max rows to merge in memory before point-in-polygon (several OData pages). */
+const MAP_POLYGON_MAX_ROWS_PRIMARY = 2_000;
+const MAP_POLYGON_MAX_ROWS_FALLBACK = 4_000;
 
 function filterUnifiedInPolygon(filters: ListingFilters, rows: UnifiedListing[]): UnifiedListing[] {
   const poly = filters.mapPolygon;
@@ -356,6 +362,37 @@ function rowsHaveAnyCoordinates(rows: Record<string, unknown>[]): boolean {
   });
 }
 
+/** Repeated OData pages with `$top` ≤ BRIDGE_PROPERTY_PAGE_SIZE until `maxRows` or no more data. */
+async function fetchPropertyRowsForPolygon(
+  cfg: BridgeODataConfig,
+  filter: string,
+  select: string,
+  orderBy: string,
+  maxRows: number,
+): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  const pageSize = BRIDGE_PROPERTY_PAGE_SIZE;
+  let odataSkip = 0;
+
+  while (out.length < maxRows) {
+    const take = Math.min(pageSize, maxRows - out.length);
+    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+      $filter: filter,
+      $select: select,
+      $top: String(take),
+      $skip: String(odataSkip),
+      $orderby: orderBy,
+    });
+    const batch = data.value ?? [];
+    out.push(...batch);
+    if (batch.length === 0) break;
+    odataSkip += batch.length;
+    if (batch.length < take) break;
+  }
+
+  return out;
+}
+
 /** Map polygon: OData bbox on Lat/Lng, then strict PIP; fall back if IDX returns empty or coord-less rows. */
 async function bridgeSearchWithMapPolygon(
   cfg: BridgeODataConfig,
@@ -367,27 +404,6 @@ async function bridgeSearchWithMapPolygon(
 
   const select = gridSelectForFilters(filters);
   const orderBy = orderByClause(filters.sort);
-
-  async function fetchPolygonPage(
-    filter: string,
-    top: number,
-    withCount: boolean,
-  ): Promise<BridgeODataValueResponse<Record<string, unknown>>> {
-    const base: Record<string, string> = {
-      $filter: filter,
-      $select: select,
-      $top: String(top),
-      $skip: "0",
-      $orderby: orderBy,
-    };
-    if (withCount) {
-      return bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
-        ...base,
-        $count: "true",
-      });
-    }
-    return bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, base);
-  }
 
   const primaryFilter = buildFilter(filters);
   const fallbackWithCoords = buildFilter(filters, {
@@ -401,12 +417,16 @@ async function bridgeSearchWithMapPolygon(
     mapPolygonFallbackRequireCoords: false,
   });
 
-  let data: BridgeODataValueResponse<Record<string, unknown>> | null = null;
   let rows: Record<string, unknown>[] = [];
 
   try {
-    data = await fetchPolygonPage(primaryFilter, MAP_POLYGON_FETCH_CAP, true);
-    rows = data.value ?? [];
+    rows = await fetchPropertyRowsForPolygon(
+      cfg,
+      primaryFilter,
+      select,
+      orderBy,
+      MAP_POLYGON_MAX_ROWS_PRIMARY,
+    );
   } catch (e1) {
     console.warn("bridgeSearchWithMapPolygon: primary OData request failed", e1);
   }
@@ -417,15 +437,13 @@ async function bridgeSearchWithMapPolygon(
 
   if (primaryUseless) {
     for (const [label, fbFilter, cap] of [
-      ["coords+state", fallbackWithCoords, MAP_POLYGON_FETCH_CAP_FALLBACK],
-      ["state-only", fallbackLoose, MAP_POLYGON_FETCH_CAP_FALLBACK],
+      ["coords+state", fallbackWithCoords, MAP_POLYGON_MAX_ROWS_FALLBACK],
+      ["state-only", fallbackLoose, MAP_POLYGON_MAX_ROWS_FALLBACK],
     ] as const) {
       try {
-        const d = await fetchPolygonPage(fbFilter, cap, false);
-        const nextRows = d.value ?? [];
+        const nextRows = await fetchPropertyRowsForPolygon(cfg, fbFilter, select, orderBy, cap);
         if (nextRows.length === 0) continue;
         if (rowsHaveAnyCoordinates(nextRows)) {
-          data = d;
           rows = nextRows;
           break;
         }
@@ -435,10 +453,15 @@ async function bridgeSearchWithMapPolygon(
     }
   }
 
-  if (data === null) {
+  if (rows.length === 0) {
     try {
-      data = await fetchPolygonPage(primaryFilter, MAP_POLYGON_FETCH_CAP, false);
-      rows = data.value ?? [];
+      rows = await fetchPropertyRowsForPolygon(
+        cfg,
+        primaryFilter,
+        select,
+        orderBy,
+        MAP_POLYGON_MAX_ROWS_PRIMARY,
+      );
     } catch (e2) {
       const msg = e2 instanceof Error ? e2.message : String(e2);
       console.error("bridgeSearchWithMapPolygon", msg, e2);
