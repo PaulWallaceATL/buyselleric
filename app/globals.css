@@ -144,3 +144,39 @@ body {
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
+
+/* Leaflet sets .leaflet-tooltip { color: #222 } — on dark theme that reads as muddy brown on some displays.
+   Scope overrides to our map so pin hover + popup always use theme tokens. */
+.listings-map-leaflet .leaflet-tooltip.map-pin-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: var(--foreground) !important;
+}
+
+.listings-map-leaflet .leaflet-tooltip.map-pin-tooltip .map-pin-tooltip__inner,
+.listings-map-leaflet .leaflet-tooltip.map-pin-tooltip .map-pin-tooltip__inner p {
+  color: var(--foreground) !important;
+}
+
+.listings-map-leaflet .leaflet-popup-content-wrapper,
+.listings-map-leaflet .leaflet-popup-tip {
+  background: var(--background) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--foreground) !important;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 18%);
+}
+
+.listings-map-leaflet .leaflet-popup-content {
+  margin: 12px 14px;
+  color: var(--foreground) !important;
+}
+
+.listings-map-leaflet .map-pin-popup__inner p {
+  color: var(--foreground) !important;
+}
+
+.listings-map-leaflet .map-pin-popup__inner .map-pin-popup-muted {
+  color: var(--muted-foreground) !important;
+}

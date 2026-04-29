@@ -289,7 +289,7 @@ export default function ListingsMap({
   const zoom = drawViewportLock?.zoom ?? (polyPositions.length >= 2 ? 12 : pins.length > 0 ? 10 : 9);
 
   return (
-    <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
+    <MapContainer center={center} zoom={zoom} className="listings-map-leaflet h-full w-full" scrollWheelZoom>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -315,8 +315,8 @@ export default function ListingsMap({
       />
       {pins.map((pin) => (
         <Marker key={pin.id} position={[pin.lat, pin.lng]} icon={icon}>
-          <Tooltip direction="top" offset={[0, -36]} opacity={1}>
-            <div className="max-w-[200px] rounded-lg border border-border bg-background px-2 py-2 text-foreground shadow-lg">
+          <Tooltip direction="top" offset={[0, -36]} opacity={1} className="map-pin-tooltip">
+            <div className="map-pin-tooltip__inner max-w-[200px] rounded-lg border border-border bg-background px-2 py-2 shadow-lg">
               {pin.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element -- remote MLS URLs; Leaflet tooltip context
                 <img
@@ -327,11 +327,11 @@ export default function ListingsMap({
                 />
               ) : null}
               <p className="text-xs font-semibold leading-snug line-clamp-2">{pin.title}</p>
-              <p className="text-sm font-bold text-foreground">{formatPriceUsd(pin.price_cents)}</p>
+              <p className="text-sm font-bold">{formatPriceUsd(pin.price_cents)}</p>
             </div>
           </Tooltip>
           <Popup>
-            <div className="min-w-[180px] text-foreground">
+            <div className="map-pin-popup__inner min-w-[180px]">
               {pin.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -343,7 +343,7 @@ export default function ListingsMap({
               ) : null}
               <p className="text-sm font-semibold">{pin.title}</p>
               <p className="text-base font-bold">{formatPriceUsd(pin.price_cents)}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="map-pin-popup-muted text-xs">
                 {pin.bedrooms} bd · {pin.bathrooms} ba · {pin.city}, {pin.state}
               </p>
               <Link
