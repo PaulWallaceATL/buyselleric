@@ -328,10 +328,20 @@ function orderByClause(sort: ListingFilters["sort"]): string {
   }
 }
 
-function gridSelectForFilters(filters: ListingFilters): string {
-  const wantsCoords = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
-  const raw = wantsCoords ? `${SELECT_GRID},Latitude,Longitude` : SELECT_GRID;
-  return sanitizeBridgePropertySelect(raw, wantsCoords ? { allowGeoFieldsInSelect: true } : undefined);
+function gridSelectForFilters(_filters: ListingFilters): string {
+  return sanitizeBridgePropertySelect(SELECT_GRID);
+}
+
+/** Map PIP needs coords in the payload; many IDX feeds reject Latitude/Longitude in `$select` (try then fall back). */
+function gridSelectForMapPolygonGeoAttempt(): string {
+  return sanitizeBridgePropertySelect(`${SELECT_GRID},Latitude,Longitude`, {
+    allowGeoFieldsInSelect: true,
+  });
+}
+
+function isODataCannotSelectLatLngError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /cannot select/i.test(msg) && (/latitude/i.test(msg) || /longitude/i.test(msg));
 }
 
 /** GAMLS / many Bridge IDX feeds reject `$top` above 200 — page with `$skip` instead. */
@@ -344,10 +354,15 @@ const BRIDGE_PROPERTY_PAGE_SIZE = Math.min(
 const MAP_POLYGON_MAX_ROWS_PRIMARY = 2_000;
 const MAP_POLYGON_MAX_ROWS_FALLBACK = 4_000;
 
-function filterUnifiedInPolygon(filters: ListingFilters, rows: UnifiedListing[]): UnifiedListing[] {
+function applyMapPolygonResultFilter(
+  filters: ListingFilters,
+  unified: UnifiedListing[],
+  applyPip: boolean,
+): UnifiedListing[] {
   const poly = filters.mapPolygon;
-  if (!poly || poly.length < 3) return rows;
-  return rows.filter(
+  if (!poly || poly.length < 3) return unified;
+  if (!applyPip) return unified;
+  return unified.filter(
     (u) =>
       u.latitude != null &&
       u.longitude != null &&
@@ -393,7 +408,34 @@ async function fetchPropertyRowsForPolygon(
   return out;
 }
 
-/** Map polygon: OData bbox on Lat/Lng, then strict PIP; fall back if IDX returns empty or coord-less rows. */
+function mapPolygonPrimaryUseless(rows: Record<string, unknown>[], applyPip: boolean): boolean {
+  if (rows.length === 0) return true;
+  if (applyPip && !rowsHaveAnyCoordinates(rows)) return true;
+  return false;
+}
+
+async function fetchMapPolygonRowsWithSelectFallback(
+  cfg: BridgeODataConfig,
+  filter: string,
+  selectGeo: string,
+  selectNoGeo: string,
+  orderBy: string,
+  maxRows: number,
+): Promise<{ rows: Record<string, unknown>[]; applyPip: boolean }> {
+  try {
+    const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectGeo, orderBy, maxRows);
+    return { rows, applyPip: true };
+  } catch (e) {
+    if (!isODataCannotSelectLatLngError(e)) throw e;
+    console.warn(
+      "bridgeSearchWithMapPolygon: IDX disallows Latitude/Longitude in $select; using OData bbox only (no lasso clip).",
+    );
+    const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectNoGeo, orderBy, maxRows);
+    return { rows, applyPip: false };
+  }
+}
+
+/** Map polygon: OData bbox on Lat/Lng; PIP when IDX returns coordinates, else bbox-only. */
 async function bridgeSearchWithMapPolygon(
   cfg: BridgeODataConfig,
   filters: ListingFilters,
@@ -402,7 +444,8 @@ async function bridgeSearchWithMapPolygon(
   const perPage = Math.min(200, Math.max(1, filters.perPage ?? 24));
   const skip = (page - 1) * perPage;
 
-  const select = gridSelectForFilters(filters);
+  const selectGeo = gridSelectForMapPolygonGeoAttempt();
+  const selectNoGeo = gridSelectForFilters(filters);
   const orderBy = orderByClause(filters.sort);
 
   const primaryFilter = buildFilter(filters);
@@ -418,33 +461,41 @@ async function bridgeSearchWithMapPolygon(
   });
 
   let rows: Record<string, unknown>[] = [];
+  let applyPip = true;
 
   try {
-    rows = await fetchPropertyRowsForPolygon(
+    const r = await fetchMapPolygonRowsWithSelectFallback(
       cfg,
       primaryFilter,
-      select,
+      selectGeo,
+      selectNoGeo,
       orderBy,
       MAP_POLYGON_MAX_ROWS_PRIMARY,
     );
+    rows = r.rows;
+    applyPip = r.applyPip;
   } catch (e1) {
     console.warn("bridgeSearchWithMapPolygon: primary OData request failed", e1);
   }
 
-  const primaryUseless =
-    rows.length === 0 ||
-    (rows.length > 0 && !rowsHaveAnyCoordinates(rows));
-
-  if (primaryUseless) {
+  if (mapPolygonPrimaryUseless(rows, applyPip)) {
     for (const [label, fbFilter, cap] of [
       ["coords+state", fallbackWithCoords, MAP_POLYGON_MAX_ROWS_FALLBACK],
       ["state-only", fallbackLoose, MAP_POLYGON_MAX_ROWS_FALLBACK],
     ] as const) {
       try {
-        const nextRows = await fetchPropertyRowsForPolygon(cfg, fbFilter, select, orderBy, cap);
-        if (nextRows.length === 0) continue;
-        if (rowsHaveAnyCoordinates(nextRows)) {
-          rows = nextRows;
+        const r = await fetchMapPolygonRowsWithSelectFallback(
+          cfg,
+          fbFilter,
+          selectGeo,
+          selectNoGeo,
+          orderBy,
+          cap,
+        );
+        if (r.rows.length === 0) continue;
+        if (!mapPolygonPrimaryUseless(r.rows, r.applyPip)) {
+          rows = r.rows;
+          applyPip = r.applyPip;
           break;
         }
       } catch (e) {
@@ -455,13 +506,16 @@ async function bridgeSearchWithMapPolygon(
 
   if (rows.length === 0) {
     try {
-      rows = await fetchPropertyRowsForPolygon(
+      const r = await fetchMapPolygonRowsWithSelectFallback(
         cfg,
         primaryFilter,
-        select,
+        selectGeo,
+        selectNoGeo,
         orderBy,
         MAP_POLYGON_MAX_ROWS_PRIMARY,
       );
+      rows = r.rows;
+      applyPip = r.applyPip;
     } catch (e2) {
       const msg = e2 instanceof Error ? e2.message : String(e2);
       console.error("bridgeSearchWithMapPolygon", msg, e2);
@@ -469,7 +523,11 @@ async function bridgeSearchWithMapPolygon(
     }
   }
 
-  const unified = filterUnifiedInPolygon(filters, rows.map((row) => rowToUnified(row)));
+  const unified = applyMapPolygonResultFilter(
+    filters,
+    rows.map((row) => rowToUnified(row)),
+    applyPip,
+  );
   const total = unified.length;
   const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
   const listings = unified.slice(skip, skip + perPage);
