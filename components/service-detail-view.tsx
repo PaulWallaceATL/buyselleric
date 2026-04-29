@@ -42,9 +42,12 @@ function iconFor(index: number): LucideIcon {
 function ServiceIcon3D({
   Icon,
   size = "md",
+  centered = true,
 }: {
   Icon: LucideIcon;
   size?: "md" | "lg" | "hero";
+  /** When false (e.g. service hero beside copy), icon aligns start on desktop; centered on small screens. */
+  centered?: boolean;
 }) {
   const box =
     size === "hero"
@@ -56,7 +59,10 @@ function ServiceIcon3D({
     size === "hero" ? "h-[44%] w-[44%]" : size === "lg" ? "h-[42%] w-[42%]" : "h-[42%] w-[42%]";
   const perspective = size === "hero" ? "[perspective:1200px]" : "[perspective:960px]";
   return (
-    <div className={`mx-auto shrink-0 ${perspective}`} aria-hidden>
+    <div
+      className={`shrink-0 ${perspective} ${centered ? "mx-auto" : "self-center lg:self-auto"}`}
+      aria-hidden
+    >
       <div
         className={`relative flex ${box} items-center justify-center rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-ring/30 via-muted/60 to-background shadow-[0_26px_60px_-22px_rgba(0,0,0,0.62)] transition-[transform,box-shadow] duration-500 ease-out will-change-transform [transform-style:preserve-3d] [transform:rotateX(10deg)_rotateY(-16deg)] hover:[transform:rotateX(5deg)_rotateY(-8deg)_translateZ(14px)] hover:shadow-[0_32px_70px_-24px_rgba(110,184,192,0.22)] sm:rounded-[2rem]`}
       >
@@ -85,20 +91,20 @@ export function ServiceDetailView({ service }: { service: ServicePage }) {
           aria-hidden
           className="pointer-events-none absolute -right-32 top-20 h-96 w-96 rounded-full bg-ring/10 blur-3xl"
         />
-        <div className={`${siteContainer} relative max-w-4xl`}>
-          <div className="flex flex-col items-center gap-12 sm:gap-14">
-            <ServiceIcon3D Icon={HeroIcon} size="hero" />
-            <div className="w-full text-center">
-              <h1 className="mx-auto max-w-4xl text-balance font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.75rem] lg:leading-[1.12]">
+        <div className={`${siteContainer} relative max-w-6xl`}>
+          <div className="flex flex-col items-center gap-10 sm:gap-12 lg:flex-row lg:items-center lg:gap-14 xl:gap-16">
+            <ServiceIcon3D Icon={HeroIcon} size="hero" centered={false} />
+            <div className="min-w-0 flex-1 text-center lg:text-left">
+              <h1 className="mx-auto max-w-3xl text-balance font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:mx-0 lg:max-w-none lg:text-[2.65rem] lg:leading-[1.12]">
                 {service.headline}
               </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+              <p className="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg lg:mx-0 lg:max-w-none">
                 {service.intro}
               </p>
-              <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground/90 sm:text-base">
+              <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground/90 sm:text-base lg:mx-0 lg:max-w-none">
                 {service.description}
               </p>
-              <div className="mt-10 flex flex-row flex-wrap justify-center gap-3">
+              <div className="mt-10 flex flex-row flex-wrap justify-center gap-3 lg:justify-start">
                 <Link href={service.ctaHref} className={ctaPrimary}>
                   {service.ctaText}
                 </Link>
