@@ -80,10 +80,19 @@ export function ListingsMapView({
     }));
 
   const missingPins = listings.length > 0 && pins.length === 0;
+  const bboxOnlyOutline = !!appliedPolygon && appliedPolygon.length >= 3 && missingPins;
 
   return (
     <div>
-      {missingPins && (
+      {bboxOnlyOutline && (
+        <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          Your outline is applied, but this MLS feed does not allow latitude/longitude in search results, so we
+          filter to the <strong className="text-foreground">bounding rectangle</strong> around your shape (not the
+          exact inner outline) and <strong className="text-foreground">pins stay off</strong>. Cards below should
+          still sit inside that rectangle plus your text filters.
+        </p>
+      )}
+      {missingPins && !bboxOnlyOutline && (
         <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           These listings don&apos;t have map coordinates yet, so pins are hidden. The map is centered on your
           search — use <strong className="text-foreground">Draw search area</strong> to outline a region; only

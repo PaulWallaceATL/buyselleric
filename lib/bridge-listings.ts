@@ -242,16 +242,7 @@ function listingIdFilterVariants(rawId: string, esc: string): string[] {
   return [...new Set(out)];
 }
 
-type BuildFilterOptions = {
-  /** Skip OData Lat/Lng bounding box (some IDX feeds return no rows when combined with null coords). */
-  omitMapPolygonBbox?: boolean;
-  /** Broaden map search: state + optional non-null coords (used after primary map query fails). */
-  mapPolygonFallbackGeo?: boolean;
-  /** Require Latitude/Longitude ne null in OData (skip if feed rejects). */
-  mapPolygonFallbackRequireCoords?: boolean;
-};
-
-function buildFilter(filters: ListingFilters, opts?: BuildFilterOptions): string {
+function buildFilter(filters: ListingFilters): string {
   const parts: string[] = [ACTIVE];
 
   if (filters.minPrice != null) parts.push(`ListPrice ge ${filters.minPrice}`);
@@ -290,7 +281,7 @@ function buildFilter(filters: ListingFilters, opts?: BuildFilterOptions): string
   }
 
   const poly = filters.mapPolygon;
-  if (poly && poly.length >= 3 && opts?.omitMapPolygonBbox !== true) {
+  if (poly && poly.length >= 3) {
     const lats = poly.map((p) => p.lat);
     const lngs = poly.map((p) => p.lng);
     const minLat = Math.min(...lats);
@@ -299,16 +290,6 @@ function buildFilter(filters: ListingFilters, opts?: BuildFilterOptions): string
     const maxLng = Math.max(...lngs);
     parts.push(`Latitude ge ${minLat} and Latitude le ${maxLat}`);
     parts.push(`Longitude ge ${minLng} and Longitude le ${maxLng}`);
-  }
-
-  if (opts?.mapPolygonFallbackGeo === true) {
-    const st = process.env.BRIDGE_MAP_POLYGON_GEO_FALLBACK_STATE?.trim() ?? "GA";
-    if (st.length > 0) {
-      parts.push(stateOrProvinceODataClause(st));
-    }
-    if (opts.mapPolygonFallbackRequireCoords === true) {
-      parts.push("(Latitude ne null and Longitude ne null)");
-    }
   }
 
   return parts.join(" and ");
@@ -358,10 +339,6 @@ const MAP_POLYGON_MAX_ROWS_PRIMARY = Math.min(
   2_000,
   Math.max(200, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS?.trim() ?? "600", 10) || 600),
 );
-const MAP_POLYGON_MAX_ROWS_FALLBACK = Math.min(
-  4_000,
-  Math.max(400, Number.parseInt(process.env.MAP_POLYGON_MAX_ODATA_ROWS_FALLBACK?.trim() ?? "1200", 10) || 1_200),
-);
 
 function applyMapPolygonResultFilter(
   filters: ListingFilters,
@@ -377,13 +354,6 @@ function applyMapPolygonResultFilter(
       u.longitude != null &&
       pointInPolygon(u.latitude, u.longitude, poly),
   );
-}
-
-function rowsHaveAnyCoordinates(rows: Record<string, unknown>[]): boolean {
-  return rows.some((row) => {
-    const u = rowToUnified(row);
-    return u.latitude != null && u.longitude != null;
-  });
 }
 
 /** Repeated OData pages with `$top` ≤ BRIDGE_PROPERTY_PAGE_SIZE until `maxRows` or no more data. */
@@ -417,12 +387,11 @@ async function fetchPropertyRowsForPolygon(
   return out;
 }
 
-function mapPolygonPrimaryUseless(rows: Record<string, unknown>[], applyPip: boolean): boolean {
-  if (rows.length === 0) return true;
-  if (applyPip && !rowsHaveAnyCoordinates(rows)) return true;
-  return false;
-}
-
+/**
+ * Many IDX feeds reject Latitude/Longitude in `$select` (400). Default skips that attempt so map search
+ * does one OData pass (faster, avoids “stuck” double-fetch). Set BRIDGE_MAP_POLYGON_TRY_GEO_SELECT=true
+ * if your feed allows geo fields on Property search.
+ */
 async function fetchMapPolygonRowsWithSelectFallback(
   cfg: BridgeODataConfig,
   filter: string,
@@ -431,6 +400,11 @@ async function fetchMapPolygonRowsWithSelectFallback(
   orderBy: string,
   maxRows: number,
 ): Promise<{ rows: Record<string, unknown>[]; applyPip: boolean }> {
+  const tryGeoFirst = process.env.BRIDGE_MAP_POLYGON_TRY_GEO_SELECT?.trim() === "true";
+  if (!tryGeoFirst) {
+    const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectNoGeo, orderBy, maxRows);
+    return { rows, applyPip: false };
+  }
   try {
     const rows = await fetchPropertyRowsForPolygon(cfg, filter, selectGeo, orderBy, maxRows);
     return { rows, applyPip: true };
@@ -455,16 +429,6 @@ async function bridgeSearchWithMapPolygon(
   const orderBy = orderByClause(filters.sort);
 
   const primaryFilter = buildFilter(filters);
-  const fallbackWithCoords = buildFilter(filters, {
-    omitMapPolygonBbox: true,
-    mapPolygonFallbackGeo: true,
-    mapPolygonFallbackRequireCoords: true,
-  });
-  const fallbackLoose = buildFilter(filters, {
-    omitMapPolygonBbox: true,
-    mapPolygonFallbackGeo: true,
-    mapPolygonFallbackRequireCoords: false,
-  });
 
   let rows: Record<string, unknown>[] = [];
   let applyPip = true;
@@ -481,52 +445,8 @@ async function bridgeSearchWithMapPolygon(
     rows = r.rows;
     applyPip = r.applyPip;
   } catch (e1) {
-    console.warn("bridgeSearchWithMapPolygon: primary OData request failed", e1);
-  }
-
-  if (mapPolygonPrimaryUseless(rows, applyPip)) {
-    for (const [label, fbFilter, cap] of [
-      ["coords+state", fallbackWithCoords, MAP_POLYGON_MAX_ROWS_FALLBACK],
-      ["state-only", fallbackLoose, MAP_POLYGON_MAX_ROWS_FALLBACK],
-    ] as const) {
-      try {
-        const r = await fetchMapPolygonRowsWithSelectFallback(
-          cfg,
-          fbFilter,
-          selectGeo,
-          selectNoGeo,
-          orderBy,
-          cap,
-        );
-        if (r.rows.length === 0) continue;
-        if (!mapPolygonPrimaryUseless(r.rows, r.applyPip)) {
-          rows = r.rows;
-          applyPip = r.applyPip;
-          break;
-        }
-      } catch (e) {
-        console.warn(`bridgeSearchWithMapPolygon: fallback (${label}) failed`, e);
-      }
-    }
-  }
-
-  if (rows.length === 0) {
-    try {
-      const r = await fetchMapPolygonRowsWithSelectFallback(
-        cfg,
-        primaryFilter,
-        selectGeo,
-        selectNoGeo,
-        orderBy,
-        MAP_POLYGON_MAX_ROWS_PRIMARY,
-      );
-      rows = r.rows;
-      applyPip = r.applyPip;
-    } catch (e2) {
-      const msg = e2 instanceof Error ? e2.message : String(e2);
-      console.error("bridgeSearchWithMapPolygon", msg, e2);
-      return { listings: [], total: 0, page, perPage, totalPages: 0 };
-    }
+    console.warn("bridgeSearchWithMapPolygon: OData request failed", e1);
+    return { listings: [], total: 0, page, perPage, totalPages: 0 };
   }
 
   const unified = applyMapPolygonResultFilter(
