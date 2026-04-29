@@ -11,8 +11,8 @@ const SCROLL_SHOW_TOP_THRESHOLD = 48;
 const SCROLL_DIRECTION_DELTA = 8;
 
 const sections = [
-  { id: "hero", label: "Home" },
-  { id: "featured-listings", label: "Homes" },
+  { id: "hero", label: "Search" },
+  { id: "featured-listings", label: "Search" },
   { id: "services", label: "Services" },
   { id: "about", label: "About" },
   { id: "social-proof", label: "Stories" },
@@ -20,9 +20,7 @@ const sections = [
 ];
 
 const menuItems = [
-  { label: "Home", href: "#" },
-  { label: "Homes", href: "/#featured-listings" },
-  { label: "Listings", href: "/listings" },
+  { label: "Search", href: "/listings" },
   { label: "Sell", href: "/sell" },
   { label: "Blog", href: "/blog" },
   { label: "Services", href: "/#services-menu" },
@@ -32,7 +30,7 @@ const menuItems = [
 ];
 
 export function Header() {
-  const [activeSection, setActiveSection] = useState("Home");
+  const [activeSection, setActiveSection] = useState("Search");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hideOverFooter, setHideOverFooter] = useState(false);
@@ -204,7 +202,7 @@ export function Header() {
               <nav className="px-4 pb-5 sm:px-5 animate-[fadeIn_0.2s_ease]">
                 <ul className="flex flex-col gap-0.5">
                   {menuItems.map((item) => (
-                    <li key={item.label}>
+                    <li key={item.href}>
                       <a
                         href={item.href}
                         onClick={() => {
