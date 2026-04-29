@@ -6,6 +6,9 @@ import { siteConfig } from "@/lib/config";
 
 const FOOTER_HIDE_TOP = 96;
 const FOOTER_RELEASE_TOP = 160;
+/** Past this offset from top, scroll-down hides the bar; scroll-up shows it. */
+const SCROLL_SHOW_TOP_THRESHOLD = 48;
+const SCROLL_DIRECTION_DELTA = 8;
 
 const sections = [
   { id: "hero", label: "Home" },
@@ -33,8 +36,10 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hideOverFooter, setHideOverFooter] = useState(false);
+  const [hiddenByScrollDir, setHiddenByScrollDir] = useState(false);
   const [mounted, setMounted] = useState(false);
   const lastScrollY = useRef(0);
+  const scrollDirPrevY = useRef(0);
   const { isOverlayOpen } = useOverlay();
 
   useEffect(() => setMounted(true), []);
@@ -122,17 +127,42 @@ export function Header() {
     if (hideOverFooter) setIsMenuOpen(false);
   }, [hideOverFooter]);
 
+  useEffect(() => {
+    scrollDirPrevY.current = window.scrollY;
+
+    const onScrollDir = () => {
+      const y = window.scrollY;
+      if (y <= SCROLL_SHOW_TOP_THRESHOLD) {
+        setHiddenByScrollDir(false);
+        scrollDirPrevY.current = y;
+        return;
+      }
+      const dy = y - scrollDirPrevY.current;
+      scrollDirPrevY.current = y;
+      if (dy > SCROLL_DIRECTION_DELTA) {
+        setHiddenByScrollDir(true);
+      } else if (dy < -SCROLL_DIRECTION_DELTA) {
+        setHiddenByScrollDir(false);
+      }
+    };
+
+    window.addEventListener("scroll", onScrollDir, { passive: true });
+    onScrollDir();
+    return () => window.removeEventListener("scroll", onScrollDir);
+  }, []);
+
   if (isOverlayOpen) return null;
 
   const menuHeight = isMenuOpen ? "auto" : isMobile ? "56px" : "68px";
+  const headerHidden = hideOverFooter || (hiddenByScrollDir && !isMenuOpen);
 
   return (
     <header
       className="fixed top-0 left-0 right-0 z-50 px-6 pt-6 pb-8 sm:px-12 sm:pt-12 sm:pb-10 lg:px-24 lg:pb-12"
       style={{
-        opacity: mounted ? (hideOverFooter ? 0 : 1) : 0,
-        transform: `translateY(${mounted ? (hideOverFooter ? "-28px" : "0") : "-20px"})`,
-        pointerEvents: hideOverFooter ? "none" : "auto",
+        opacity: mounted ? (headerHidden ? 0 : 1) : 0,
+        transform: `translateY(${mounted ? (headerHidden ? "-28px" : "0") : "-20px"})`,
+        pointerEvents: headerHidden ? "none" : "auto",
         transition: "opacity 0.3s cubic-bezier(0.22,1,0.36,1), transform 0.3s cubic-bezier(0.22,1,0.36,1)",
       }}
     >
