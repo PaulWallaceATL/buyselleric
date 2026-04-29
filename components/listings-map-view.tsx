@@ -1,9 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { listingDetailHref } from "@/lib/listing-urls";
+import { MAP_DRAW_VIEWPORT_STORAGE_KEY, writeDrawViewport } from "@/lib/listings-map-draw-storage";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { encodeMapPolygonQuery, MAP_POLYGON_QUERY_KEY } from "@/lib/map-polygon-query";
 import type { UnifiedListing } from "@/lib/listings-queries";
@@ -37,6 +38,9 @@ export function ListingsMapView({
   mapPolygonWideFetch?: boolean | undefined;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mapPolyFromUrl = searchParams.get(MAP_POLYGON_QUERY_KEY);
+  const [mapNavPending, startMapNav] = useTransition();
   const [drawActive, setDrawActive] = useState(false);
   const [drawHint, setDrawHint] = useState<string | null>(null);
   const drawHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,13 +62,20 @@ export function ListingsMapView({
   );
 
   const applyPolygon = useCallback(
-    (ring: MapPolygonVertex[]) => {
+    (ring: MapPolygonVertex[], view: { lat: number; lng: number; zoom: number }) => {
+      const encoded = encodeMapPolygonQuery(ring);
+      writeDrawViewport({
+        mapPoly: encoded,
+        lat: view.lat,
+        lng: view.lng,
+        zoom: view.zoom,
+      });
       const p = new URLSearchParams(baseParams);
-      p.set(MAP_POLYGON_QUERY_KEY, encodeMapPolygonQuery(ring));
+      p.set(MAP_POLYGON_QUERY_KEY, encoded);
       p.delete("page");
       p.set("view", "map");
       const href = `/listings?${p.toString()}`;
-      startTransition(() => {
+      startMapNav(() => {
         router.push(href);
       });
       queueMicrotask(() => setDrawActive(false));
@@ -85,7 +96,12 @@ export function ListingsMapView({
     p.set("view", "map");
     setDrawActive(false);
     const href = `/listings?${p.toString()}`;
-    startTransition(() => {
+    try {
+      sessionStorage.removeItem(MAP_DRAW_VIEWPORT_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    startMapNav(() => {
       router.push(href);
     });
   }, [baseParams, router]);
@@ -171,17 +187,31 @@ export function ListingsMapView({
         )}
       </div>
       <div
-        className="overflow-hidden rounded-2xl border border-border shadow-sm sm:rounded-3xl"
+        className="relative overflow-hidden rounded-2xl border border-border shadow-sm sm:rounded-3xl"
         style={{ height: "min(70vh, 600px)" }}
       >
         <ListingsMap
+          key={mapPolyFromUrl ?? "map-no-poly"}
           pins={pins}
           fallbackCenter={fallbackCenter}
           appliedPolygon={appliedPolygon ?? null}
           drawActive={drawActive}
           onApplyPolygon={applyPolygon}
           onStrokeRejected={onStrokeRejected}
+          mapPolyFromUrl={mapPolyFromUrl}
         />
+        {mapNavPending && (
+          <div
+            className="pointer-events-none absolute inset-0 z-[2000] flex flex-col items-center justify-center gap-3 bg-background/55 backdrop-blur-[2px]"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-muted-foreground/25 border-t-foreground" />
+            <p className="max-w-[min(280px,88vw)] text-center text-sm font-medium text-foreground">
+              Updating listings for your drawn area…
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

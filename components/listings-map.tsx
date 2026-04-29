@@ -2,11 +2,12 @@
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { MapContainer, Marker, Polygon, Popup, TileLayer, useMap } from "react-leaflet";
 import Link from "next/link";
 import { formatPriceUsd } from "@/lib/format";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
+import { peekDrawViewport, type StoredDrawViewport } from "@/lib/listings-map-draw-storage";
 
 const icon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -64,7 +65,7 @@ function MapFreehandDrawer({
   onStrokeRejected,
 }: {
   active: boolean;
-  onComplete: (ring: MapPolygonVertex[]) => void;
+  onComplete: (ring: MapPolygonVertex[], view: { lat: number; lng: number; zoom: number }) => void;
   onStrokeRejected?: (() => void) | undefined;
 }) {
   const map = useMap();
@@ -145,7 +146,8 @@ function MapFreehandDrawer({
       const first = out[0]!;
       const last = out[out.length - 1]!;
       if (last.lat !== first.lat || last.lng !== first.lng) out.push({ ...first });
-      onComplete(out);
+      const c = map.getCenter();
+      onComplete(out, { lat: c.lat, lng: c.lng, zoom: map.getZoom() });
     };
 
     container.addEventListener("mousedown", onDown);
@@ -170,13 +172,12 @@ function MapFreehandDrawer({
   return null;
 }
 
-function FitAppliedPolygon({ positions }: { positions: [number, number][] }) {
+/** Reapply pan/zoom after draw navigation (belt-and-suspenders with MapContainer initial props). */
+function RestoreDrawViewport({ view }: { view: StoredDrawViewport }) {
   const map = useMap();
-  useEffect(() => {
-    if (positions.length < 2) return;
-    const b = L.latLngBounds(positions);
-    map.fitBounds(b, { padding: [28, 28], maxZoom: 15, animate: true });
-  }, [map, positions]);
+  useLayoutEffect(() => {
+    map.setView([view.lat, view.lng], view.zoom, { animate: false });
+  }, [map, view]);
   return null;
 }
 
@@ -187,14 +188,23 @@ export default function ListingsMap({
   drawActive,
   onApplyPolygon,
   onStrokeRejected,
+  mapPolyFromUrl,
 }: {
   pins: MapPin[];
   fallbackCenter: { lat: number; lng: number };
   appliedPolygon?: ReadonlyArray<MapPolygonVertex> | null;
   drawActive: boolean;
-  onApplyPolygon: (ring: MapPolygonVertex[]) => void;
+  onApplyPolygon: (ring: MapPolygonVertex[], view: { lat: number; lng: number; zoom: number }) => void;
   onStrokeRejected?: (() => void) | undefined;
+  /** Raw `mapPoly` query value — used once to restore pan/zoom after a draw (sessionStorage). */
+  mapPolyFromUrl: string | null;
 }) {
+  const drawViewportLockRef = useRef<StoredDrawViewport | null | undefined>(undefined);
+  if (drawViewportLockRef.current === undefined) {
+    drawViewportLockRef.current = peekDrawViewport(mapPolyFromUrl);
+  }
+  const drawViewportLock = drawViewportLockRef.current;
+
   const avgLat = pins.length > 0 ? pins.reduce((s, p) => s + p.lat, 0) / pins.length : fallbackCenter.lat;
   const avgLng = pins.length > 0 ? pins.reduce((s, p) => s + p.lng, 0) / pins.length : fallbackCenter.lng;
 
@@ -203,8 +213,9 @@ export default function ListingsMap({
     return appliedPolygon.map((p) => [p.lat, p.lng] as [number, number]);
   }, [appliedPolygon]);
 
-  const center: [number, number] =
-    polyPositions.length >= 2
+  const center: [number, number] = drawViewportLock
+    ? [drawViewportLock.lat, drawViewportLock.lng]
+    : polyPositions.length >= 2
       ? [
           polyPositions.reduce((s, p) => s + p[0], 0) / polyPositions.length,
           polyPositions.reduce((s, p) => s + p[1], 0) / polyPositions.length,
@@ -212,13 +223,13 @@ export default function ListingsMap({
       : [avgLat, avgLng];
 
   const onComplete = useCallback(
-    (ring: MapPolygonVertex[]) => {
-      onApplyPolygon(ring);
+    (ring: MapPolygonVertex[], view: { lat: number; lng: number; zoom: number }) => {
+      onApplyPolygon(ring, view);
     },
     [onApplyPolygon],
   );
 
-  const zoom = polyPositions.length >= 2 ? 12 : pins.length > 0 ? 10 : 9;
+  const zoom = drawViewportLock?.zoom ?? (polyPositions.length >= 2 ? 12 : pins.length > 0 ? 10 : 9);
 
   return (
     <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
@@ -227,19 +238,17 @@ export default function ListingsMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {polyPositions.length >= 3 && (
-        <>
-          <Polygon
-            positions={polyPositions}
-            pathOptions={{
-              color: "#6eb8c0",
-              fillColor: "#6eb8c0",
-              fillOpacity: 0.12,
-              weight: 2,
-            }}
-          />
-          <FitAppliedPolygon positions={polyPositions} />
-        </>
+        <Polygon
+          positions={polyPositions}
+          pathOptions={{
+            color: "#6eb8c0",
+            fillColor: "#6eb8c0",
+            fillOpacity: 0.12,
+            weight: 2,
+          }}
+        />
       )}
+      {drawViewportLock ? <RestoreDrawViewport view={drawViewportLock} /> : null}
       <MapFreehandDrawer
         active={drawActive}
         onComplete={onComplete}

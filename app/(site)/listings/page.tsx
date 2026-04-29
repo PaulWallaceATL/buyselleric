@@ -132,13 +132,25 @@ export default async function ListingsPage({
 
         {view === "map" ? (
           <div className="mt-8">
-            <ListingsMapView
-              listings={listings}
-              baseParams={baseParams}
-              appliedPolygon={appliedMapPolygon}
-              fallbackCenter={mapFallbackCenter}
-              mapPolygonWideFetch={mapPolygonWideFetch}
-            />
+            <Suspense
+              fallback={
+                <div
+                  className="flex flex-col items-center justify-center rounded-2xl border border-border bg-muted/10 sm:rounded-3xl"
+                  style={{ height: "min(70vh, 600px)" }}
+                >
+                  <div className="h-9 w-9 animate-spin rounded-full border-2 border-muted-foreground/25 border-t-foreground" />
+                  <p className="mt-3 text-sm text-muted-foreground">Loading map…</p>
+                </div>
+              }
+            >
+              <ListingsMapView
+                listings={listings}
+                baseParams={baseParams}
+                appliedPolygon={appliedMapPolygon}
+                fallbackCenter={mapFallbackCenter}
+                mapPolygonWideFetch={mapPolygonWideFetch}
+              />
+            </Suspense>
             {listings.length === 0 ? (
               <div className="mt-8 rounded-2xl border border-dashed border-border bg-muted/15 px-5 py-8 text-center sm:px-8">
                 <p className="font-medium text-foreground">No homes in this view</p>
