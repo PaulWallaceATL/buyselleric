@@ -397,15 +397,18 @@ async function enrichListingsPageWithLatLngFromBridge(
   }
 }
 
-/** Bridge keyed lat/lng when the MLS allows it, then Photon address geocode for remaining rows. */
+/**
+ * Bridge keyed lat/lng when the MLS allows it, then ZIP-centroid pins (fast), then Photon only for
+ * rows still missing coords — avoids dozens of external geocode calls when GA postal codes cover the page.
+ */
 async function enrichListingsPageForMapPins(
   cfg: BridgeODataConfig,
   listings: UnifiedListing[],
   polygon?: ReadonlyArray<MapPolygonVertex> | undefined,
 ): Promise<UnifiedListing[]> {
   let out = await enrichListingsPageWithLatLngFromBridge(cfg, listings);
-  out = await enrichListingsWithPhotonGeocode(out, { polygon });
   out = applyZipCentroidPinCoords(out, polygon);
+  out = await enrichListingsWithPhotonGeocode(out, { polygon });
   return out;
 }
 

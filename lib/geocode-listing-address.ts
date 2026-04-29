@@ -124,7 +124,7 @@ export async function enrichListingsWithPhotonGeocode<T extends ListingGeocodeSh
       }),
     );
     if (i + concurrency < indicesNeeding.length) {
-      await new Promise((r) => setTimeout(r, 120));
+      await new Promise((r) => setTimeout(r, 50));
     }
   }
 

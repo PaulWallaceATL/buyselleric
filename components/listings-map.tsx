@@ -24,6 +24,10 @@ const MIN_SAMPLE_M = 3;
 const MIN_STROKE_M = 6;
 const MIN_VERTICES = 3;
 
+/** Drawn search area — high-contrast stroke on light/dark map tiles. */
+const MAP_SEARCH_STROKE = "#0a4f6e";
+const MAP_SEARCH_FILL = "#0e7490";
+
 export type { MapPolygonVertex };
 
 export interface MapPin {
@@ -118,9 +122,9 @@ function MapFreehandDrawer({
     container.style.touchAction = "none";
 
     const lineStyle = {
-      color: "#6eb8c0",
+      color: MAP_SEARCH_STROKE,
       weight: 3,
-      opacity: 0.95,
+      opacity: 1,
     } as const;
 
     const ptrOpts: AddEventListenerOptions = { passive: false };
@@ -294,10 +298,12 @@ export default function ListingsMap({
         <Polygon
           positions={polyPositions}
           pathOptions={{
-            color: "#6eb8c0",
-            fillColor: "#6eb8c0",
-            fillOpacity: 0.12,
-            weight: 2,
+            color: MAP_SEARCH_STROKE,
+            fillColor: MAP_SEARCH_FILL,
+            fillOpacity: 0.16,
+            weight: 4,
+            lineJoin: "round",
+            lineCap: "round",
           }}
         />
       )}
