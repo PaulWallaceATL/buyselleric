@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { siteContainer } from "@/lib/ui";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -48,9 +49,9 @@ function ServiceItem({ title, href, index }: { title: string; href: string; inde
     const ctx = gsap.context(() => {
       gsap.fromTo(
         itemRef.current,
-        { x: -60, opacity: 0 },
+        { y: 28, opacity: 0 },
         {
-          x: 0,
+          y: 0,
           opacity: 1,
           duration: 0.8,
           ease: "power3.out",
@@ -154,37 +155,38 @@ function ServiceItem({ title, href, index }: { title: string; href: string; inde
   return (
     <div
       ref={itemRef}
-      className="relative overflow-hidden border-t border-foreground/10"
+      className="relative h-full min-h-[11.5rem] overflow-hidden rounded-2xl border border-foreground/15 bg-muted/5 sm:min-h-[12.5rem]"
     >
       <a
         href={href}
-        className="focus-ring outline-none flex min-h-[4.5rem] cursor-pointer items-center justify-between px-6 py-8 sm:px-12 md:min-h-[5rem] md:py-10 lg:px-24"
+        className="focus-ring outline-none flex h-full min-h-[11.5rem] cursor-pointer flex-col items-center justify-center px-4 py-6 text-center sm:min-h-[12.5rem] sm:px-5 sm:py-8"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        <span className="text-[clamp(1.5rem,4vw,4rem)] font-light tracking-tight text-foreground">
+        <span className="text-balance text-lg font-medium leading-snug tracking-tight text-foreground sm:text-xl lg:text-2xl">
           {title}
         </span>
       </a>
 
       <div
         ref={overlayRef}
-        className="absolute inset-0 overflow-hidden pointer-events-none bg-foreground"
+        className="pointer-events-none absolute inset-0 overflow-hidden bg-foreground"
         style={{ transform: "translateY(101%)" }}
       >
         <div
           ref={overlayInnerRef}
-          className="flex items-center justify-between h-full px-6 sm:px-12 lg:px-24"
+          className="flex h-full flex-col items-center justify-center gap-4 px-4 py-6 sm:px-5"
           style={{ transform: "translateY(-101%)" }}
         >
-          <span className="text-[clamp(1.5rem,4vw,4rem)] font-light tracking-tight text-background">
+          <span className="text-balance text-center text-lg font-medium leading-snug tracking-tight text-background sm:text-xl lg:text-2xl">
             {chars}
           </span>
           <svg
-            className="w-8 h-8 md:w-12 md:h-12 text-background"
+            className="h-8 w-8 shrink-0 text-background sm:h-9 sm:w-9"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden
           >
             <path
               strokeLinecap="round"
@@ -258,17 +260,25 @@ export function Services() {
         </h2>
       </div>
 
-      <div id="services-menu" className="w-full scroll-mt-28 pb-24 sm:scroll-mt-32">
-        <div className="w-full">
-          {services.map((service, index) => (
-            <ServiceItem
-              key={service.id}
-              title={service.title}
-              href={service.href}
-              index={index}
-            />
-          ))}
-          <div className="border-t border-foreground/10" />
+      <div id="services-menu" className="w-full scroll-mt-28 border-t border-foreground/10 pb-24 pt-12 sm:scroll-mt-32 sm:pt-16">
+        <div className={siteContainer}>
+          <h3
+            id="services-heading"
+            className="text-center text-xs font-semibold uppercase tracking-[0.35em] text-ring sm:text-sm"
+          >
+            SERVICES
+          </h3>
+          <div
+            className="mx-auto mt-8 grid w-full max-w-6xl grid-cols-2 justify-items-stretch gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6"
+            role="list"
+            aria-labelledby="services-heading"
+          >
+            {services.map((service, index) => (
+              <div key={service.id} className="h-full" role="listitem">
+                <ServiceItem title={service.title} href={service.href} index={index} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
