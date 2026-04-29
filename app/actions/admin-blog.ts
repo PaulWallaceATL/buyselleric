@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ADMIN_COOKIE_NAME, verifyAdminSession } from "@/lib/admin-auth";
+import { stripHashtagSpamFromMarkdownBody } from "@/lib/blog-markdown";
 import { slugify } from "@/lib/format";
 import { truncateMetaDescription } from "@/lib/seo";
 import {
@@ -14,6 +15,21 @@ import {
 } from "@/lib/supabase/admin";
 
 export type AdminBlogFormState = { ok: false; message: string } | null;
+
+/** Strip # prefixes and duplicates; keeps display-friendly keywords only. */
+function normalizeSeoKeywordsFromForm(raw: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of raw) {
+    const t = k.replace(/^#+/, "").trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
 
 async function requireAdminSession(): Promise<void> {
   const jar = await cookies();
@@ -53,8 +69,10 @@ async function adminCreateBlogPost(
   const meta_description_raw = String(formData.get("meta_description") ?? "").trim();
   const meta_description = truncateMetaDescription(meta_description_raw || excerpt);
   const seo_keywords_raw = String(formData.get("seo_keywords") ?? "").trim();
-  const seo_keywords = seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [];
-  const body = String(formData.get("body") ?? "").trim();
+  const seo_keywords = normalizeSeoKeywordsFromForm(
+    seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [],
+  );
+  const body = stripHashtagSpamFromMarkdownBody(String(formData.get("body") ?? "")).trim();
   const cover_image_url = String(formData.get("cover_image_url") ?? "").trim() || null;
   const author = String(formData.get("author") ?? "Eric Adams").trim();
   const is_published = formData.get("is_published") === "on";
@@ -121,8 +139,10 @@ async function adminUpdateBlogPost(
   const meta_description_raw = String(formData.get("meta_description") ?? "").trim();
   const meta_description = truncateMetaDescription(meta_description_raw || excerpt);
   const seo_keywords_raw = String(formData.get("seo_keywords") ?? "").trim();
-  const seo_keywords = seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [];
-  const body = String(formData.get("body") ?? "").trim();
+  const seo_keywords = normalizeSeoKeywordsFromForm(
+    seo_keywords_raw ? seo_keywords_raw.split(",").map((k) => k.trim()).filter(Boolean) : [],
+  );
+  const body = stripHashtagSpamFromMarkdownBody(String(formData.get("body") ?? "")).trim();
   const cover_image_url = String(formData.get("cover_image_url") ?? "").trim() || null;
   const author = String(formData.get("author") ?? "Eric Adams").trim();
   const is_published = formData.get("is_published") === "on";

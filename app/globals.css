@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* Real estate palette: warm neutrals + trust blues / sage + moody navy (dark) */
 :root {

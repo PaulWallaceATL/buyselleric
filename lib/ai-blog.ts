@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { siteConfig } from "@/lib/config";
+import { stripHashtagSpamFromMarkdownBody } from "@/lib/blog-markdown";
 import { truncateMetaDescription } from "@/lib/seo";
 
 let _client: OpenAI | null = null;
@@ -38,6 +39,8 @@ SEO requirements:
 - Body in markdown with clear H2/H3 heading structure (one H1 in the body is OK if it matches the topic; prefer H2 for sections)
 - Naturally incorporate relevant real estate keywords throughout
 - Include a brief call-to-action mentioning ${siteConfig.agentName} near the end
+- Do NOT put hashtags (#keyword) or hashtag lists in the article body. Do NOT end the body with social-style #tags.
+- seo_keywords must be plain words or short phrases only — no # prefix, no duplicates
 
 Output format: Respond ONLY with valid JSON matching this exact schema:
 {
@@ -111,15 +114,24 @@ function parseAIResponse(text: string): GeneratedBlogPost {
   const excerpt = String(parsed.excerpt || "");
   const metaRaw = String(parsed.meta_description || parsed.excerpt || "");
 
+  const rawKeywords: string[] = Array.isArray(parsed.seo_keywords)
+    ? (parsed.seo_keywords as unknown[]).map((k) => String(k))
+    : [];
+  const seo_keywords: string[] = [
+    ...new Set(
+      rawKeywords
+        .map((k: string) => k.replace(/^#+/, "").trim())
+        .filter((k: string) => k.length > 0),
+    ),
+  ];
+
   return {
     title: String(parsed.title),
     slug: String(parsed.slug || ""),
     excerpt,
     meta_description: truncateMetaDescription(metaRaw),
-    body: String(parsed.body),
-    seo_keywords: Array.isArray(parsed.seo_keywords)
-      ? parsed.seo_keywords.map(String)
-      : [],
+    body: stripHashtagSpamFromMarkdownBody(String(parsed.body)),
+    seo_keywords,
   };
 }
 
