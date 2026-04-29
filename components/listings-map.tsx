@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { MapContainer, Marker, Polygon, Popup, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polygon, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
 import Link from "next/link";
 import { formatPriceUsd } from "@/lib/format";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
@@ -37,6 +37,8 @@ export interface MapPin {
   state: string;
   bedrooms: number;
   bathrooms: number;
+  /** First listing photo for hover preview */
+  image_url?: string | null;
 }
 
 function strokeLengthM(map: L.Map, ring: L.LatLng[]): number {
@@ -307,16 +309,40 @@ export default function ListingsMap({
       />
       {pins.map((pin) => (
         <Marker key={pin.id} position={[pin.lat, pin.lng]} icon={icon}>
+          <Tooltip direction="top" offset={[0, -36]} opacity={1}>
+            <div className="max-w-[200px] rounded-lg border border-border bg-background px-2 py-2 text-foreground shadow-lg">
+              {pin.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- remote MLS URLs; Leaflet tooltip context
+                <img
+                  src={pin.image_url}
+                  alt=""
+                  className="mb-1.5 h-20 w-full rounded-md object-cover"
+                  loading="lazy"
+                />
+              ) : null}
+              <p className="text-xs font-semibold leading-snug line-clamp-2">{pin.title}</p>
+              <p className="text-sm font-bold text-foreground">{formatPriceUsd(pin.price_cents)}</p>
+            </div>
+          </Tooltip>
           <Popup>
-            <div className="min-w-[180px]">
+            <div className="min-w-[180px] text-foreground">
+              {pin.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={pin.image_url}
+                  alt=""
+                  className="mb-2 h-24 w-full rounded-md object-cover"
+                  loading="lazy"
+                />
+              ) : null}
               <p className="text-sm font-semibold">{pin.title}</p>
               <p className="text-base font-bold">{formatPriceUsd(pin.price_cents)}</p>
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-muted-foreground">
                 {pin.bedrooms} bd · {pin.bathrooms} ba · {pin.city}, {pin.state}
               </p>
               <Link
                 href={pin.href}
-                className="mt-2 inline-block text-xs font-semibold text-blue-600 underline underline-offset-2"
+                className="mt-2 inline-block text-xs font-semibold text-ring underline underline-offset-2"
               >
                 View details →
               </Link>

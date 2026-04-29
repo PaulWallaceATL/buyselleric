@@ -340,6 +340,61 @@ function isODataCannotSelectLatLngError(err: unknown): boolean {
   return /cannot select/i.test(msg) && (/latitude/i.test(msg) || /longitude/i.test(msg));
 }
 
+/**
+ * Some IDX feeds omit Lat/Lng on broad `$select` but return them on a narrow keyed query.
+ * Best-effort: one OData round-trip for the current page so map pins can render when the MLS allows it.
+ * GAMLS and others may still return 400 — we swallow errors and leave coords null.
+ */
+async function enrichListingsPageWithLatLngFromBridge(
+  cfg: BridgeODataConfig,
+  listings: UnifiedListing[],
+): Promise<UnifiedListing[]> {
+  const missing = listings.filter((l) => l.latitude == null || l.longitude == null);
+  if (missing.length === 0) return listings;
+
+  const uniqueIds = [...new Set(missing.map((l) => l.id).filter((id) => id.trim().length > 0))];
+  if (uniqueIds.length === 0) return listings;
+
+  const keyClauses = uniqueIds.map((id) => {
+    const esc = escapeODataString(id.trim());
+    if (/^\d+$/.test(id.trim())) {
+      const n = id.trim();
+      return `(ListingKey eq '${esc}' or ListingId eq '${esc}' or ListingId eq ${n})`;
+    }
+    return `(ListingKey eq '${esc}' or ListingId eq '${esc}')`;
+  });
+
+  const select = sanitizeBridgePropertySelect("ListingKey,ListingId,Latitude,Longitude", {
+    allowGeoFieldsInSelect: true,
+  });
+  const filter = `${ACTIVE} and (${keyClauses.join(" or ")})`;
+
+  try {
+    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+      $filter: filter,
+      $select: select,
+      $top: String(Math.min(200, Math.max(uniqueIds.length, 24))),
+    });
+    const byKey = new Map<string, { lat: number; lng: number }>();
+    for (const row of data.value ?? []) {
+      const c = bridgePropertyToCoreFields(row);
+      if (c.latitude == null || c.longitude == null) continue;
+      const pair = { lat: c.latitude, lng: c.longitude };
+      if (c.listingKey) byKey.set(String(c.listingKey), pair);
+      if (c.listingId) byKey.set(String(c.listingId), pair);
+    }
+    if (byKey.size === 0) return listings;
+    return listings.map((l) => {
+      if (l.latitude != null && l.longitude != null) return l;
+      const hit = byKey.get(l.id) ?? (l.mls_id ? byKey.get(l.mls_id) : undefined);
+      if (!hit) return l;
+      return { ...l, latitude: hit.lat, longitude: hit.lng };
+    });
+  } catch {
+    return listings;
+  }
+}
+
 /** GAMLS / many Bridge IDX feeds reject `$top` above 200 — page with `$skip` instead. */
 const BRIDGE_PROPERTY_PAGE_SIZE = Math.min(
   200,
@@ -526,7 +581,8 @@ async function bridgeSearchWithMapPolygon(
   }
   const total = unified.length;
   const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
-  const listings = unified.slice(skip, skip + perPage);
+  let listings = unified.slice(skip, skip + perPage);
+  listings = await enrichListingsPageWithLatLngFromBridge(cfg, listings);
   return {
     listings,
     total,

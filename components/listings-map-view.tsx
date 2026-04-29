@@ -119,6 +119,7 @@ export function ListingsMapView({
       state: l.state,
       bedrooms: l.bedrooms,
       bathrooms: l.bathrooms,
+      image_url: l.image_urls[0] ?? null,
     }));
 
   const missingPins = listings.length > 0 && pins.length === 0;
@@ -129,9 +130,10 @@ export function ListingsMapView({
     <div>
       {zipApproxNoPins && (
         <p className="mb-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-          Your outline is applied using <strong className="text-foreground">ZIP centroids</strong> (this MLS often
-          omits coordinates on search). The list should follow your shape at ZIP-level accuracy;{" "}
-          <strong className="text-foreground">map pins stay off</strong> when no coordinates are returned.
+          Your outline is applied using <strong className="text-foreground">ZIP centroids</strong> when this MLS
+          omits coordinates on the main search. We still try a follow-up lookup for pins on the current page; if
+          the feed blocks geo fields entirely, the list stays ZIP-accurate and{" "}
+          <strong className="text-foreground">pins stay off</strong>.
         </p>
       )}
       {missingPins && hasPoly && !zipApproxNoPins && (
