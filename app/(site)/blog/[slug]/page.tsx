@@ -152,7 +152,7 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
         ) : null}
 
         <div
-          className="prose prose-lg prose-stone mt-10 max-w-none space-y-6 text-foreground dark:prose-invert prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-h2:mb-4 prose-h2:mt-10 prose-h3:mb-3 prose-h3:mt-8 prose-a:text-ring prose-a:underline-offset-4 prose-p:mb-4 prose-p:mt-0 prose-p:last:mb-0 prose-ul:my-4 prose-ol:my-4 prose-li:my-1 [&_.blog-deck]:not-prose [&_.blog-deck]:mb-3 [&_.blog-deck]:mt-10"
+          className="prose prose-lg mt-10 max-w-none space-y-6 [--tw-prose-body:var(--muted-foreground)] [--tw-prose-headings:var(--foreground)] [--tw-prose-bold:var(--foreground)] [--tw-prose-bullets:var(--muted-foreground)] [--tw-prose-counters:var(--muted-foreground)] [--tw-prose-quotes:var(--foreground)] [--tw-prose-quote-borders:var(--border)] [--tw-prose-hr:var(--border)] prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-h2:mb-4 prose-h2:mt-10 prose-h3:mb-3 prose-h3:mt-8 prose-a:text-ring prose-a:underline-offset-4 prose-p:mb-4 prose-p:mt-0 prose-p:last:mb-0 prose-ul:my-4 prose-ol:my-4 prose-li:my-1 [&_.blog-deck]:not-prose [&_.blog-deck]:mb-3 [&_.blog-deck]:mt-10 [&_.blog-deck]:text-foreground"
           dangerouslySetInnerHTML={{ __html: renderBlogBodyMarkdown(post.body) }}
         />
 
