@@ -1,7 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatPriceUsd } from "@/lib/format";
-import { filterDisplayImageUrls, listingDetailHref } from "@/lib/listing-urls";
+import {
+  filterDisplayImageUrls,
+  listingDetailHref,
+  listingImagePreferUnoptimized,
+} from "@/lib/listing-urls";
 import type { UnifiedListing } from "@/lib/listings-queries";
 
 export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
@@ -25,6 +29,7 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
             sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
             loading="lazy"
+            unoptimized={listingImagePreferUnoptimized(img)}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-base text-muted-foreground">

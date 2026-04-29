@@ -16,3 +16,16 @@ export function listingDetailHref(listing: UnifiedListing): string {
 export function filterDisplayImageUrls(urls: string[] | null | undefined): string[] {
   return (urls ?? []).filter((u) => Boolean(u) && u !== MLS_NO_PHOTOS_SENTINEL);
 }
+
+/**
+ * Some CDNs (e.g. Zillow) allow browser hotlinks but block Next’s image optimizer fetch.
+ * Use with next/image `unoptimized` so the URL loads in the browser like admin previews (no optimizer proxy).
+ */
+export function listingImagePreferUnoptimized(src: string): boolean {
+  try {
+    const h = new URL(src.trim()).hostname.toLowerCase();
+    return h === "zillowstatic.com" || h.endsWith(".zillowstatic.com");
+  } catch {
+    return false;
+  }
+}

@@ -66,6 +66,12 @@ const nextConfig: NextConfig = {
         hostname: "**.cloudfront.net",
         pathname: "/**",
       },
+      // Manual listing photos (e.g. pasted from Zillow CDN)
+      {
+        protocol: "https",
+        hostname: "**.zillowstatic.com",
+        pathname: "/**",
+      },
       ...(supabasePattern ? [supabasePattern] : []),
     ],
   },

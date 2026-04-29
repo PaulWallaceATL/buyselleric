@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useState } from "react";
-import { filterDisplayImageUrls } from "@/lib/listing-urls";
+import { filterDisplayImageUrls, listingImagePreferUnoptimized } from "@/lib/listing-urls";
 
 export function ListingGallery({ urls }: { urls: string[] }) {
   const clean = filterDisplayImageUrls(urls);
@@ -42,6 +42,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
           sizes="(max-width: 768px) 100vw, 80vw"
           className="object-cover"
           priority
+          unoptimized={listingImagePreferUnoptimized(main!)}
         />
         {multi ? (
           <>
@@ -114,6 +115,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
                 sizes="120px"
                 className="object-cover"
                 loading="lazy"
+                unoptimized={listingImagePreferUnoptimized(url)}
               />
             </button>
           ))}

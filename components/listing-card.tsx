@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatPriceUsd } from "@/lib/format";
+import { listingImagePreferUnoptimized } from "@/lib/listing-urls";
 import type { ListingRow } from "@/lib/types/db";
 
 function pickImage(urls: string[]) {
@@ -25,6 +26,7 @@ export function ListingCard({ listing }: { listing: ListingRow }) {
             sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
             loading="lazy"
+            unoptimized={listingImagePreferUnoptimized(img)}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-base text-muted-foreground">
