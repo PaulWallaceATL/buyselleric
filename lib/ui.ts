@@ -18,7 +18,7 @@ export const sectionTitle =
 
 /** Inner pages (<main>) — below fixed header (tall pill + menu), full-width column */
 export const pageMain =
-  "relative z-10 w-full flex-1 bg-background px-6 pb-24 pt-36 sm:px-12 sm:pb-28 sm:pt-40 lg:px-24 lg:pt-44";
+  "relative z-10 w-full flex-1 bg-background px-6 pb-24 pt-52 sm:px-12 sm:pb-28 sm:pt-60 lg:px-24 lg:pt-72";
 
 /** Muted body under titles */
 export const lead =
