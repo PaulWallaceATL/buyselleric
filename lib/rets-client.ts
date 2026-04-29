@@ -473,7 +473,15 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
   const state = get(["StateOrProvince"]);
   const postalCode = get(["PostalCode"]);
   const priceDollars = getNum(["ListPrice"]);
-  const remarks = get(["PublicRemarks"]);
+  const remarks = get([
+    "PublicRemarks",
+    "InternetRemarks",
+    "Remarks",
+    "ListingRemarks",
+    "MarketingRemarks",
+    "IDXRemarks",
+    "SupplementalPublicRemarks",
+  ]);
   const subdivision = get(["SubdivisionName"]);
 
   const validSubdivision = subdivision && subdivision.toLowerCase() !== "none" ? subdivision : "";

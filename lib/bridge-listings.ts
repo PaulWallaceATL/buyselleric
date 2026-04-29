@@ -2,6 +2,7 @@ import type { MlsListingRow } from "@/lib/types/db";
 import {
   bridgeODataGet,
   bridgePropertyToCoreFields,
+  bridgeRowHasRemarkFields,
   escapeODataString,
   fetchBridgeMediaUrlsForListing,
   getBridgeODataConfig,
@@ -137,6 +138,41 @@ function sanitizeBridgePropertySelect(select: string): string {
     out.push(f);
   }
   return out.join(",");
+}
+
+/** When detail $select omits remarks (sparse fallback), fetch remark columns alone and merge. */
+const REMARK_SUPPLEMENT_SELECTS = [
+  "ListingKey,ListingId,PublicRemarks,SupplementalPublicRemarks,PrivateRemarks,InternetRemarks",
+  "ListingKey,ListingId,PublicRemarks,InternetRemarks",
+  "ListingKey,ListingId,PublicRemarks",
+  "ListingId,PublicRemarks",
+];
+
+async function enrichPropertyRowWithRemarksIfNeeded(
+  client: BridgeODataConfig,
+  filter: string,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (bridgeRowHasRemarkFields(row)) return row;
+  const selects = [...new Set(REMARK_SUPPLEMENT_SELECTS.map((s) => sanitizeBridgePropertySelect(s)))];
+  // Run in parallel so a sparse Property hit does not add four sequential round-trips (feels “stuck”).
+  const settled = await Promise.allSettled(
+    selects.map(($select) =>
+      bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(client, {
+        $filter: filter,
+        $select,
+        $top: "1",
+      }),
+    ),
+  );
+  for (const r of settled) {
+    if (r.status !== "fulfilled") continue;
+    const extra = r.value.value?.[0];
+    if (!extra) continue;
+    const merged = { ...row, ...extra };
+    if (bridgeRowHasRemarkFields(merged)) return merged;
+  }
+  return row;
 }
 
 /**
@@ -446,9 +482,10 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
     return data.value?.[0] ?? null;
   }
 
-  async function finalize(row: Record<string, unknown>): Promise<MlsListingRow> {
-    const listingKey = String(row.ListingKey ?? "").trim();
-    const listingId = String(row.ListingId ?? "").trim();
+  async function finalize(row: Record<string, unknown>, filter: string): Promise<MlsListingRow> {
+    const enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
+    const listingKey = String(enriched.ListingKey ?? "").trim();
+    const listingId = String(enriched.ListingId ?? "").trim();
     let mediaUrls: string[] = [];
     if (listingKey || listingId) {
       try {
@@ -463,14 +500,14 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
     }
     const mapOpts: BridgePropertyMapOptions =
       mediaUrls.length > 0 ? { supplementalImageUrls: mediaUrls } : {};
-    return rowToMlsListingRow(row, mapOpts);
+    return rowToMlsListingRow(enriched, mapOpts);
   }
 
   for (const filter of listingIdFilterVariants(id, esc)) {
     for (const select of detailSelectCandidates()) {
       try {
         const row = await fetchRow(filter, select);
-        if (row) return await finalize(row);
+        if (row) return await finalize(row, filter);
       } catch (e) {
         console.warn(
           `bridgeGetMlsListingById: attempt failed filter=${filter.slice(0, 100)}… selectFields=${select.split(",").length}`,

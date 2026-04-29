@@ -389,8 +389,13 @@ function housingFactsAppendix(row: Record<string, unknown>): string {
   return `\n\n—\n${lines.join("\n")}`;
 }
 
+/** Narrative remarks from RESO / MLS (field names vary by board and vendor). */
 function buildDescription(row: Record<string, unknown>): string {
   const pub = str(row.PublicRemarks);
+  const internet = str(row.InternetRemarks);
+  const listingRm = str(row.ListingRemarks) || str(row.Remarks);
+  const marketing = str(row.MarketingRemarks);
+  const idxRm = str(row.IDXRemarks);
   const sup = str(row.SupplementalPublicRemarks);
   const priv = str(row.PrivateRemarks);
   const biz = str(row.BusinessRemarks);
@@ -398,8 +403,83 @@ function buildDescription(row: Record<string, unknown>): string {
   const taxLegal = str(row.TaxLegalDescription);
   const directions = str(row.Directions);
   const disclosures = str(row.Disclosures);
-  const body = [pub, sup, priv, biz, synd, taxLegal, directions, disclosures].filter(Boolean).join("\n\n");
-  return ((body || "") + housingFactsAppendix(row)).trim();
+  const body = [
+    pub,
+    internet,
+    listingRm,
+    marketing,
+    idxRm,
+    sup,
+    priv,
+    biz,
+    synd,
+    taxLegal,
+    directions,
+    disclosures,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const withFacts = ((body || "") + housingFactsAppendix(row)).trim();
+  if (withFacts) return withFacts;
+  return fallbackNarrativeFromPropertyRow(row);
+}
+
+/** When no remarks or feature appendix is available (e.g. sparse $select), still show useful copy. */
+function fallbackNarrativeFromPropertyRow(row: Record<string, unknown>): string {
+  const city = str(row.City);
+  const st = str(row.StateOrProvince) || "GA";
+  const addr = str(row.UnparsedAddress);
+  const place = addr && city ? `${addr}, ${city}, ${st}` : city ? `${city}, ${st}` : st;
+  const pt = str(row.PropertySubType) || str(row.PropertyType) || "home";
+  const beds = Math.round(num(row.BedroomsTotal));
+  const baths = parseBathroomsTotal(row);
+  const sq = numOrNull(row.LivingArea);
+  const price = num(row.ListPrice);
+  const priceStr =
+    price > 0
+      ? new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          maximumFractionDigits: 0,
+        }).format(price)
+      : "";
+
+  const noun = /home|house|condo|townhouse|lot|land|farm|duplex|multi/i.test(pt) ? pt : `${pt} property`;
+  const open = place ? `This ${noun} is listed in ${place}.` : `This ${noun} is on the market.`;
+  const stats: string[] = [];
+  if (beds > 0) stats.push(`${beds} bedroom${beds === 1 ? "" : "s"}`);
+  if (baths > 0) stats.push(`${baths} bathroom${baths === 1 ? "" : "s"}`);
+  if (sq != null && sq > 0) stats.push(`${Math.round(sq).toLocaleString("en-US")} sq ft`);
+  const mid =
+    stats.length > 0 ? `Listing highlights: ${stats.join(", ")}.` : "";
+  const ask = priceStr ? `List price: ${priceStr}.` : "";
+  const close =
+    "Contact the listing office or your agent for full MLS remarks and showing availability.";
+  return [open, mid, ask, close].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+/** True when the row already includes at least one remark-style field (not facts-only appendix). */
+export function bridgeRowHasRemarkFields(row: Record<string, unknown>): boolean {
+  return [
+    str(row.PublicRemarks),
+    str(row.InternetRemarks),
+    str(row.ListingRemarks),
+    str(row.Remarks),
+    str(row.MarketingRemarks),
+    str(row.IDXRemarks),
+    str(row.SupplementalPublicRemarks),
+    str(row.PrivateRemarks),
+    str(row.BusinessRemarks),
+    str(row.SyndicationRemarks),
+    str(row.TaxLegalDescription),
+    str(row.Directions),
+    str(row.Disclosures),
+  ].some((s) => s.length > 0);
+}
+
+/** Exported for follow-up OData passes that merge extra remark columns into a sparse row. */
+export function buildBridgePropertyDescription(row: Record<string, unknown>): string {
+  return buildDescription(row);
 }
 
 export interface BridgePropertyMapOptions {
