@@ -242,7 +242,16 @@ function listingIdFilterVariants(rawId: string, esc: string): string[] {
   return [...new Set(out)];
 }
 
-function buildFilter(filters: ListingFilters): string {
+type BuildFilterOptions = {
+  /** Skip OData Lat/Lng bounding box (some IDX feeds return no rows when combined with null coords). */
+  omitMapPolygonBbox?: boolean;
+  /** Broaden map search: state + optional non-null coords (used after primary map query fails). */
+  mapPolygonFallbackGeo?: boolean;
+  /** Require Latitude/Longitude ne null in OData (skip if feed rejects). */
+  mapPolygonFallbackRequireCoords?: boolean;
+};
+
+function buildFilter(filters: ListingFilters, opts?: BuildFilterOptions): string {
   const parts: string[] = [ACTIVE];
 
   if (filters.minPrice != null) parts.push(`ListPrice ge ${filters.minPrice}`);
@@ -281,7 +290,7 @@ function buildFilter(filters: ListingFilters): string {
   }
 
   const poly = filters.mapPolygon;
-  if (poly && poly.length >= 3) {
+  if (poly && poly.length >= 3 && opts?.omitMapPolygonBbox !== true) {
     const lats = poly.map((p) => p.lat);
     const lngs = poly.map((p) => p.lng);
     const minLat = Math.min(...lats);
@@ -290,6 +299,16 @@ function buildFilter(filters: ListingFilters): string {
     const maxLng = Math.max(...lngs);
     parts.push(`Latitude ge ${minLat} and Latitude le ${maxLat}`);
     parts.push(`Longitude ge ${minLng} and Longitude le ${maxLng}`);
+  }
+
+  if (opts?.mapPolygonFallbackGeo === true) {
+    const st = process.env.BRIDGE_MAP_POLYGON_GEO_FALLBACK_STATE?.trim() ?? "GA";
+    if (st.length > 0) {
+      parts.push(stateOrProvinceODataClause(st));
+    }
+    if (opts.mapPolygonFallbackRequireCoords === true) {
+      parts.push("(Latitude ne null and Longitude ne null)");
+    }
   }
 
   return parts.join(" and ");
@@ -316,6 +335,8 @@ function gridSelectForFilters(filters: ListingFilters): string {
 }
 
 const MAP_POLYGON_FETCH_CAP = 2_000;
+/** When OData bbox on Lat/Lng returns nothing or rows without coordinates, sample more rows in fallback state. */
+const MAP_POLYGON_FETCH_CAP_FALLBACK = 8_000;
 
 function filterUnifiedInPolygon(filters: ListingFilters, rows: UnifiedListing[]): UnifiedListing[] {
   const poly = filters.mapPolygon;
@@ -328,7 +349,14 @@ function filterUnifiedInPolygon(filters: ListingFilters, rows: UnifiedListing[])
   );
 }
 
-/** Map polygon: fetch a capped bbox window, strict point-in-polygon, then paginate in memory. */
+function rowsHaveAnyCoordinates(rows: Record<string, unknown>[]): boolean {
+  return rows.some((row) => {
+    const u = rowToUnified(row);
+    return u.latitude != null && u.longitude != null;
+  });
+}
+
+/** Map polygon: OData bbox on Lat/Lng, then strict PIP; fall back if IDX returns empty or coord-less rows. */
 async function bridgeSearchWithMapPolygon(
   cfg: BridgeODataConfig,
   filters: ListingFilters,
@@ -337,45 +365,92 @@ async function bridgeSearchWithMapPolygon(
   const perPage = Math.min(200, Math.max(1, filters.perPage ?? 24));
   const skip = (page - 1) * perPage;
 
-  const polyQuery: Record<string, string> = {
-    $filter: buildFilter(filters),
-    $select: gridSelectForFilters(filters),
-    $top: String(MAP_POLYGON_FETCH_CAP),
-    $skip: "0",
-    $orderby: orderByClause(filters.sort),
-  };
+  const select = gridSelectForFilters(filters);
+  const orderBy = orderByClause(filters.sort);
+
+  async function fetchPolygonPage(
+    filter: string,
+    top: number,
+    withCount: boolean,
+  ): Promise<BridgeODataValueResponse<Record<string, unknown>>> {
+    const base: Record<string, string> = {
+      $filter: filter,
+      $select: select,
+      $top: String(top),
+      $skip: "0",
+      $orderby: orderBy,
+    };
+    if (withCount) {
+      return bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+        ...base,
+        $count: "true",
+      });
+    }
+    return bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, base);
+  }
+
+  const primaryFilter = buildFilter(filters);
+  const fallbackWithCoords = buildFilter(filters, {
+    omitMapPolygonBbox: true,
+    mapPolygonFallbackGeo: true,
+    mapPolygonFallbackRequireCoords: true,
+  });
+  const fallbackLoose = buildFilter(filters, {
+    omitMapPolygonBbox: true,
+    mapPolygonFallbackGeo: true,
+    mapPolygonFallbackRequireCoords: false,
+  });
+
+  let data: BridgeODataValueResponse<Record<string, unknown>> | null = null;
+  let rows: Record<string, unknown>[] = [];
 
   try {
-    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
-      ...polyQuery,
-      $count: "true",
-    });
-    const unified = filterUnifiedInPolygon(
-      filters,
-      (data.value ?? []).map((row) => rowToUnified(row)),
-    );
-    const total = unified.length;
-    const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
-    const listings = unified.slice(skip, skip + perPage);
-    return { listings, total, page, perPage, totalPages };
+    data = await fetchPolygonPage(primaryFilter, MAP_POLYGON_FETCH_CAP, true);
+    rows = data.value ?? [];
   } catch (e1) {
-    console.warn("bridgeSearchWithMapPolygon: $count failed, retrying without $count", e1);
+    console.warn("bridgeSearchWithMapPolygon: primary OData request failed", e1);
+  }
+
+  const primaryUseless =
+    rows.length === 0 ||
+    (rows.length > 0 && !rowsHaveAnyCoordinates(rows));
+
+  if (primaryUseless) {
+    for (const [label, fbFilter, cap] of [
+      ["coords+state", fallbackWithCoords, MAP_POLYGON_FETCH_CAP_FALLBACK],
+      ["state-only", fallbackLoose, MAP_POLYGON_FETCH_CAP_FALLBACK],
+    ] as const) {
+      try {
+        const d = await fetchPolygonPage(fbFilter, cap, false);
+        const nextRows = d.value ?? [];
+        if (nextRows.length === 0) continue;
+        if (rowsHaveAnyCoordinates(nextRows)) {
+          data = d;
+          rows = nextRows;
+          break;
+        }
+      } catch (e) {
+        console.warn(`bridgeSearchWithMapPolygon: fallback (${label}) failed`, e);
+      }
+    }
+  }
+
+  if (data === null) {
     try {
-      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, polyQuery);
-      const unified = filterUnifiedInPolygon(
-        filters,
-        (data.value ?? []).map((row) => rowToUnified(row)),
-      );
-      const total = unified.length;
-      const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
-      const listings = unified.slice(skip, skip + perPage);
-      return { listings, total, page, perPage, totalPages };
+      data = await fetchPolygonPage(primaryFilter, MAP_POLYGON_FETCH_CAP, false);
+      rows = data.value ?? [];
     } catch (e2) {
       const msg = e2 instanceof Error ? e2.message : String(e2);
       console.error("bridgeSearchWithMapPolygon", msg, e2);
       return { listings: [], total: 0, page, perPage, totalPages: 0 };
     }
   }
+
+  const unified = filterUnifiedInPolygon(filters, rows.map((row) => rowToUnified(row)));
+  const total = unified.length;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+  const listings = unified.slice(skip, skip + perPage);
+  return { listings, total, page, perPage, totalPages };
 }
 
 export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {

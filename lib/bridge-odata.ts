@@ -569,8 +569,16 @@ export function bridgePropertyToCoreFields(
     bedrooms: Math.round(num(row.BedroomsTotal)),
     bathrooms: baths,
     square_feet: numOrNull(row.LivingArea) ?? numOrNull(row.BuildingAreaTotal),
-    latitude: numOrNull(row.Latitude),
-    longitude: numOrNull(row.Longitude),
+    latitude:
+      numOrNull(row.Latitude) ??
+      numOrNull(row.latitude) ??
+      numOrNull(row.Lat) ??
+      numOrNull(row.PropertyLatitude),
+    longitude:
+      numOrNull(row.Longitude) ??
+      numOrNull(row.longitude) ??
+      numOrNull(row.Long) ??
+      numOrNull(row.PropertyLongitude),
     description: buildDescription(row),
     property_type: str(row.PropertySubType) || str(row.PropertyType),
     status: str(row.StandardStatus) || str(row.MlsStatus) || "active",

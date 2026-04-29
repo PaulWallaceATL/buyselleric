@@ -80,6 +80,7 @@ export default async function ListingsPage({
   if (filters.maxSqft) baseParams.maxSqft = String(filters.maxSqft);
   if (filters.sort && filters.sort !== "price_desc") baseParams.sort = filters.sort;
   if (view !== "list") baseParams.view = view;
+  if (filters.propertyType) baseParams.propertyType = filters.propertyType;
   if (mapPolyEncoded) baseParams[MAP_POLYGON_QUERY_KEY] = mapPolyEncoded;
 
   const hasFilters = !!(
@@ -115,7 +116,7 @@ export default async function ListingsPage({
 
         <div className="mt-8 flex flex-col gap-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <ListingsSearchBar defaultValue={filters.q ?? ""} />
+            <ListingsSearchBar defaultValue={filters.q ?? ""} baseParams={baseParams} />
             <ViewToggle baseParams={baseParams} activeView={view} />
           </div>
           <Suspense>

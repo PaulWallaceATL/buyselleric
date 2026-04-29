@@ -7,7 +7,14 @@ import { SearchSuggestionsList } from "@/components/search-suggestions-list";
 import { useListingSearchSuggestions } from "@/components/use-listing-search-suggestions";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 
-export function ListingsSearchBar({ defaultValue = "" }: { defaultValue?: string }) {
+export function ListingsSearchBar({
+  defaultValue = "",
+  baseParams,
+}: {
+  defaultValue?: string;
+  /** Preserve map outline, filters, and view when changing the search box (merged with new q). */
+  baseParams?: Record<string, string>;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState(defaultValue);
   const [open, setOpen] = useState(false);
@@ -39,13 +46,19 @@ export function ListingsSearchBar({ defaultValue = "" }: { defaultValue?: string
     (q: string) => {
       const trimmed = q.trim();
       setOpen(false);
-      if (!trimmed) {
-        router.push("/listings");
-        return;
+      const p = new URLSearchParams();
+      if (baseParams) {
+        for (const [k, v] of Object.entries(baseParams)) {
+          if (v) p.set(k, v);
+        }
       }
-      router.push(`/listings?q=${encodeURIComponent(trimmed)}`);
+      if (trimmed) p.set("q", trimmed);
+      else p.delete("q");
+      p.delete("page");
+      const qs = p.toString();
+      router.push(qs ? `/listings?${qs}` : "/listings");
     },
-    [router],
+    [router, baseParams],
   );
 
   const handleSubmit = (e: FormEvent) => {
