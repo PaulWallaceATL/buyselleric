@@ -10,6 +10,7 @@ import {
   type BridgeODataValueResponse,
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
+import { haversineDistanceMeters } from "@/lib/geo";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import type { ListingFilters, PaginatedResult, UnifiedListing } from "@/lib/listings-queries";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
@@ -269,6 +270,16 @@ function buildFilter(filters: ListingFilters): string {
     }
   }
 
+  const { mapLat, mapLng, mapRadiusM } = filters;
+  if (mapLat != null && mapLng != null && mapRadiusM != null && mapRadiusM > 0) {
+    const latRad = (mapLat * Math.PI) / 180;
+    const latDelta = mapRadiusM / 111_320;
+    const cosLat = Math.cos(latRad);
+    const lngDelta = cosLat > 0.01 ? mapRadiusM / (111_320 * cosLat) : 180;
+    parts.push(`Latitude ge ${mapLat - latDelta} and Latitude le ${mapLat + latDelta}`);
+    parts.push(`Longitude ge ${mapLng - lngDelta} and Longitude le ${mapLng + lngDelta}`);
+  }
+
   return parts.join(" and ");
 }
 
@@ -286,10 +297,90 @@ function orderByClause(sort: ListingFilters["sort"]): string {
   }
 }
 
+function gridSelectForFilters(filters: ListingFilters): string {
+  const wantsCoords =
+    filters.mapLat != null && filters.mapLng != null && filters.mapRadiusM != null && filters.mapRadiusM > 0;
+  const raw = wantsCoords ? `${SELECT_GRID},Latitude,Longitude` : SELECT_GRID;
+  return sanitizeBridgePropertySelect(raw);
+}
+
+const MAP_CIRCLE_FETCH_CAP = 2_000;
+
+function filterUnifiedInCircle(filters: ListingFilters, rows: UnifiedListing[]): UnifiedListing[] {
+  const { mapLat, mapLng, mapRadiusM } = filters;
+  if (mapLat == null || mapLng == null || mapRadiusM == null || mapRadiusM <= 0) return rows;
+  return rows.filter(
+    (u) =>
+      u.latitude != null &&
+      u.longitude != null &&
+      haversineDistanceMeters(u.latitude, u.longitude, mapLat, mapLng) <= mapRadiusM,
+  );
+}
+
+/** Map circle: fetch a capped window in the bbox, strict haversine filter, then paginate in memory. */
+async function bridgeSearchWithMapCircle(
+  cfg: BridgeODataConfig,
+  filters: ListingFilters,
+): Promise<PaginatedResult> {
+  const page = Math.max(1, filters.page ?? 1);
+  const perPage = Math.min(200, Math.max(1, filters.perPage ?? 24));
+  const skip = (page - 1) * perPage;
+
+  const circleQuery: Record<string, string> = {
+    $filter: buildFilter(filters),
+    $select: gridSelectForFilters(filters),
+    $top: String(MAP_CIRCLE_FETCH_CAP),
+    $skip: "0",
+    $orderby: orderByClause(filters.sort),
+  };
+
+  try {
+    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+      ...circleQuery,
+      $count: "true",
+    });
+    const unified = filterUnifiedInCircle(
+      filters,
+      (data.value ?? []).map((row) => rowToUnified(row)),
+    );
+    const total = unified.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+    const listings = unified.slice(skip, skip + perPage);
+    return { listings, total, page, perPage, totalPages };
+  } catch (e1) {
+    console.warn("bridgeSearchWithMapCircle: $count failed, retrying without $count", e1);
+    try {
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, circleQuery);
+      const unified = filterUnifiedInCircle(
+        filters,
+        (data.value ?? []).map((row) => rowToUnified(row)),
+      );
+      const total = unified.length;
+      const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+      const listings = unified.slice(skip, skip + perPage);
+      return { listings, total, page, perPage, totalPages };
+    } catch (e2) {
+      const msg = e2 instanceof Error ? e2.message : String(e2);
+      console.error("bridgeSearchWithMapCircle", msg, e2);
+      return { listings: [], total: 0, page, perPage, totalPages: 0 };
+    }
+  }
+}
+
 export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
   const cfg = getBridgeODataConfig();
   if (!cfg) {
     return { listings: [], total: 0, page: 1, perPage: 24, totalPages: 0 };
+  }
+
+  const hasMapCircle =
+    filters.mapLat != null &&
+    filters.mapLng != null &&
+    filters.mapRadiusM != null &&
+    filters.mapRadiusM > 0;
+
+  if (hasMapCircle) {
+    return bridgeSearchWithMapCircle(cfg, filters);
   }
 
   const page = Math.max(1, filters.page ?? 1);
@@ -298,7 +389,7 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
 
   const baseQuery: Record<string, string> = {
     $filter: buildFilter(filters),
-    $select: sanitizeBridgePropertySelect(SELECT_GRID),
+    $select: gridSelectForFilters(filters),
     $top: String(perPage),
     $skip: String(skip),
     $orderby: orderByClause(filters.sort),
@@ -320,10 +411,11 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
       $count: "true",
     });
     const rows = withCount.value ?? [];
+    const listings = rows.map((row) => rowToUnified(row));
     const total = totalFromResponse(withCount, rows.length);
     const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
     return {
-      listings: rows.map((row) => rowToUnified(row)),
+      listings,
       total,
       page,
       perPage,
@@ -334,10 +426,11 @@ export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<
     try {
       const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, baseQuery);
       const rows = data.value ?? [];
+      const listings = rows.map((row) => rowToUnified(row));
       const total = totalFromResponse(data, rows.length);
       const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
       return {
-        listings: rows.map((row) => rowToUnified(row)),
+        listings,
         total,
         page,
         perPage,

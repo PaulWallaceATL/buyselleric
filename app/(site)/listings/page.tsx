@@ -27,12 +27,29 @@ function parseNum(val: string | string[] | undefined): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
+function parseMapCoord(val: string | string[] | undefined): number | undefined {
+  if (typeof val !== "string") return undefined;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+const MAP_RADIUS_MIN_M = 150;
+const MAP_RADIUS_MAX_M = 50_000;
+
 export default async function ListingsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<ReactNode> {
   const params = await searchParams;
+
+  const ml = parseMapCoord(params.mapLat);
+  const mlg = parseMapCoord(params.mapLng);
+  const mr = parseMapCoord(params.mapRadiusM);
+  const mapCircleOk = ml != null && mlg != null && mr != null && mr > 0;
+  const mapLat = mapCircleOk ? ml : undefined;
+  const mapLng = mapCircleOk ? mlg : undefined;
+  const mapRadiusM = mapCircleOk ? Math.min(MAP_RADIUS_MAX_M, Math.max(MAP_RADIUS_MIN_M, mr)) : undefined;
 
   const filters: ListingFilters = {
     q: typeof params.q === "string" ? params.q.trim() : undefined,
@@ -46,6 +63,9 @@ export default async function ListingsPage({
     sort: (typeof params.sort === "string" ? params.sort : "price_desc") as ListingFilters["sort"],
     page: parseNum(params.page) ?? 1,
     perPage: 24,
+    mapLat,
+    mapLng,
+    mapRadiusM,
   };
 
   const view = typeof params.view === "string" ? params.view : "list";
@@ -61,8 +81,27 @@ export default async function ListingsPage({
   if (filters.maxSqft) baseParams.maxSqft = String(filters.maxSqft);
   if (filters.sort && filters.sort !== "price_desc") baseParams.sort = filters.sort;
   if (view !== "list") baseParams.view = view;
+  if (mapLat != null && mapLng != null && mapRadiusM != null) {
+    baseParams.mapLat = String(mapLat);
+    baseParams.mapLng = String(mapLng);
+    baseParams.mapRadiusM = String(mapRadiusM);
+  }
 
-  const hasFilters = !!(filters.q || filters.minPrice || filters.maxPrice || filters.minBeds || filters.minBaths || filters.minSqft || filters.maxSqft);
+  const hasFilters = !!(
+    filters.q ||
+    filters.minPrice ||
+    filters.maxPrice ||
+    filters.minBeds ||
+    filters.minBaths ||
+    filters.minSqft ||
+    filters.maxSqft ||
+    mapCircleOk
+  );
+
+  const appliedMapCircle =
+    mapLat != null && mapLng != null && mapRadiusM != null
+      ? { lat: mapLat, lng: mapLng, radiusM: mapRadiusM }
+      : null;
 
   return (
     <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
@@ -72,9 +111,11 @@ export default async function ListingsPage({
           {hasFilters ? "Search results" : "Available homes"}
         </h1>
         <p className={`${lead} mt-4`}>
-          {filters.q
-            ? `Showing homes matching "${filters.q}"`
-            : "Browse homes across Georgia. Use filters to narrow your search."}
+          {appliedMapCircle
+            ? "Showing homes inside your drawn map area (and any other filters you set)."
+            : filters.q
+              ? `Showing homes matching "${filters.q}"`
+              : "Browse homes across Georgia. Use filters to narrow your search."}
         </p>
 
         <div className="mt-8 flex flex-col gap-4">
@@ -91,7 +132,7 @@ export default async function ListingsPage({
           <EmptyState hasFilters={hasFilters} query={filters.q} />
         ) : view === "map" ? (
           <div className="mt-8">
-            <ListingsMapView listings={listings} />
+            <ListingsMapView listings={listings} baseParams={baseParams} appliedCircle={appliedMapCircle} />
             <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {listings.map((l) => (
                 <UnifiedListingCard key={l.id} listing={l} />
