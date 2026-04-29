@@ -126,14 +126,24 @@ const GAMLS_BLOCKED_SELECT_FIELDS = new Set([
   "ListOffice",
 ]);
 
-function sanitizeBridgePropertySelect(select: string): string {
+/** Some feeds block Lat/Lng on $select for generic grid — map polygon search must keep them when allowed. */
+const GAMLS_GEO_SELECT_FIELDS = new Set(["Latitude", "Longitude"]);
+
+function sanitizeBridgePropertySelect(
+  select: string,
+  options?: { allowGeoFieldsInSelect?: boolean },
+): string {
+  const blocked =
+    options?.allowGeoFieldsInSelect === true
+      ? new Set([...GAMLS_BLOCKED_SELECT_FIELDS].filter((f) => !GAMLS_GEO_SELECT_FIELDS.has(f)))
+      : GAMLS_BLOCKED_SELECT_FIELDS;
   const seen = new Set<string>();
   const out: string[] = [];
   for (const f of select
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((field) => !GAMLS_BLOCKED_SELECT_FIELDS.has(field))) {
+    .filter((field) => !blocked.has(field))) {
     if (seen.has(f)) continue;
     seen.add(f);
     out.push(f);
@@ -302,7 +312,7 @@ function orderByClause(sort: ListingFilters["sort"]): string {
 function gridSelectForFilters(filters: ListingFilters): string {
   const wantsCoords = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
   const raw = wantsCoords ? `${SELECT_GRID},Latitude,Longitude` : SELECT_GRID;
-  return sanitizeBridgePropertySelect(raw);
+  return sanitizeBridgePropertySelect(raw, wantsCoords ? { allowGeoFieldsInSelect: true } : undefined);
 }
 
 const MAP_POLYGON_FETCH_CAP = 2_000;
