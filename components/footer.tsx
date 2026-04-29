@@ -61,9 +61,16 @@ export function Footer() {
             <p className="mt-4 text-2xl font-medium tracking-tight text-background/60 sm:text-3xl lg:text-4xl">
               {siteConfig.tagline}
             </p>
-            <p className="mt-4 text-base text-background/55">
-              {siteConfig.agentName} · {siteConfig.license}
-            </p>
+            <ul className="mt-4 list-none space-y-1.5 text-base text-background/55">
+              {siteConfig.footerCredentialLines.map((line) => (
+                <li key={line} className="flex gap-2 leading-snug">
+                  <span className="shrink-0 text-background/35" aria-hidden>
+                    ·
+                  </span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="grid grid-cols-1 gap-12 sm:grid-cols-3 lg:col-span-8 lg:gap-10">

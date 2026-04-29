@@ -1,5 +1,5 @@
 /**
- * Site configuration — buyselleric · Eric Adams
+ * Site configuration — buyselleric
  */
 
 function hostnameOf(urlish: string): string | null {
@@ -74,7 +74,15 @@ export const siteConfig = {
   email: "eric@buyselleric.com",
   phoneDisplay: "478-456-6650",
   phoneTel: "+14784566650",
-  license: "DRE #00000000",
+  /** Shown under the tagline in the site footer (licensing / affiliations). */
+  footerCredentialLines: [
+    "CrossCountry Mortgage",
+    "Loan Officer",
+    "Greensboro, GA Mortgage Loan Officer",
+    "NMLS #1245446",
+    "Georgia real estate salesperson · License #447520",
+    "Southern Classic Realty",
+  ],
   primaryMarket: "Your metro area",
 
   /** CrossCountry Mortgage — application with Eric as referrer */
