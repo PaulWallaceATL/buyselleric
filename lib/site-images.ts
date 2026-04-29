@@ -3,10 +3,7 @@
  * @see https://unsplash.com/license
  */
 export const siteImages = {
-  /**
-   * Eric’s headshot: add `public/eric-adams.jpg` (recommended). Instagram CDN URLs expire;
-   * the About section falls back to a monogram if this file is missing.
-   */
+  /** Eric Adams — headshot served from `/public/eric-adams.jpg` (committed asset). */
   ericHeadshot: "/eric-adams.jpg",
 
   /** About section — wide exterior / curb appeal (secondary visual if needed) */

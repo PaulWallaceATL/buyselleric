@@ -92,8 +92,7 @@ export function About() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-muted via-background to-muted p-8 text-center">
                   <span className="font-serif text-6xl font-semibold tracking-tight text-ring sm:text-7xl">EA</span>
                   <p className="mt-4 max-w-[14rem] text-sm leading-snug text-muted-foreground">
-                    Add your headshot as <code className="text-foreground">public/eric-adams.jpg</code> so it loads
-                    reliably (social CDN links expire).
+                    Missing <code className="text-foreground">public/eric-adams.jpg</code> — add the file and redeploy.
                   </p>
                 </div>
               ) : null}
