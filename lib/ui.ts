@@ -2,6 +2,8 @@
  * Shared layout and typography tokens for marketing pages (responsive, consistent rhythm).
  */
 
+import type { CSSProperties } from "react";
+
 export const siteContainer =
   "mx-auto w-full max-w-360 px-6 sm:px-12 lg:px-24 2xl:max-w-450 3xl:max-w-550";
 
@@ -16,9 +18,14 @@ export const eyebrow =
 export const sectionTitle =
   "text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl";
 
-/** Inner pages (<main>) — below fixed header; top spacing from `.inner-page-main` in globals.css */
+/** Inner pages (<main>) — horizontal + bottom padding; top clearance via `innerPageMainTopPadding` (inline wins over utilities). */
 export const pageMain =
-  "inner-page-main relative z-10 w-full flex-1 bg-background px-6 pb-24 sm:px-12 sm:pb-28 lg:px-24";
+  "relative z-10 w-full flex-1 bg-background px-6 pb-24 sm:px-12 sm:pb-28 lg:px-24";
+
+/** Fixed header overlaps <main>; inline padding so it cannot be overridden by CSS chunk order. */
+export const innerPageMainTopPadding = {
+  paddingTop: "max(clamp(15rem, 8rem + 14vmin, 28rem), calc(env(safe-area-inset-top, 0px) + 13rem))",
+} satisfies CSSProperties;
 
 /** Muted body under titles */
 export const lead =

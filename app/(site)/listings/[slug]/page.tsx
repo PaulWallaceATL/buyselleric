@@ -5,7 +5,7 @@ import { siteConfig } from "@/lib/config";
 import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
 import { getPublishedListingBySlug } from "@/lib/listings-queries";
-import { pageMain } from "@/lib/ui";
+import { innerPageMainTopPadding, pageMain } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -55,7 +55,7 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
         : "For sale";
 
   return (
-    <main id="main-content" className={pageMain}>
+    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <div className="mx-auto w-full max-w-6xl px-6 sm:px-12 lg:px-16">
         <nav className="text-sm text-muted-foreground sm:text-base" aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">

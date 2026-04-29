@@ -1,7 +1,7 @@
 import { SellHouseForm } from "@/components/sell-house-form";
 import { siteConfig } from "@/lib/config";
 import { createMetadata } from "@/lib/metadata";
-import { lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
+import { innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -13,7 +13,7 @@ export const metadata: Metadata = createMetadata({
 
 export default function SellPage(): ReactNode {
   return (
-    <main id="main-content" className={pageMain}>
+    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <div className={siteContainer}>
         <h1 className={sectionTitle}>
           Sell with {siteConfig.agentName}

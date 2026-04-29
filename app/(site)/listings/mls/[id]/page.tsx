@@ -7,7 +7,7 @@ import { formatPriceUsd } from "@/lib/format";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getMlsListingById } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
-import { pageMain, siteContainer } from "@/lib/ui";
+import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -39,7 +39,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   const galleryUrls = filterDisplayImageUrls(listing.image_urls);
 
   return (
-    <main id="main-content" className={pageMain}>
+    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <div className={`${siteContainer} max-w-4xl`}>
         <Link
           href="/listings"

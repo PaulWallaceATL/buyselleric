@@ -5,7 +5,7 @@ import { BlogViewTracker } from "@/components/blog-view-tracker";
 import { siteConfig } from "@/lib/config";
 import { defaultSocialImage } from "@/lib/metadata";
 import { getPublishedPostBySlug } from "@/lib/blog-queries";
-import { pageMain, siteContainer } from "@/lib/ui";
+import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -70,7 +70,7 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
   };
 
   return (
-    <main id="main-content" className={pageMain}>
+    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

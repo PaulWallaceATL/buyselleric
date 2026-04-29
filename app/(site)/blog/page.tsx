@@ -4,7 +4,7 @@ import { siteConfig } from "@/lib/config";
 import { getPublishedPosts } from "@/lib/blog-queries";
 import { ctaPrimary } from "@/lib/cta-styles";
 import { createMetadata } from "@/lib/metadata";
-import { eyebrow, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
+import { eyebrow, innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -20,7 +20,7 @@ export default async function BlogPage(): Promise<ReactNode> {
   const posts = await getPublishedPosts();
 
   return (
-    <main id="main-content" className={pageMain}>
+    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <div className={siteContainer}>
         <p className={eyebrow}>{siteConfig.brandSlug}</p>
         <h1 className={`${sectionTitle} mt-3`}>Blog</h1>

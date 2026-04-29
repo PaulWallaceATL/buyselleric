@@ -8,7 +8,7 @@ import { ListingsSearchBar } from "@/components/listings-search-bar";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
 import { searchWithFilters, type ListingFilters } from "@/lib/listings-queries";
-import { eyebrow, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
+import { eyebrow, innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -65,7 +65,7 @@ export default async function ListingsPage({
   const hasFilters = !!(filters.q || filters.minPrice || filters.maxPrice || filters.minBeds || filters.minBaths || filters.minSqft || filters.maxSqft);
 
   return (
-    <main id="main-content" className={pageMain}>
+    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <div className={siteContainer}>
         <p className={eyebrow}>{siteConfig.brandSlug}</p>
         <h1 className={`${sectionTitle} mt-3`}>
