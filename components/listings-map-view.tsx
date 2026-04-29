@@ -116,7 +116,8 @@ export function ListingsMapView({
         )}
         {drawActive && (
           <p className="w-full text-sm text-muted-foreground sm:w-auto">
-            Click the map for the center, then drag to size the circle. Release to search homes inside it.
+            Press where one side of the area should be, drag to the opposite side (like pulling a diameter), then
+            release to search homes inside that circle.
           </p>
         )}
       </div>

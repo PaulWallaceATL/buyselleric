@@ -39,6 +39,7 @@ export interface MapSearchCircle {
   radiusM: number;
 }
 
+/** Circle from a diameter: press = one end of the span, drag = opposite end, release = apply. */
 function MapCircleDrawer({
   active,
   onComplete,
@@ -48,7 +49,8 @@ function MapCircleDrawer({
 }) {
   const map = useMap();
   const previewRef = useRef<L.Circle | null>(null);
-  const centerRef = useRef<L.LatLng | null>(null);
+  const pointARef = useRef<L.LatLng | null>(null);
+  const pointBRef = useRef<L.LatLng | null>(null);
   const draggingRef = useRef(false);
 
   useEffect(() => {
@@ -57,7 +59,8 @@ function MapCircleDrawer({
         map.removeLayer(previewRef.current);
         previewRef.current = null;
       }
-      centerRef.current = null;
+      pointARef.current = null;
+      pointBRef.current = null;
       draggingRef.current = false;
       map.dragging.enable();
       map.getContainer().classList.remove("cursor-crosshair");
@@ -66,14 +69,34 @@ function MapCircleDrawer({
 
     map.getContainer().classList.add("cursor-crosshair");
 
+    const circleStyle = {
+      color: "#6eb8c0",
+      fillColor: "#6eb8c0",
+      fillOpacity: 0.12,
+      weight: 2,
+    } as const;
+
     const cleanupPreview = () => {
       if (previewRef.current) {
         map.removeLayer(previewRef.current);
         previewRef.current = null;
       }
-      centerRef.current = null;
+      pointARef.current = null;
+      pointBRef.current = null;
       draggingRef.current = false;
       map.dragging.enable();
+    };
+
+    const updatePreviewFromAB = (a: L.LatLng, b: L.LatLng) => {
+      const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+      const halfChord = map.distance(a, b) / 2;
+      const r = Math.min(MAX_DRAW_RADIUS_M, Math.max(MIN_DRAW_RADIUS_M, halfChord));
+      if (!previewRef.current) {
+        previewRef.current = L.circle(mid, { radius: r, ...circleStyle }).addTo(map);
+      } else {
+        previewRef.current.setLatLng(mid);
+        previewRef.current.setRadius(r);
+      }
     };
 
     const onDown = (e: L.LeafletMouseEvent) => {
@@ -81,39 +104,40 @@ function MapCircleDrawer({
       const t = e.originalEvent.target as HTMLElement | null;
       if (t?.closest?.(".leaflet-marker-icon,.leaflet-popup")) return;
 
-      centerRef.current = e.latlng;
+      pointARef.current = e.latlng;
+      pointBRef.current = e.latlng;
       draggingRef.current = true;
       if (previewRef.current) map.removeLayer(previewRef.current);
-      previewRef.current = L.circle(e.latlng, {
-        radius: MIN_DRAW_RADIUS_M,
-        color: "#6eb8c0",
-        fillColor: "#6eb8c0",
-        fillOpacity: 0.12,
-        weight: 2,
-      }).addTo(map);
+      previewRef.current = null;
       map.dragging.disable();
+      L.DomEvent.stopPropagation(e.originalEvent);
     };
 
     const onMove = (e: L.LeafletMouseEvent) => {
-      if (!draggingRef.current || !centerRef.current || !previewRef.current) return;
-      const m = map.distance(centerRef.current, e.latlng);
-      previewRef.current.setRadius(Math.min(MAX_DRAW_RADIUS_M, Math.max(MIN_DRAW_RADIUS_M, m)));
+      if (!draggingRef.current || !pointARef.current) return;
+      pointBRef.current = e.latlng;
+      updatePreviewFromAB(pointARef.current, pointBRef.current);
     };
 
     const finish = () => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
       map.dragging.enable();
-      const c = centerRef.current;
-      const p = previewRef.current;
-      if (!c || !p) return;
-      const r = p.getRadius();
-      map.removeLayer(p);
-      previewRef.current = null;
-      centerRef.current = null;
-      if (r >= MIN_DRAW_RADIUS_M) {
-        onComplete(c.lat, c.lng, Math.min(r, MAX_DRAW_RADIUS_M));
+      const a = pointARef.current;
+      const b = pointBRef.current ?? a;
+      if (!a || !b) {
+        cleanupPreview();
+        return;
       }
+      const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+      const r = Math.min(MAX_DRAW_RADIUS_M, Math.max(MIN_DRAW_RADIUS_M, map.distance(a, b) / 2));
+      if (previewRef.current) {
+        map.removeLayer(previewRef.current);
+        previewRef.current = null;
+      }
+      pointARef.current = null;
+      pointBRef.current = null;
+      onComplete(mid.lat, mid.lng, r);
     };
 
     map.on("mousedown", onDown);
@@ -126,7 +150,14 @@ function MapCircleDrawer({
       map.off("mousemove", onMove);
       map.off("mouseup", finish);
       map.off("mouseleave", finish);
-      cleanupPreview();
+      if (previewRef.current) {
+        map.removeLayer(previewRef.current);
+        previewRef.current = null;
+      }
+      pointARef.current = null;
+      pointBRef.current = null;
+      draggingRef.current = false;
+      map.dragging.enable();
       map.getContainer().classList.remove("cursor-crosshair");
     };
   }, [active, map, onComplete]);
