@@ -71,7 +71,7 @@ export async function generateFromPrompt(prompt: string): Promise<GeneratedBlogP
 
   const text = response.choices[0]?.message?.content?.trim();
   if (!text) throw new Error("Empty response from OpenAI");
-  return parseAIResponse(text);
+  return parseGeneratedBlogJson(text);
 }
 
 export async function generateFromUrl(url: string, extractedContent: string, _ogImage?: string | null): Promise<GeneratedBlogPost> {
@@ -96,10 +96,11 @@ ${extractedContent.slice(0, 8000)}`,
 
   const text = response.choices[0]?.message?.content?.trim();
   if (!text) throw new Error("Empty response from OpenAI");
-  return parseAIResponse(text);
+  return parseGeneratedBlogJson(text);
 }
 
-function parseAIResponse(text: string): GeneratedBlogPost {
+/** Parse JSON blog output from OpenAI (used by admin generator and SEO agent). */
+export function parseGeneratedBlogJson(text: string): GeneratedBlogPost {
   let cleaned = text;
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");

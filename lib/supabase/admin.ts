@@ -1,5 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
-import type { BlogPostKind, BlogPostRow, ListingRow, SellSubmissionRow } from "@/lib/types/db";
+import type {
+  BlogPostKind,
+  BlogPostRow,
+  ListingRow,
+  SeoAgentActivityLevel,
+  SeoAgentActivityRow,
+  SellSubmissionRow,
+} from "@/lib/types/db";
 
 const AUTOGEN_BLOG_KINDS: BlogPostKind[] = ["curated", "new_listing", "price_drop"];
 
@@ -77,6 +84,67 @@ export async function adminListAutogenBlogPosts(
   return (data ?? []) as BlogPostRow[];
 }
 
-export function isAutogenBlogKind(kind: string | null | undefined): kind is BlogPostKind {
+export function isAutogenBlogKind(
+  kind: string | null | undefined,
+): kind is "curated" | "new_listing" | "price_drop" {
   return kind === "curated" || kind === "new_listing" || kind === "price_drop";
+}
+
+export type NewSeoAgentActivityInput = {
+  run_id: string;
+  level: SeoAgentActivityLevel;
+  kind: string;
+  summary: string;
+  detail?: Record<string, unknown> | null;
+};
+
+export async function adminInsertSeoAgentActivity(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  input: NewSeoAgentActivityInput,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const { data, error } = await client
+    .from("seo_agent_activity")
+    .insert({
+      run_id: input.run_id,
+      level: input.level,
+      kind: input.kind,
+      summary: input.summary,
+      detail: input.detail ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "Insert failed" };
+  }
+  return { ok: true, id: (data as { id: string }).id };
+}
+
+export async function adminListSeoAgentActivity(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  opts?: { limit?: number; run_id?: string | null },
+): Promise<SeoAgentActivityRow[]> {
+  const limit = Math.min(500, Math.max(1, opts?.limit ?? 100));
+  let q = client.from("seo_agent_activity").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (opts?.run_id) {
+    q = q.eq("run_id", opts.run_id);
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as SeoAgentActivityRow[];
+}
+
+export async function adminGetLatestSeoAgentRunSummary(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+): Promise<{ run_id: string; created_at: string } | null> {
+  const { data, error } = await client
+    .from("seo_agent_activity")
+    .select("run_id, created_at")
+    .eq("kind", "run_start")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return data as { run_id: string; created_at: string };
 }

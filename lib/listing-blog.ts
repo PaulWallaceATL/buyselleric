@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { siteConfig } from "@/lib/config";
 import { generateFromPrompt } from "@/lib/ai-blog";
 import { formatPriceUsd, slugify } from "@/lib/format";
+import { defaultSocialImage } from "@/lib/metadata";
 import { truncateMetaDescription } from "@/lib/seo";
 import type { BlogPostKind, MlsListingRow } from "@/lib/types/db";
 import { adminListBlogPosts, createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -36,7 +37,7 @@ function trimDescription(text: string, max = 1200): string {
   return `${t.slice(0, max)}…`;
 }
 
-async function allocateUniqueSlug(client: AdminClient, baseSlug: string): Promise<string> {
+export async function allocateUniqueSlug(client: AdminClient, baseSlug: string): Promise<string> {
   const existing = await adminListBlogPosts(client);
   const slugs = new Set(existing.map((p) => p.slug));
   let s = baseSlug || "listing";
@@ -53,6 +54,7 @@ const POST_KIND_LABEL: Partial<Record<BlogPostKind, string>> = {
   new_listing: "new-to-market listing",
   price_drop: "listing with a recent price reduction",
   manual: "listing",
+  agent_seo: "AI SEO article",
 };
 
 function buildUserPrompt(
@@ -103,8 +105,9 @@ export async function insertDraftFromListing(params: {
     const baseSlug = generated.slug?.trim() || slugify(generated.title);
     const slug = await allocateUniqueSlug(client, slugify(baseSlug));
 
-    const cover =
-      Array.isArray(row.image_urls) && row.image_urls.length > 0 ? String(row.image_urls[0]) : null;
+    const coverRaw =
+      Array.isArray(row.image_urls) && row.image_urls.length > 0 ? String(row.image_urls[0]).trim() : "";
+    const cover = coverRaw.length > 0 ? coverRaw : defaultSocialImage.url;
 
     const { data, error } = await client
       .from("blog_posts")

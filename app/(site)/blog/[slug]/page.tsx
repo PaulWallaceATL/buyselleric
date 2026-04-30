@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BlogCoverImage } from "@/components/blog-cover-image";
+import { BlogToc } from "@/components/blog-toc";
 import { BlogViewTracker } from "@/components/blog-view-tracker";
 import { siteConfig } from "@/lib/config";
 import { defaultSocialImage } from "@/lib/metadata";
 import { getPublishedPostBySlug } from "@/lib/blog-queries";
-import { renderBlogBodyMarkdown } from "@/lib/blog-markdown";
+import { extractBlogToc, renderBlogBodyMarkdown } from "@/lib/blog-markdown";
 import { absoluteResourceUrl, truncateMetaDescription } from "@/lib/seo";
 import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
@@ -78,6 +79,8 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
     ...new Set(post.seo_keywords?.map((k) => k.replace(/^#+/, "").trim()).filter(Boolean) ?? []),
   ];
 
+  const tocItems = extractBlogToc(post.body);
+
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -105,63 +108,72 @@ export default async function BlogPostPage({ params }: Props): Promise<ReactNode
       />
       <BlogViewTracker slug={slug} />
 
-      <article className={`${siteContainer} max-w-3xl`}>
-        <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-          ← Back to blog
-        </Link>
+      <div className={`${siteContainer} lg:max-w-6xl`}>
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_13.5rem] lg:items-start lg:gap-10">
+          <article className="min-w-0 max-w-3xl">
+            <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              ← Back to blog
+            </Link>
 
-        <h1 className="mt-6 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-          {post.title}
-        </h1>
+            <h1 className="mt-6 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
+              {post.title}
+            </h1>
 
-        <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground">
-          <span>{post.author}</span>
-          {post.published_at && (
-            <>
-              <span>·</span>
-              <time dateTime={post.published_at}>
-                {new Date(post.published_at).toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </time>
-            </>
-          )}
-        </div>
+            <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground">
+              <span>{post.author}</span>
+              {post.published_at && (
+                <>
+                  <span>·</span>
+                  <time dateTime={post.published_at}>
+                    {new Date(post.published_at).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </time>
+                </>
+              )}
+            </div>
 
-        {displayKeywords.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {displayKeywords.map((kw) => (
-              <span key={kw} className="rounded-full bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
-                {kw}
-              </span>
-            ))}
-          </div>
-        )}
+            {displayKeywords.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {displayKeywords.map((kw) => (
+                  <span
+                    key={kw}
+                    className="rounded-full bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground"
+                  >
+                    {kw}
+                  </span>
+                ))}
+              </div>
+            )}
 
-        {post.cover_image_url?.trim() ? (
-          <div className="relative mt-8 aspect-[21/9] w-full overflow-hidden rounded-2xl bg-muted sm:rounded-3xl">
-            <BlogCoverImage
-              src={post.cover_image_url}
-              alt={post.title}
-              className="absolute inset-0 h-full w-full object-cover"
-              priority
+            {post.cover_image_url?.trim() ? (
+              <div className="relative mt-8 aspect-[21/9] w-full overflow-hidden rounded-2xl bg-muted sm:rounded-3xl">
+                <BlogCoverImage
+                  src={post.cover_image_url}
+                  alt={post.title}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  priority
+                />
+              </div>
+            ) : null}
+
+            <div
+              className="prose prose-lg mt-10 max-w-none space-y-6 [--tw-prose-body:var(--muted-foreground)] [--tw-prose-headings:var(--foreground)] [--tw-prose-bold:var(--foreground)] [--tw-prose-bullets:var(--muted-foreground)] [--tw-prose-counters:var(--muted-foreground)] [--tw-prose-quotes:var(--foreground)] [--tw-prose-quote-borders:var(--border)] [--tw-prose-hr:var(--border)] prose-headings:tracking-tight prose-headings:scroll-mt-28 prose-h1:scroll-mt-28 prose-h2:mb-4 prose-h2:mt-10 prose-h3:mb-3 prose-h3:mt-8 prose-a:text-ring prose-a:underline-offset-4 prose-p:mb-4 prose-p:mt-0 prose-p:last:mb-0 prose-ul:my-4 prose-ol:my-4 prose-li:my-1 [&_.blog-deck]:not-prose [&_.blog-deck]:mb-3 [&_.blog-deck]:mt-10 [&_.blog-deck]:text-foreground"
+              dangerouslySetInnerHTML={{ __html: renderBlogBodyMarkdown(post.body) }}
             />
-          </div>
-        ) : null}
 
-        <div
-          className="prose prose-lg mt-10 max-w-none space-y-6 [--tw-prose-body:var(--muted-foreground)] [--tw-prose-headings:var(--foreground)] [--tw-prose-bold:var(--foreground)] [--tw-prose-bullets:var(--muted-foreground)] [--tw-prose-counters:var(--muted-foreground)] [--tw-prose-quotes:var(--foreground)] [--tw-prose-quote-borders:var(--border)] [--tw-prose-hr:var(--border)] prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-h2:mb-4 prose-h2:mt-10 prose-h3:mb-3 prose-h3:mt-8 prose-a:text-ring prose-a:underline-offset-4 prose-p:mb-4 prose-p:mt-0 prose-p:last:mb-0 prose-ul:my-4 prose-ol:my-4 prose-li:my-1 [&_.blog-deck]:not-prose [&_.blog-deck]:mb-3 [&_.blog-deck]:mt-10 [&_.blog-deck]:text-foreground"
-          dangerouslySetInnerHTML={{ __html: renderBlogBodyMarkdown(post.body) }}
-        />
+            <div className="mt-16 border-t border-border pt-8">
+              <Link href="/blog" className="text-sm font-semibold text-ring underline-offset-4 hover:underline">
+                ← More articles
+              </Link>
+            </div>
+          </article>
 
-        <div className="mt-16 border-t border-border pt-8">
-          <Link href="/blog" className="text-sm font-semibold text-ring underline-offset-4 hover:underline">
-            ← More articles
-          </Link>
+          <BlogToc items={tocItems} />
         </div>
-      </article>
+      </div>
     </main>
   );
 }

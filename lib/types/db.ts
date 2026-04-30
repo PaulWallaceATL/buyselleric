@@ -24,7 +24,31 @@ export interface ListingRow {
   updated_at: string;
 }
 
-export type BlogPostKind = "manual" | "curated" | "new_listing" | "price_drop";
+export type BlogPostKind = "manual" | "curated" | "new_listing" | "price_drop" | "agent_seo";
+
+export type SeoAgentActivityLevel = "info" | "warn" | "error";
+
+export type SeoAgentActivityKind =
+  | "run_start"
+  | "run_end"
+  | "skipped"
+  | "web_research"
+  | "topic_selected"
+  | "blog_draft_created"
+  | "listing_post_created"
+  | "listing_post_skipped"
+  | "cover_generated"
+  | "error_step";
+
+export interface SeoAgentActivityRow {
+  id: string;
+  created_at: string;
+  run_id: string;
+  level: SeoAgentActivityLevel;
+  kind: SeoAgentActivityKind | string;
+  summary: string;
+  detail: Record<string, unknown> | null;
+}
 
 export interface BlogPostRow {
   id: string;

@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/listing-blog",
       "schedule": "15 14 * * *"
+    },
+    {
+      "path": "/api/cron/seo-agent",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
