@@ -284,8 +284,7 @@ export async function adminApproveAutogenBlogPost(
   revalidatePath("/blog");
   revalidatePath(`/blog/${post.slug}`);
   revalidatePath("/admin/blog");
-  revalidatePath("/admin/blog/autogen");
-  redirect("/admin/blog/autogen");
+  redirect("/admin/blog");
 }
 
 export async function adminRejectAutogenBlogPost(
@@ -322,8 +321,7 @@ export async function adminRejectAutogenBlogPost(
   revalidatePath("/blog");
   revalidatePath(`/blog/${slug}`);
   revalidatePath("/admin/blog");
-  revalidatePath("/admin/blog/autogen");
-  redirect("/admin/blog/autogen");
+  redirect("/admin/blog");
 }
 
 export async function adminDeleteBlogPost(id: string): Promise<AdminBlogFormState> {

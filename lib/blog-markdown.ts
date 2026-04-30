@@ -1,31 +1,59 @@
 import { slugify } from "@/lib/format";
 
-/** Strip trailing “#tag #tag2” spam (whole lines or tail of last line) from article bodies. */
+/**
+ * Strip ALL hashtag tokens from article bodies (not just trailing spam) while leaving
+ * markdown headings (`#`, `##`, `###` followed by a space at start of line) intact.
+ *
+ * Removes:
+ *   - whole "#tag #tag2 #tag3" lines anywhere in the body
+ *   - trailing "... #tag #tag2" tails
+ *   - inline " #tag" tokens between words
+ */
 export function stripHashtagSpamFromMarkdownBody(md: string): string {
-  let s = md.replace(/\r\n/g, "\n").trimEnd();
-  while (s.length > 0) {
-    const lastNl = s.lastIndexOf("\n");
-    const lastLine = (lastNl === -1 ? s : s.slice(lastNl + 1)).trim();
-    if (/^(?:#[A-Za-z0-9_-]+\s*)+$/.test(lastLine)) {
-      s = lastNl === -1 ? "" : s.slice(0, lastNl).trimEnd();
+  const out: string[] = [];
+  for (const rawLine of md.replace(/\r\n/g, "\n").split("\n")) {
+    const line = rawLine;
+    const trimmed = line.trim();
+    if (/^(?:#[A-Za-z0-9_-]+\s*)+$/.test(trimmed)) continue;
+    if (/^#{1,6}\s/.test(trimmed)) {
+      out.push(line);
       continue;
     }
-    break;
+    out.push(line.replace(/(^|\s)#[A-Za-z0-9_-]+(?=\s|$|[.,;:!?])/g, "$1").replace(/\s{2,}/g, " ").trimEnd());
   }
-  s = s.replace(/(?:\s+#[A-Za-z0-9_-]+)+\s*$/g, "").trimEnd();
-  return s.trim();
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function applyInlineMarkdown(text: string): string {
   return text
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, alt: string, src: string) => {
+      const safeAlt = escapeHtml(alt);
+      const safeSrc = escapeHtml(src);
+      return `<img src="${safeSrc}" alt="${safeAlt}" loading="lazy" class="my-6 h-auto w-full rounded-2xl" />`;
+    })
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>');
 }
 
+/** `## Heading {#explicit-id}` → split into label + optional explicit id. */
+function parseExplicitHeadingId(raw: string): { label: string; explicitId: string | null } {
+  const m = raw.match(/^(.*?)\s*\{#([A-Za-z][A-Za-z0-9_-]*)\}\s*$/);
+  if (m) return { label: m[1]!.trim(), explicitId: m[2]! };
+  return { label: raw.trim(), explicitId: null };
+}
+
 /** Plain label from a markdown heading line (for TOC + stable ids). */
 export function stripHeadingMarkdownSource(raw: string): string {
-  return raw
+  const { label } = parseExplicitHeadingId(raw);
+  return label
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/\*(.+?)\*/g, "$1")
     .replace(/\[(.+?)\]\(.+?\)/g, "$1")
@@ -46,7 +74,8 @@ export function prepareBlogBodyMarkdown(rawMd: string): string {
 }
 
 export function assignHeadingId(rawHeadingInner: string, usedIds: Set<string>): string {
-  const base = slugify(stripHeadingMarkdownSource(rawHeadingInner)) || "section";
+  const { explicitId } = parseExplicitHeadingId(rawHeadingInner);
+  const base = explicitId || slugify(stripHeadingMarkdownSource(rawHeadingInner)) || "section";
   let id = base;
   let n = 2;
   while (usedIds.has(id)) {
@@ -55,6 +84,58 @@ export function assignHeadingId(rawHeadingInner: string, usedIds: Set<string>): 
   }
   usedIds.add(id);
   return id;
+}
+
+/** Inner HTML to render for a heading line (label only, drops the {#id} suffix). */
+function renderHeadingLabelMarkdown(rawHeadingInner: string): string {
+  const { label } = parseExplicitHeadingId(rawHeadingInner);
+  return applyInlineMarkdown(label);
+}
+
+const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{6,32}$/;
+
+function youtubeIdFromUrl(url: string): string | null {
+  try {
+    const u = new URL(url.trim());
+    if (u.hostname === "youtu.be") {
+      const id = u.pathname.replace(/^\//, "");
+      return YOUTUBE_ID_RE.test(id) ? id : null;
+    }
+    if (/(^|\.)youtube\.com$/.test(u.hostname)) {
+      if (u.pathname.startsWith("/embed/")) {
+        const id = u.pathname.replace(/^\/embed\//, "").split("/")[0]!;
+        return YOUTUBE_ID_RE.test(id) ? id : null;
+      }
+      const v = u.searchParams.get("v");
+      if (v && YOUTUBE_ID_RE.test(v)) return v;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function vimeoIdFromUrl(url: string): string | null {
+  try {
+    const u = new URL(url.trim());
+    if (!/(^|\.)vimeo\.com$/.test(u.hostname)) return null;
+    const seg = u.pathname.replace(/^\//, "").split("/")[0] ?? "";
+    return /^\d{6,}$/.test(seg) ? seg : null;
+  } catch {
+    return null;
+  }
+}
+
+function videoEmbedHtml(rawUrl: string): string | null {
+  const yt = youtubeIdFromUrl(rawUrl);
+  if (yt) {
+    return `<div class="my-8 aspect-video w-full overflow-hidden rounded-2xl bg-muted"><iframe src="https://www.youtube-nocookie.com/embed/${yt}" title="YouTube video" loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen class="h-full w-full"></iframe></div>`;
+  }
+  const v = vimeoIdFromUrl(rawUrl);
+  if (v) {
+    return `<div class="my-8 aspect-video w-full overflow-hidden rounded-2xl bg-muted"><iframe src="https://player.vimeo.com/video/${v}" title="Vimeo video" loading="lazy" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen class="h-full w-full"></iframe></div>`;
+  }
+  return null;
 }
 
 export type BlogTocItem = { depth: 2 | 3; text: string; id: string };
@@ -150,7 +231,7 @@ export function renderBlogBodyMarkdown(rawMd: string): string {
       flushParagraphs();
       const inner = h3[1]!;
       const id = assignHeadingId(inner, usedIds);
-      html.push(`<h3 id="${escapeHtmlAttr(id)}">${applyInlineMarkdown(inner)}</h3>`);
+      html.push(`<h3 id="${escapeHtmlAttr(id)}">${renderHeadingLabelMarkdown(inner)}</h3>`);
       i++;
       continue;
     }
@@ -158,7 +239,7 @@ export function renderBlogBodyMarkdown(rawMd: string): string {
       flushParagraphs();
       const inner = h2[1]!;
       const id = assignHeadingId(inner, usedIds);
-      html.push(`<h2 id="${escapeHtmlAttr(id)}">${applyInlineMarkdown(inner)}</h2>`);
+      html.push(`<h2 id="${escapeHtmlAttr(id)}">${renderHeadingLabelMarkdown(inner)}</h2>`);
       i++;
       continue;
     }
@@ -166,7 +247,30 @@ export function renderBlogBodyMarkdown(rawMd: string): string {
       flushParagraphs();
       const inner = h1[1]!;
       const id = assignHeadingId(inner, usedIds);
-      html.push(`<h1 id="${escapeHtmlAttr(id)}">${applyInlineMarkdown(inner)}</h1>`);
+      html.push(`<h1 id="${escapeHtmlAttr(id)}">${renderHeadingLabelMarkdown(inner)}</h1>`);
+      i++;
+      continue;
+    }
+
+    const videoMatch = line.match(/^@video\s+(\S+)\s*$/i);
+    if (videoMatch) {
+      const embed = videoEmbedHtml(videoMatch[1]!);
+      if (embed) {
+        flushParagraphs();
+        html.push(embed);
+        i++;
+        continue;
+      }
+    }
+
+    const standaloneImage = line.match(/^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)\s*$/);
+    if (standaloneImage) {
+      flushParagraphs();
+      const alt = escapeHtml(standaloneImage[1]!);
+      const src = escapeHtml(standaloneImage[2]!);
+      html.push(
+        `<figure class="my-8"><img src="${src}" alt="${alt}" loading="lazy" class="h-auto w-full rounded-2xl" />${alt ? `<figcaption class="mt-2 text-center text-sm text-muted-foreground">${alt}</figcaption>` : ""}</figure>`,
+      );
       i++;
       continue;
     }
@@ -182,6 +286,35 @@ export function renderBlogBodyMarkdown(rawMd: string): string {
         i++;
       }
       html.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    if (/^\d+\.\s/.test(line)) {
+      flushParagraphs();
+      const items: string[] = [];
+      while (i < lines.length) {
+        const L = lines[i]!.trim();
+        if (!L) break;
+        if (!/^\d+\.\s/.test(L)) break;
+        items.push(`<li>${applyInlineMarkdown(L.replace(/^\d+\.\s+/, ""))}</li>`);
+        i++;
+      }
+      html.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    if (/^\s*>\s?/.test(line)) {
+      flushParagraphs();
+      const text = line.replace(/^\s*>\s?/, "");
+      html.push(`<blockquote>${applyInlineMarkdown(text)}</blockquote>`);
+      i++;
+      continue;
+    }
+
+    if (/^---+$/.test(line) || /^\*\*\*+$/.test(line)) {
+      flushParagraphs();
+      html.push("<hr />");
+      i++;
       continue;
     }
 

@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useRef } from "react";
 import { adminSaveBlogPost, type AdminBlogFormState } from "@/app/actions/admin-blog";
+import { AdminBlogBodyEditor } from "@/components/admin-blog-body-editor";
 import type { BlogPostRow } from "@/lib/types/db";
 
 const label = "mb-1 block text-sm font-medium text-foreground";
@@ -25,7 +26,7 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
   const excerptRef = useRef<HTMLTextAreaElement>(null);
   const metaRef = useRef<HTMLTextAreaElement>(null);
   const keywordsRef = useRef<HTMLInputElement>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [bodyValue, setBodyValue] = useState<string>(post?.body ?? "");
   const coverRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,7 +56,7 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
       if (titleRef.current) titleRef.current.value = data.title || "";
       if (slugRef.current) slugRef.current.value = data.slug || "";
       if (excerptRef.current) excerptRef.current.value = data.excerpt || "";
-      if (bodyRef.current) bodyRef.current.value = data.body || "";
+      setBodyValue(data.body || "");
 
       if (data.cover_image_url && coverRef.current) {
         coverRef.current.value = data.cover_image_url;
@@ -282,17 +283,13 @@ export function AdminBlogForm({ post }: { post?: BlogPostRow }) {
         </div>
 
         <div>
-          <label htmlFor="body" className={label}>Body (Markdown supported)</label>
-          <textarea
-            ref={bodyRef}
-            id="body"
-            name="body"
-            data-lenis-prevent
-            defaultValue={post?.body ?? ""}
-            className="block w-full rounded-lg border border-border bg-muted/20 px-3 py-2.5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-            style={{ height: "500px", overflowY: "scroll", touchAction: "pan-y" }}
-            required
-          />
+          <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
+            <label htmlFor="body" className={label}>Body</label>
+            <p className="text-xs text-muted-foreground">
+              Use the toolbar for headings, anchors, images, and video embeds. Hashtags are stripped on save.
+            </p>
+          </div>
+          <AdminBlogBodyEditor key={post?.id ?? "new"} name="body" defaultValue={bodyValue} required />
         </div>
 
         <div className="flex items-center gap-3">

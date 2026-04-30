@@ -6,13 +6,15 @@ import { getSeoAgentOpenAI } from "@/lib/seo-agent/openai-client";
 import type { SeoResearchMemo } from "@/lib/seo-agent/research";
 
 const ARTICLE_INSTRUCTIONS = `You are a professional real estate blog writer. Output ONLY valid JSON (no markdown fences) with keys:
-title, slug (lowercase-kebab-case), excerpt, meta_description (max 155 chars for Google), body (markdown with multiple ## and ### section headings, no hashtag spam), seo_keywords (plain strings, no #).
+title, slug (lowercase-kebab-case), excerpt, meta_description (max 155 chars for Google), body (markdown with multiple ## and ### section headings), seo_keywords (plain strings).
 
 Rules:
 - Professional, helpful, locally relevant to ${siteConfig.primaryMarket}.
 - Do not invent statistics; if uncertain, speak generally.
 - End with a short CTA to contact ${siteConfig.agentName}.
-- Prefer ## and ### headings (clear hierarchy for a table of contents).`;
+- Prefer ## and ### headings (clear hierarchy for a table of contents). You MAY use the explicit anchor syntax "## Section title {#anchor-id}" for sections worth linking to from a TOC.
+- ABSOLUTELY NO hashtags anywhere — never write a "#word" token in the title, excerpt, meta_description, or body (no inline like "love #atlanta", no trailing "#tag #tag2" lists, no social-style hashtag groups). Markdown headings (lines that start with "#" or "##" followed by a space) are the ONLY allowed use of "#". If you would otherwise write a hashtag, just use the plain word.
+- seo_keywords must be plain words or short phrases — no "#" prefix.`;
 
 /** Second step: longform JSON article from research memo (no web search). */
 export async function generateSeoArticleFromResearch(memo: SeoResearchMemo): Promise<{

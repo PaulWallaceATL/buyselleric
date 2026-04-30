@@ -39,8 +39,9 @@ SEO requirements:
 - Body in markdown with clear H2/H3 heading structure (one H1 in the body is OK if it matches the topic; prefer H2 for sections)
 - Naturally incorporate relevant real estate keywords throughout
 - Include a brief call-to-action mentioning ${siteConfig.agentName} near the end
-- Do NOT put hashtags (#keyword) or hashtag lists in the article body. Do NOT end the body with social-style #tags.
-- seo_keywords must be plain words or short phrases only — no # prefix, no duplicates
+- ABSOLUTELY NO hashtags anywhere — never write a "#word" token in the title, excerpt, meta_description, or body (whether inline like "great #atlanta neighborhood" or as a trailing list of #tags). Markdown headings (lines that start with "#" or "##" followed by a space) are the ONLY allowed use of "#". If you would otherwise write a hashtag, just use the plain word.
+- seo_keywords must be plain words or short phrases only — no "#" prefix, no duplicates
+- For longform sections you may use explicit anchor ids on headings via the syntax "## Section title {#anchor-id}" when an internal table of contents would help readers; only include alphanumerics, underscores, and dashes inside the braces
 
 Output format: Respond ONLY with valid JSON matching this exact schema:
 {
@@ -126,11 +127,17 @@ export function parseGeneratedBlogJson(text: string): GeneratedBlogPost {
     ),
   ];
 
+  const cleanInline = (raw: string): string =>
+    raw
+      .replace(/(^|\s)#[A-Za-z0-9_-]+(?=\s|$|[.,;:!?])/g, "$1")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
   return {
-    title: String(parsed.title),
+    title: cleanInline(String(parsed.title)),
     slug: String(parsed.slug || ""),
-    excerpt,
-    meta_description: truncateMetaDescription(metaRaw),
+    excerpt: cleanInline(excerpt),
+    meta_description: cleanInline(truncateMetaDescription(metaRaw)),
     body: stripHashtagSpamFromMarkdownBody(String(parsed.body)),
     seo_keywords,
   };
