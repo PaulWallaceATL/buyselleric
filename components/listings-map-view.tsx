@@ -26,12 +26,20 @@ const ListingsMap = dynamic(() => import("@/components/listings-map"), {
 
 export function ListingsMapView({
   listings,
+  mapListings,
   baseParams,
   appliedPolygon,
   fallbackCenter,
   mapPolygonWideFetch,
 }: {
+  /** Listings on the current page — drives the cards underneath the map. */
   listings: UnifiedListing[];
+  /**
+   * Full result set for pin rendering — uses leaflet.markercluster so pins for
+   * every result show on the map, not just the current page. Falls back to
+   * `listings` when not provided.
+   */
+  mapListings?: UnifiedListing[] | undefined;
   baseParams: Record<string, string>;
   appliedPolygon?: ReadonlyArray<MapPolygonVertex> | null;
   fallbackCenter: { lat: number; lng: number };
@@ -106,7 +114,8 @@ export function ListingsMapView({
     });
   }, [baseParams, router]);
 
-  const pins = listings
+  const pinSource = mapListings ?? listings;
+  const pins = pinSource
     .filter((l) => l.latitude != null && l.longitude != null)
     .map((l) => ({
       id: l.id,
@@ -120,9 +129,10 @@ export function ListingsMapView({
       bedrooms: l.bedrooms,
       bathrooms: l.bathrooms,
       image_url: l.image_urls[0] ?? null,
+      feed: l.feed,
     }));
 
-  const missingPins = listings.length > 0 && pins.length === 0;
+  const missingPins = pinSource.length > 0 && pins.length === 0;
   const hasPoly = !!appliedPolygon && appliedPolygon.length >= 3;
   const zipApproxNoPins = hasPoly && !!mapPolygonWideFetch && missingPins;
 

@@ -180,3 +180,58 @@ body {
 .listings-map-leaflet .map-pin-popup__inner .map-pin-popup-muted {
   color: var(--muted-foreground) !important;
 }
+
+/* Per-pin source badge (top-right of tooltip + popup). */
+.listings-map-leaflet .map-pin-feed-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 18%);
+  pointer-events: none;
+}
+
+/* Numbered cluster bubbles — Zillow-style stacked-pin indicator. */
+.listings-map-leaflet .map-cluster-bubble-wrap {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.listings-map-leaflet .map-cluster-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--ring);
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  border: 3px solid rgb(255 255 255 / 90%);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 28%);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.listings-map-leaflet .map-cluster-bubble--medium {
+  font-size: 14px;
+}
+
+.listings-map-leaflet .map-cluster-bubble--large {
+  font-size: 16px;
+}
+
+.listings-map-leaflet .map-cluster-bubble-wrap:hover .map-cluster-bubble {
+  transform: scale(1.05);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 36%);
+}

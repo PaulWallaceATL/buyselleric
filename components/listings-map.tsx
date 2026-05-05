@@ -1,11 +1,15 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
+import "leaflet.markercluster";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { MapContainer, Marker, Polygon, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
-import Link from "next/link";
+import { MapContainer, Polygon, TileLayer, useMap } from "react-leaflet";
+import { feedLabel } from "@/lib/feed-labels";
 import { formatPriceUsd } from "@/lib/format";
+import type { ListingFeed } from "@/lib/listings-queries";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { peekDrawViewport, type StoredDrawViewport } from "@/lib/listings-map-draw-storage";
 
@@ -43,6 +47,145 @@ export interface MapPin {
   bathrooms: number;
   /** First listing photo for hover preview */
   image_url?: string | null;
+  /** Source MLS / API the row came from — drives the per-pin source badge. */
+  feed?: ListingFeed | undefined;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function shortPrice(cents: number): string {
+  const dollars = Math.round(cents / 100);
+  if (dollars >= 1_000_000) {
+    const m = dollars / 1_000_000;
+    return `$${m >= 10 ? Math.round(m) : m.toFixed(1)}M`;
+  }
+  if (dollars >= 1_000) {
+    const k = dollars / 1_000;
+    return `$${k >= 100 ? Math.round(k) : Math.round(k)}K`;
+  }
+  return `$${dollars.toLocaleString("en-US")}`;
+}
+
+function buildTooltipHtml(pin: MapPin): string {
+  const feed = feedLabel(pin.feed);
+  const feedBadge = feed
+    ? `<span class="map-pin-feed-badge ${escapeHtml(feed.pillClass)}">${escapeHtml(feed.short)}</span>`
+    : "";
+  const img = pin.image_url
+    ? `<img src="${escapeHtml(pin.image_url)}" alt="" class="mb-1.5 h-20 w-full rounded-md object-cover" loading="lazy" />`
+    : "";
+  return `
+    <div class="map-pin-tooltip__inner relative max-w-[220px] rounded-lg border border-border bg-background px-2 py-2 shadow-lg">
+      ${feedBadge}
+      ${img}
+      <p class="text-xs font-semibold leading-snug line-clamp-2">${escapeHtml(pin.title)}</p>
+      <p class="text-sm font-bold">${escapeHtml(formatPriceUsd(pin.price_cents))}</p>
+    </div>
+  `;
+}
+
+function buildPopupHtml(pin: MapPin): string {
+  const feed = feedLabel(pin.feed);
+  const feedBadge = feed
+    ? `<span class="map-pin-feed-badge ${escapeHtml(feed.pillClass)}">${escapeHtml(feed.short)}</span>`
+    : "";
+  const img = pin.image_url
+    ? `<img src="${escapeHtml(pin.image_url)}" alt="" class="mb-2 h-24 w-full rounded-md object-cover" loading="lazy" />`
+    : "";
+  return `
+    <div class="map-pin-popup__inner relative min-w-[180px]">
+      ${feedBadge}
+      ${img}
+      <p class="text-sm font-semibold">${escapeHtml(pin.title)}</p>
+      <p class="text-base font-bold">${escapeHtml(formatPriceUsd(pin.price_cents))}</p>
+      <p class="map-pin-popup-muted text-xs">${pin.bedrooms} bd · ${pin.bathrooms} ba · ${escapeHtml(pin.city)}, ${escapeHtml(pin.state)}</p>
+      <a href="${escapeHtml(pin.href)}" class="mt-2 inline-block text-xs font-semibold text-ring underline underline-offset-2">View details →</a>
+    </div>
+  `;
+}
+
+/** Numbered cluster bubble, sized by child count. */
+function buildClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
+  const count = cluster.getChildCount();
+  let size = 36;
+  let bucket = "small";
+  if (count >= 100) {
+    size = 56;
+    bucket = "large";
+  } else if (count >= 20) {
+    size = 46;
+    bucket = "medium";
+  }
+  const display = count >= 1000 ? `${Math.round(count / 100) / 10}k` : count.toString();
+  return L.divIcon({
+    html: `<div class="map-cluster-bubble map-cluster-bubble--${bucket}"><span>${display}</span></div>`,
+    className: "map-cluster-bubble-wrap",
+    iconSize: [size, size],
+  });
+}
+
+/**
+ * Bridges React `pins` array → leaflet.markercluster, recreating layers when the
+ * pin set changes. Uses raw `L.marker` (not react-leaflet `<Marker>`) so all pins
+ * are managed by the cluster group, which handles spiderfy / unspiderfy and the
+ * Zillow-style numbered bubbles for stacked markers.
+ */
+function ClusterLayer({ pins }: { pins: MapPin[] }) {
+  const map = useMap();
+  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+
+  useEffect(() => {
+    const group = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      removeOutsideVisibleBounds: true,
+      zoomToBoundsOnClick: true,
+      maxClusterRadius: 60,
+      iconCreateFunction: buildClusterIcon,
+    });
+    map.addLayer(group);
+    clusterRef.current = group;
+    return () => {
+      map.removeLayer(group);
+      clusterRef.current = null;
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const group = clusterRef.current;
+    if (!group) return;
+    group.clearLayers();
+    if (pins.length === 0) return;
+
+    const markers: L.Marker[] = [];
+    for (const pin of pins) {
+      const marker = L.marker([pin.lat, pin.lng], {
+        icon,
+        title: `${pin.title} · ${shortPrice(pin.price_cents)}`,
+      });
+      marker.bindTooltip(buildTooltipHtml(pin), {
+        direction: "top",
+        offset: [0, -36],
+        opacity: 1,
+        className: "map-pin-tooltip",
+      });
+      marker.bindPopup(buildPopupHtml(pin), {
+        maxWidth: 240,
+        autoPanPaddingTopLeft: [20, 20],
+      });
+      markers.push(marker);
+    }
+    group.addLayers(markers);
+  }, [pins]);
+
+  return null;
 }
 
 function strokeLengthM(map: L.Map, ring: L.LatLng[]): number {
@@ -313,49 +456,7 @@ export default function ListingsMap({
         onComplete={onComplete}
         onStrokeRejected={onStrokeRejected}
       />
-      {pins.map((pin) => (
-        <Marker key={pin.id} position={[pin.lat, pin.lng]} icon={icon}>
-          <Tooltip direction="top" offset={[0, -36]} opacity={1} className="map-pin-tooltip">
-            <div className="map-pin-tooltip__inner max-w-[200px] rounded-lg border border-border bg-background px-2 py-2 shadow-lg">
-              {pin.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element -- remote MLS URLs; Leaflet tooltip context
-                <img
-                  src={pin.image_url}
-                  alt=""
-                  className="mb-1.5 h-20 w-full rounded-md object-cover"
-                  loading="lazy"
-                />
-              ) : null}
-              <p className="text-xs font-semibold leading-snug line-clamp-2">{pin.title}</p>
-              <p className="text-sm font-bold">{formatPriceUsd(pin.price_cents)}</p>
-            </div>
-          </Tooltip>
-          <Popup>
-            <div className="map-pin-popup__inner min-w-[180px]">
-              {pin.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={pin.image_url}
-                  alt=""
-                  className="mb-2 h-24 w-full rounded-md object-cover"
-                  loading="lazy"
-                />
-              ) : null}
-              <p className="text-sm font-semibold">{pin.title}</p>
-              <p className="text-base font-bold">{formatPriceUsd(pin.price_cents)}</p>
-              <p className="map-pin-popup-muted text-xs">
-                {pin.bedrooms} bd · {pin.bathrooms} ba · {pin.city}, {pin.state}
-              </p>
-              <Link
-                href={pin.href}
-                className="mt-2 inline-block text-xs font-semibold text-ring underline underline-offset-2"
-              >
-                View details →
-              </Link>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      <ClusterLayer pins={pins} />
     </MapContainer>
   );
 }

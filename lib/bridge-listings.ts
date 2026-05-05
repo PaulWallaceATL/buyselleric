@@ -75,6 +75,7 @@ function rowToUnified(row: Record<string, unknown>, mapOpts?: BridgePropertyMapO
     longitude: c.longitude,
     image_urls: c.image_urls,
     source: "mls",
+    feed: "bridge",
   };
   if (c.listing_agent) base.listing_agent = c.listing_agent;
   if (c.listing_office) base.listing_office = c.listing_office;

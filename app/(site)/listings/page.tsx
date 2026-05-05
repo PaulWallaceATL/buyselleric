@@ -13,7 +13,7 @@ import {
   encodeMapPolygonQuery,
   MAP_POLYGON_QUERY_KEY,
 } from "@/lib/map-polygon-query";
-import { searchWithFilters, type ListingFilters } from "@/lib/listings-queries";
+import { fetchAllPinsForMap, searchWithFilters, type ListingFilters } from "@/lib/listings-queries";
 import { eyebrow, innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
@@ -71,8 +71,16 @@ export default async function ListingsPage({
   };
 
   const view = typeof params.view === "string" ? params.view : "list";
-  const { listings, total, page, totalPages, mapPolygonWideFetch } =
-    await searchWithFilters(filters);
+
+  // When in map view, fetch the paginated cards AND a wider pin set in parallel
+  // so leaflet.markercluster can render a pin for every matching listing.
+  const [
+    { listings, total, page, totalPages, mapPolygonWideFetch },
+    mapPinListings,
+  ] = await Promise.all([
+    searchWithFilters(filters),
+    view === "map" ? fetchAllPinsForMap(filters) : Promise.resolve<undefined>(undefined),
+  ]);
 
   const baseParams: Record<string, string> = {};
   if (filters.q) baseParams.q = filters.q;
@@ -145,6 +153,7 @@ export default async function ListingsPage({
             >
               <ListingsMapView
                 listings={listings}
+                mapListings={mapPinListings}
                 baseParams={baseParams}
                 appliedPolygon={appliedMapPolygon}
                 fallbackCenter={mapFallbackCenter}

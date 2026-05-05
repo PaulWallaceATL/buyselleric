@@ -18,6 +18,13 @@ import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
 
+/**
+ * Live MLS feeds we currently merge from. `manual` covers Eric's hand-curated
+ * Supabase listings; `bridge` is Bridge Interactive (gamls2 IDX); `spark` is
+ * the Spark Platform RESO Web API (Middle Georgia MLS).
+ */
+export type ListingFeed = "manual" | "bridge" | "spark";
+
 export interface UnifiedListing {
   id: string;
   slug: string | null;
@@ -35,6 +42,8 @@ export interface UnifiedListing {
   longitude: number | null;
   image_urls: string[];
   source: "manual" | "mls";
+  /** Which upstream feed produced the row — drives the per-card source badge. */
+  feed?: ListingFeed;
   listing_agent?: string;
   listing_office?: string;
 }
@@ -73,6 +82,7 @@ function manualToUnified(l: ListingRow): UnifiedListing {
     bedrooms: l.bedrooms, bathrooms: l.bathrooms,
     square_feet: l.square_feet, latitude: l.latitude,
     longitude: l.longitude, image_urls: l.image_urls, source: "manual",
+    feed: "manual",
   };
 }
 
@@ -98,6 +108,12 @@ function mlsToUnified(m: MlsListingRow): UnifiedListing {
 const MERGE_MAX_ROWS_PER_FEED = Math.min(
   1_000,
   Math.max(48, Number.parseInt(process.env.MULTI_FEED_MERGE_MAX_ROWS?.trim() ?? "400", 10) || 400),
+);
+
+/** Map view pulls more rows per feed so cluster pins reflect the full result set, not just one page. */
+const MAP_PINS_MAX_ROWS_PER_FEED = Math.min(
+  2_500,
+  Math.max(100, Number.parseInt(process.env.MAP_PINS_MAX_ROWS_PER_FEED?.trim() ?? "750", 10) || 750),
 );
 
 function unifiedSorter(sort: ListingFilters["sort"]) {
@@ -182,6 +198,79 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
     perPage,
     totalPages,
   };
+}
+
+/**
+ * Fetch enough rows across all enabled feeds to drive the map cluster layer
+ * (Zillow-style "every result has a pin"). Caller may render thousands of
+ * pins via leaflet.markercluster, but we still cap per-feed to keep the
+ * function within Vercel time limits on broad queries.
+ */
+export async function fetchAllPinsForMap(filters: ListingFilters): Promise<UnifiedListing[]> {
+  const bridgeOn = isBridgeListingsEnabled();
+  const sparkOn = isSparkListingsEnabled();
+
+  // Manual listings live in Supabase; gather them too so curated rows show
+  // a pin alongside MLS results.
+  const supabase = await createSupabaseServerClient();
+  const manualPromise: Promise<UnifiedListing[]> = supabase
+    ? (async () => {
+        const r = await supabase.from("listings").select("*").eq("is_published", true).limit(500);
+        const rows = ((r.data ?? []) as ListingRow[]).map(manualToUnified);
+        return filterManualByListingFilters(rows, filters);
+      })()
+    : Promise.resolve<UnifiedListing[]>([]);
+
+  const tasks: Array<Promise<UnifiedListing[]>> = [manualPromise];
+  if (bridgeOn) {
+    tasks.push(
+      bridgeFetchTopUnifiedListings(filters, MAP_PINS_MAX_ROWS_PER_FEED).then((r) => r.rows),
+    );
+  }
+  if (sparkOn) {
+    tasks.push(
+      sparkFetchTopUnifiedListings(filters, MAP_PINS_MAX_ROWS_PER_FEED).then((r) => r.rows),
+    );
+  }
+
+  const settled = await Promise.allSettled(tasks);
+  const all: UnifiedListing[] = [];
+  for (const s of settled) {
+    if (s.status === "fulfilled") all.push(...s.value);
+    else console.warn("fetchAllPinsForMap: feed failed", s.reason);
+  }
+
+  let rows = dedupeUnifiedListings(all);
+  rows = applyZipCentroidPinCoords(rows, filters.mapPolygon);
+  rows = await enrichListingsWithPhotonGeocode(rows, filters.mapPolygon ? { polygon: filters.mapPolygon } : undefined);
+
+  // Polygon-aware drop: only keep rows that fall inside the drawn outline
+  // (when present); leave open-search results untouched.
+  const poly = filters.mapPolygon;
+  if (poly && poly.length >= 3) {
+    rows = rows.filter((r) => {
+      if (r.latitude == null || r.longitude == null) return false;
+      return pointInPolygon(r.latitude, r.longitude, poly);
+    });
+  }
+
+  // Keep only rows we can pin on the map.
+  return rows.filter((r) => r.latitude != null && r.longitude != null);
+}
+
+/** Apply scalar listing filters to the manual Supabase rows. Polygon is handled in the caller. */
+function filterManualByListingFilters(rows: UnifiedListing[], filters: ListingFilters): UnifiedListing[] {
+  const minPriceCents = filters.minPrice ? filters.minPrice * 100 : undefined;
+  const maxPriceCents = filters.maxPrice ? filters.maxPrice * 100 : undefined;
+  return rows.filter((r) => {
+    if (minPriceCents != null && r.price_cents < minPriceCents) return false;
+    if (maxPriceCents != null && r.price_cents > maxPriceCents) return false;
+    if (filters.minBeds != null && r.bedrooms < filters.minBeds) return false;
+    if (filters.minBaths != null && r.bathrooms < filters.minBaths) return false;
+    if (filters.minSqft != null && (r.square_feet ?? 0) < filters.minSqft) return false;
+    if (filters.maxSqft != null && (r.square_feet ?? Number.POSITIVE_INFINITY) > filters.maxSqft) return false;
+    return true;
+  });
 }
 
 export async function searchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {

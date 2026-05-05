@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { feedLabelForListing } from "@/lib/feed-labels";
 import { formatPriceUsd } from "@/lib/format";
 import {
   filterDisplayImageUrls,
@@ -14,6 +15,7 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
   const location = [listing.city, listing.state].filter(Boolean).join(", ");
 
   const href = listingDetailHref(listing);
+  const feed = feedLabelForListing(listing);
 
   return (
     <Link
@@ -41,6 +43,14 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
             MLS
           </span>
         )}
+        {feed ? (
+          <span
+            className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider shadow-sm ${feed.pillClass}`}
+            title={feed.long}
+          >
+            {feed.short}
+          </span>
+        ) : null}
       </div>
       <div className="p-5 sm:p-6">
         <p className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{listing.title}</p>
