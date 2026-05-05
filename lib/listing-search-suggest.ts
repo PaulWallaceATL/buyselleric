@@ -1,4 +1,5 @@
 import { bridgeGetSearchSuggestions, isBridgeListingsEnabled } from "@/lib/bridge-listings";
+import { isSparkListingsEnabled, sparkGetSearchSuggestions } from "@/lib/spark-listings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type SearchSuggestionType = "city" | "zip" | "address";
@@ -16,12 +17,44 @@ export function sanitizeSuggestQuery(raw: string): string {
   return raw.replace(/[%_,]/g, " ").replace(/\s+/g, " ").trim().slice(0, 64);
 }
 
+/** Merge suggestions from multiple feeds, dedupe by id, keep ordering by type. */
+function mergeSuggestionsByType(...lists: SearchSuggestion[][]): SearchSuggestion[] {
+  const seen = new Set<string>();
+  const cities: SearchSuggestion[] = [];
+  const zips: SearchSuggestion[] = [];
+  const addrs: SearchSuggestion[] = [];
+  for (const list of lists) {
+    for (const s of list) {
+      if (seen.has(s.id)) continue;
+      seen.add(s.id);
+      if (s.type === "city") cities.push(s);
+      else if (s.type === "zip") zips.push(s);
+      else addrs.push(s);
+    }
+  }
+  return [...cities.slice(0, 6), ...zips.slice(0, 4), ...addrs.slice(0, 5)].slice(0, 12);
+}
+
 export async function getSearchSuggestions(raw: string): Promise<SearchSuggestion[]> {
   const q = sanitizeSuggestQuery(raw);
   if (q.length < 2) return [];
 
-  if (isBridgeListingsEnabled()) {
+  const bridgeOn = isBridgeListingsEnabled();
+  const sparkOn = isSparkListingsEnabled();
+
+  if (bridgeOn && sparkOn) {
+    const settled = await Promise.allSettled([
+      bridgeGetSearchSuggestions(q),
+      sparkGetSearchSuggestions(q),
+    ]);
+    const lists = settled.map((s) => (s.status === "fulfilled" ? s.value : []));
+    return mergeSuggestionsByType(...lists);
+  }
+  if (bridgeOn) {
     return bridgeGetSearchSuggestions(q);
+  }
+  if (sparkOn) {
+    return sparkGetSearchSuggestions(q);
   }
 
   const term = `%${q}%`;

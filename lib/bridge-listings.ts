@@ -610,6 +610,88 @@ async function bridgeSearchWithMapPolygon(
   };
 }
 
+/**
+ * Cross-feed merge helper — fetches up to `take` rows + a total count.
+ * Skips per-pin geocode enrichment (the merged page enriches at the end).
+ */
+export async function bridgeFetchTopUnifiedListings(
+  filters: ListingFilters,
+  take: number,
+): Promise<{ rows: UnifiedListing[]; total: number }> {
+  const cfg = getBridgeODataConfig();
+  if (!cfg) return { rows: [], total: 0 };
+
+  const hasMapPolygon = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
+  if (hasMapPolygon) {
+    const result = await bridgeSearchWithMapPolygon(cfg, {
+      ...filters,
+      page: 1,
+      perPage: Math.min(200, Math.max(1, take)),
+    });
+    return { rows: result.listings, total: result.total };
+  }
+
+  const filter = buildFilter(filters);
+  const select = gridSelectForFilters(filters);
+  const orderBy = orderByClause(filters.sort);
+  const pageSize = BRIDGE_PROPERTY_PAGE_SIZE;
+
+  const all: Record<string, unknown>[] = [];
+  let total = 0;
+
+  try {
+    const first = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+      $filter: filter,
+      $select: select,
+      $top: String(Math.min(pageSize, Math.max(1, take))),
+      $skip: "0",
+      $orderby: orderBy,
+      $count: "true",
+    });
+    const batch = first.value ?? [];
+    all.push(...batch);
+    total = typeof first["@odata.count"] === "number" ? first["@odata.count"] : batch.length;
+  } catch (e1) {
+    try {
+      const first = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+        $filter: filter,
+        $select: select,
+        $top: String(Math.min(pageSize, Math.max(1, take))),
+        $skip: "0",
+        $orderby: orderBy,
+      });
+      const batch = first.value ?? [];
+      all.push(...batch);
+      total = batch.length;
+    } catch (e2) {
+      console.error("bridgeFetchTopUnifiedListings", e2);
+      return { rows: [], total: 0 };
+    }
+    void e1;
+  }
+
+  while (all.length < take && all.length > 0 && all.length % pageSize === 0) {
+    try {
+      const next = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+        $filter: filter,
+        $select: select,
+        $top: String(Math.min(pageSize, take - all.length)),
+        $skip: String(all.length),
+        $orderby: orderBy,
+      });
+      const batch = next.value ?? [];
+      if (batch.length === 0) break;
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+    } catch (e) {
+      console.warn("bridgeFetchTopUnifiedListings: pagination stopped early", e);
+      break;
+    }
+  }
+
+  return { rows: all.map((row) => rowToUnified(row)), total };
+}
+
 export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
   const cfg = getBridgeODataConfig();
   if (!cfg) {

@@ -5,6 +5,22 @@
  * Server token: Authorization: Bearer <token> (or access_token query param).
  */
 
+import {
+  bestPhotoUrlFromMediaRow,
+  extractMediaUrls,
+  extractOrderedPhotoUrlsFromMediaRows,
+  isLikelyImageUrl,
+  isProbablyDisplayablePhotoUrl,
+  type ODataValueResponse,
+} from "@/lib/reso-odata";
+
+export {
+  bestPhotoUrlFromMediaRow,
+  extractMediaUrls,
+  extractOrderedPhotoUrlsFromMediaRows,
+  normalizeMediaRows,
+} from "@/lib/reso-odata";
+
 const DEFAULT_BASE = "https://api.bridgedataoutput.com/api/v2/OData";
 
 export interface BridgeODataConfig {
@@ -71,11 +87,6 @@ export function odataResourceCollectionUrl(cfg: BridgeODataConfig, resourcePath:
   return `${cfg.baseUrl}/${cfg.datasetId}/${path}`;
 }
 
-type ODataValueBundle<T> = {
-  value?: T[];
-  ["@odata.nextLink"]?: string;
-};
-
 /** Follow @odata.nextLink until exhausted (e.g. all Media rows). */
 export async function bridgeODataFetchAllValueRows(
   cfg: BridgeODataConfig,
@@ -85,7 +96,7 @@ export async function bridgeODataFetchAllValueRows(
   let pageUrl: string | null = firstPageUrl.toString();
 
   while (pageUrl) {
-    const data: ODataValueBundle<Record<string, unknown>> = await bridgeODataGetAbsolute(cfg, pageUrl);
+    const data: ODataValueResponse<Record<string, unknown>> = await bridgeODataGetAbsolute(cfg, pageUrl);
     const chunk = data.value ?? [];
     out.push(...chunk);
     const rawNext = data["@odata.nextLink"];
@@ -95,11 +106,8 @@ export async function bridgeODataFetchAllValueRows(
   return out;
 }
 
-export interface BridgeODataValueResponse<T> {
-  value?: T[];
-  /** @odata.count when $count=true */
-  ["@odata.count"]?: number;
-}
+/** Re-exported under the old name so existing callers in this codebase keep working. */
+export type BridgeODataValueResponse<T> = ODataValueResponse<T>;
 
 function dedupeUrlsPreserveOrder(urls: string[]): string[] {
   const seen = new Set<string>();
@@ -113,102 +121,11 @@ function dedupeUrlsPreserveOrder(urls: string[]): string[] {
   return out;
 }
 
-/**
- * Best single URL per media row — same preference order as RETS photo picker
- * so we do not store thumbnail + midsize + full as separate gallery slots.
- */
-export function bestPhotoUrlFromMediaRow(m: Record<string, unknown>): string {
-  const preference = [
-    "OriginalURL",
-    "MediaURLFull",
-    "MediaURLHiRes",
-    "MediaURL",
-    "MediaMidsizeURL",
-    "MediaThumbnailURL",
-    "ImageURL",
-    "PhotoURL",
-    "URL",
-    "Url",
-  ] as const;
-  for (const k of preference) {
-    const v = m[k];
-    if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
-  }
-  for (const v of Object.values(m)) {
-    if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
-  }
-  return "";
-}
-
-function mediaRowPreferred(m: Record<string, unknown>): boolean {
-  const p = m.PreferredPhoto;
-  return p === true || p === "Y" || p === "y" || p === "true" || p === "1" || p === 1;
-}
-
-function mediaRowOrder(m: Record<string, unknown>): number {
-  const o = m.Order ?? m.MediaOrder ?? m.ImageOrderPrimary;
-  const n = typeof o === "number" ? o : Number.parseFloat(String(o ?? "999"));
-  return Number.isFinite(n) ? n : 999;
-}
-
-/** Normalize Bridge `Media` JSON (array, @odata.bind wrapper, or { value }) into rows. */
-export function normalizeMediaRows(media: unknown): Record<string, unknown>[] {
-  if (media == null) return [];
-  if (Array.isArray(media)) {
-    return media.filter((m): m is Record<string, unknown> => Boolean(m) && typeof m === "object");
-  }
-  if (typeof media === "object") {
-    const o = media as Record<string, unknown>;
-    if (Array.isArray(o.value)) {
-      return o.value.filter((m): m is Record<string, unknown> => Boolean(m) && typeof m === "object");
-    }
-  }
-  return [];
-}
-
-/** Ordered photo URLs from inline `Media` on a Property row (or Media entity rows). */
-export function extractOrderedPhotoUrlsFromMediaRows(rows: Record<string, unknown>[]): string[] {
-  const scored = rows
-    .map((m) => ({
-      preferred: mediaRowPreferred(m),
-      order: mediaRowOrder(m),
-      url: bestPhotoUrlFromMediaRow(m),
-    }))
-    .filter((x) => /^https?:\/\//i.test(x.url));
-
-  scored.sort((a, b) => {
-    if (a.preferred && !b.preferred) return -1;
-    if (!a.preferred && b.preferred) return 1;
-    return a.order - b.order;
-  });
-
-  return dedupeUrlsPreserveOrder(scored.map((s) => s.url));
-}
-
-export function extractMediaUrls(media: unknown): string[] {
-  return extractOrderedPhotoUrlsFromMediaRows(normalizeMediaRows(media));
-}
-
 /** Max URLs stored per listing (aligned with RETS sync cap). */
 export const BRIDGE_MEDIA_MAX_URLS = 250;
 
 function defaultMediaEntityPath(): string {
   return (process.env.BRIDGE_MEDIA_ENTITY?.trim() || "Media").replace(/^\/+/, "");
-}
-
-function isLikelyImageUrl(u: string): boolean {
-  return /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(u) || /format=(webp|jpeg|jpg|png)/i.test(u);
-}
-
-/** CDN/signed URLs often omit extensions; still treat as photos unless clearly documents/video. */
-function isProbablyDisplayablePhotoUrl(u: string): boolean {
-  const t = u.trim();
-  if (!/^https?:\/\//i.test(t)) return false;
-  if (isLikelyImageUrl(t)) return true;
-  if (/\.(pdf|docx?|xlsx?|zip|mp4|mov|webm|m4v|wmv)(\?|$)/i.test(t)) return false;
-  if (/photo|image|img|pictures|resize|thumbnail|cdn|cloudfront|bridgedataoutput|mlspin|brightmls/i.test(t))
-    return true;
-  return false;
 }
 
 /**

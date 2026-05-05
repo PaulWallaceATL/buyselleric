@@ -1,4 +1,17 @@
-import { bridgeGetMlsListingById, bridgeSearchWithFilters, isBridgeListingsEnabled } from "@/lib/bridge-listings";
+import {
+  bridgeFetchTopUnifiedListings,
+  bridgeGetMlsListingById,
+  bridgeSearchWithFilters,
+  isBridgeListingsEnabled,
+} from "@/lib/bridge-listings";
+import {
+  isSparkListingsEnabled,
+  sparkFetchTopUnifiedListings,
+  sparkGetMlsListingById,
+  sparkSearchWithFilters,
+} from "@/lib/spark-listings";
+import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
+import { applyZipCentroidPinCoords } from "@/lib/map-pin-coords";
 import { pointInPolygon } from "@/lib/geo";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
@@ -76,9 +89,113 @@ function mlsToUnified(m: MlsListingRow): UnifiedListing {
   };
 }
 
-export async function searchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
+/**
+ * Cap on rows pulled per upstream feed when merging — caps deep-page accuracy
+ * but keeps response time bounded. Each feed already returns rows sorted by
+ * the requested key, so taking the top N from each gives a globally-correct
+ * top N up to this cap.
+ */
+const MERGE_MAX_ROWS_PER_FEED = Math.min(
+  1_000,
+  Math.max(48, Number.parseInt(process.env.MULTI_FEED_MERGE_MAX_ROWS?.trim() ?? "400", 10) || 400),
+);
+
+function unifiedSorter(sort: ListingFilters["sort"]) {
+  return (a: UnifiedListing, b: UnifiedListing): number => {
+    switch (sort) {
+      case "price_asc":
+        return a.price_cents - b.price_cents;
+      case "sqft_desc":
+        return (b.square_feet ?? 0) - (a.square_feet ?? 0);
+      case "newest":
+        // Manual listings first, then MLS — preserves prior behaviour for newest.
+        return (a.source === "manual" ? -1 : 1) - (b.source === "manual" ? -1 : 1);
+      case "price_desc":
+      default:
+        return b.price_cents - a.price_cents;
+    }
+  };
+}
+
+function dedupeUnifiedListings(rows: UnifiedListing[]): UnifiedListing[] {
+  const seen = new Set<string>();
+  const out: UnifiedListing[] = [];
+  for (const r of rows) {
+    const key = r.id || r.mls_id || `${r.address_line}|${r.city}|${r.postal_code}`;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
+async function searchWithMultipleFeeds(filters: ListingFilters): Promise<PaginatedResult> {
+  const page = Math.max(1, filters.page ?? 1);
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
+  const cap = Math.min(MERGE_MAX_ROWS_PER_FEED, Math.max(perPage, page * perPage));
+
+  const tasks: Array<Promise<{ rows: UnifiedListing[]; total: number; tag: string }>> = [];
   if (isBridgeListingsEnabled()) {
+    tasks.push(
+      bridgeFetchTopUnifiedListings(filters, cap).then((r) => ({ ...r, tag: "bridge" })),
+    );
+  }
+  if (isSparkListingsEnabled()) {
+    tasks.push(
+      sparkFetchTopUnifiedListings(filters, cap).then((r) => ({ ...r, tag: "spark" })),
+    );
+  }
+
+  const settled = await Promise.allSettled(tasks);
+  const allRows: UnifiedListing[] = [];
+  let total = 0;
+  for (const s of settled) {
+    if (s.status !== "fulfilled") {
+      console.warn("searchWithMultipleFeeds: feed failed", s.reason);
+      continue;
+    }
+    allRows.push(...s.value.rows);
+    total += s.value.total;
+  }
+
+  const poly = filters.mapPolygon;
+  let unified = dedupeUnifiedListings(allRows);
+  if (poly && poly.length >= 3) {
+    unified = unified.filter((u) => {
+      if (u.latitude == null || u.longitude == null) return true;
+      return pointInPolygon(u.latitude, u.longitude, poly);
+    });
+  }
+
+  unified.sort(unifiedSorter(filters.sort));
+
+  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+  const start = (page - 1) * perPage;
+  let listings = unified.slice(start, start + perPage);
+  listings = applyZipCentroidPinCoords(listings, poly);
+  listings = await enrichListingsWithPhotonGeocode(listings, poly ? { polygon: poly } : undefined);
+
+  return {
+    listings,
+    total,
+    page,
+    perPage,
+    totalPages,
+  };
+}
+
+export async function searchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
+  const bridgeOn = isBridgeListingsEnabled();
+  const sparkOn = isSparkListingsEnabled();
+
+  if (bridgeOn && sparkOn) {
+    return searchWithMultipleFeeds(filters);
+  }
+  if (bridgeOn) {
     return bridgeSearchWithFilters(filters);
+  }
+  if (sparkOn) {
+    return sparkSearchWithFilters(filters);
   }
 
   const supabase = await createSupabaseServerClient();
@@ -192,9 +309,17 @@ export async function getPublishedListingBySlug(slug: string): Promise<ListingRo
 }
 
 export async function getMlsListingById(mlsId: string): Promise<MlsListingRow | null> {
-  if (isBridgeListingsEnabled()) {
-    const fromBridge = await bridgeGetMlsListingById(mlsId);
-    if (fromBridge) return fromBridge;
+  // Try live feeds in parallel — first non-null wins. Order is deterministic
+  // (Bridge before Spark) so that overlapping listings have a consistent
+  // canonical source for SEO/JSON-LD.
+  const liveLookups: Array<Promise<MlsListingRow | null>> = [];
+  if (isBridgeListingsEnabled()) liveLookups.push(bridgeGetMlsListingById(mlsId));
+  if (isSparkListingsEnabled()) liveLookups.push(sparkGetMlsListingById(mlsId));
+  if (liveLookups.length > 0) {
+    const results = await Promise.allSettled(liveLookups);
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) return r.value;
+    }
   }
 
   const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
