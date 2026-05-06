@@ -10,12 +10,10 @@ const navLinks = [
   { label: "Listings", href: "/listings" },
   { label: "Sell", href: "/sell" },
   { label: "Blog", href: "/blog" },
-  { label: "About", href: "/#about" },
   { label: "Contact", href: "#contact" },
 ];
 
 const footerLinks = [
-  { label: "About Eric", href: "/#about" },
   { label: "Homes for sale", href: "/listings" },
   { label: "List your home", href: "/sell" },
 ];

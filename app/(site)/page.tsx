@@ -8,7 +8,6 @@ import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 
 const Services = dynamic(() => import("@/components/services").then((m) => ({ default: m.Services })));
-const About = dynamic(() => import("@/components/about").then((m) => ({ default: m.About })));
 const SocialProof = dynamic(() => import("@/components/social-proof").then((m) => ({ default: m.SocialProof })));
 const Faq = dynamic(() => import("@/components/faq").then((m) => ({ default: m.Faq })));
 
@@ -23,9 +22,8 @@ export default function HomePage(): ReactNode {
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background">
       <HeroLoader />
       <FeaturedListings />
-      {/* Eager mount: hash links (#services, #about) must exist on first paint for scroll + Lenis. */}
+      {/* Eager mount: hash links (#services) must exist on first paint for scroll + Lenis. */}
       <Services />
-      <About />
       <SocialProof />
       <LazySection>
         <Faq />

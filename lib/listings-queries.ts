@@ -146,9 +146,15 @@ function dedupeUnifiedListings(rows: UnifiedListing[]): UnifiedListing[] {
 }
 
 async function searchWithMultipleFeeds(filters: ListingFilters): Promise<PaginatedResult> {
-  const page = Math.max(1, filters.page ?? 1);
+  const requestedPage = Math.max(1, filters.page ?? 1);
   const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
-  const cap = Math.min(MERGE_MAX_ROWS_PER_FEED, Math.max(perPage, page * perPage));
+
+  // Always pull the full merge cap from each feed so the navigable page set is
+  // stable across page changes. Each feed already returns rows sorted by the
+  // requested key, so taking the top N from each gives the globally-correct
+  // top N up to the cap. This trades a slightly larger first-page fetch for
+  // predictable pagination — pages no longer "go blank" past the cap.
+  const cap = MERGE_MAX_ROWS_PER_FEED;
 
   const tasks: Array<Promise<{ rows: UnifiedListing[]; total: number; tag: string }>> = [];
   if (isBridgeListingsEnabled()) {
@@ -164,14 +170,14 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
 
   const settled = await Promise.allSettled(tasks);
   const allRows: UnifiedListing[] = [];
-  let total = 0;
+  let upstreamTotal = 0;
   for (const s of settled) {
     if (s.status !== "fulfilled") {
       console.warn("searchWithMultipleFeeds: feed failed", s.reason);
       continue;
     }
     allRows.push(...s.value.rows);
-    total += s.value.total;
+    upstreamTotal += s.value.total;
   }
 
   const poly = filters.mapPolygon;
@@ -185,7 +191,13 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
 
   unified.sort(unifiedSorter(filters.sort));
 
-  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+  // Reachable rows are bounded by what we actually fetched + dedup'd. Even if
+  // upstream reports thousands of matches, we can only paginate within the
+  // merged window — clamp totalPages so the UI doesn't promise pages we'd
+  // serve as blank.
+  const reachable = Math.min(upstreamTotal, unified.length);
+  const totalPages = reachable === 0 ? 0 : Math.ceil(reachable / perPage);
+  const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
   const start = (page - 1) * perPage;
   let listings = unified.slice(start, start + perPage);
   listings = applyZipCentroidPinCoords(listings, poly);
@@ -193,7 +205,7 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
 
   return {
     listings,
-    total,
+    total: reachable,
     page,
     perPage,
     totalPages,
