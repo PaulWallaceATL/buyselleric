@@ -612,6 +612,74 @@ async function bridgeSearchWithMapPolygon(
 }
 
 /**
+ * Cross-feed merge helper — fetches a single OData page by ($skip, $top) plus
+ * the upstream total via $count. Used by the multi-feed deep-pagination path
+ * so each feed contributes one page worth of rows; the caller merges, sorts
+ * and slices into the final page. Lean (no per-pin geocode enrichment) — the
+ * merged page enriches at the end.
+ */
+export async function bridgeFetchUnifiedPage(
+  filters: ListingFilters,
+  options: { skip: number; take: number },
+): Promise<{ rows: UnifiedListing[]; total: number }> {
+  const cfg = getBridgeODataConfig();
+  if (!cfg) return { rows: [], total: 0 };
+
+  const hasMapPolygon = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
+  if (hasMapPolygon) {
+    // Polygon search needs the bbox + in-memory PIP path — fall back to the wider helper.
+    const result = await bridgeSearchWithMapPolygon(cfg, {
+      ...filters,
+      page: 1,
+      perPage: Math.min(200, Math.max(1, options.take)),
+    });
+    return { rows: result.listings, total: result.total };
+  }
+
+  const filter = buildFilter(filters);
+  const select = gridSelectForFilters(filters);
+  const orderBy = orderByClause(filters.sort);
+
+  // gamls2 IDX caps $top at 200; we always pass small windows here (perPage * 2).
+  const top = Math.min(BRIDGE_PROPERTY_PAGE_SIZE, Math.max(1, options.take));
+  const skip = Math.max(0, options.skip);
+
+  try {
+    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+      $filter: filter,
+      $select: select,
+      $top: String(top),
+      $skip: String(skip),
+      $orderby: orderBy,
+      $count: "true",
+    });
+    const raw = data.value ?? [];
+    const total =
+      typeof data["@odata.count"] === "number"
+        ? data["@odata.count"]
+        : skip + raw.length + (raw.length === top ? top : 0);
+    return { rows: raw.map((row) => rowToUnified(row)), total };
+  } catch (e1) {
+    try {
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+        $filter: filter,
+        $select: select,
+        $top: String(top),
+        $skip: String(skip),
+        $orderby: orderBy,
+      });
+      const raw = data.value ?? [];
+      const total = skip + raw.length + (raw.length === top ? top : 0);
+      return { rows: raw.map((row) => rowToUnified(row)), total };
+    } catch (e2) {
+      console.error("bridgeFetchUnifiedPage", e2);
+      void e1;
+      return { rows: [], total: 0 };
+    }
+  }
+}
+
+/**
  * Cross-feed merge helper — fetches up to `take` rows + a total count.
  * Skips per-pin geocode enrichment (the merged page enriches at the end).
  */

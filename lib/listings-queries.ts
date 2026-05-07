@@ -1,5 +1,6 @@
 import {
   bridgeFetchTopUnifiedListings,
+  bridgeFetchUnifiedPage,
   bridgeGetMlsListingById,
   bridgeSearchWithFilters,
   isBridgeListingsEnabled,
@@ -7,6 +8,7 @@ import {
 import {
   isSparkListingsEnabled,
   sparkFetchTopUnifiedListings,
+  sparkFetchUnifiedPage,
   sparkGetMlsListingById,
   sparkSearchWithFilters,
 } from "@/lib/spark-listings";
@@ -72,13 +74,6 @@ export interface PaginatedResult {
   totalPages: number;
   /** Bridge: OData bbox returned nothing (often null coords in MLS); we widened to text filters + ZIP-centroid match inside the draw. */
   mapPolygonWideFetch?: boolean | undefined;
-  /**
-   * Multi-feed merge truncated the result set. `total` reflects what is
-   * navigable; `upstreamTotal` is the real upstream sum reported by each feed
-   * (helpful for "showing top N of M" hints).
-   */
-  upstreamTotal?: number | undefined;
-  truncated?: boolean | undefined;
 }
 
 function manualToUnified(l: ListingRow): UnifiedListing {
@@ -107,13 +102,12 @@ function mlsToUnified(m: MlsListingRow): UnifiedListing {
 }
 
 /**
- * Cap on rows pulled per upstream feed when merging. Each feed returns rows
- * sorted by the requested key, so taking the top N from each gives the
- * globally-correct top N up to this cap. Default tuned for typical Georgia
- * searches (a few thousand active listings); raise via env if your dataset
- * is denser.
+ * Polygon-merge cap (only applies when a drawn outline is active). Without a
+ * polygon, we use deep per-feed offset pagination so all results are
+ * navigable; the polygon path needs to fetch the full candidate set so we
+ * can apply point-in-polygon in memory.
  */
-const MERGE_MAX_ROWS_PER_FEED = Math.min(
+const POLYGON_MAX_ROWS_PER_FEED = Math.min(
   4_000,
   Math.max(48, Number.parseInt(process.env.MULTI_FEED_MERGE_MAX_ROWS?.trim() ?? "1500", 10) || 1500),
 );
@@ -156,73 +150,104 @@ function dedupeUnifiedListings(rows: UnifiedListing[]): UnifiedListing[] {
   return out;
 }
 
-async function searchWithMultipleFeeds(filters: ListingFilters): Promise<PaginatedResult> {
+/**
+ * Polygon-aware multi-feed merge. We fetch a wider window from each feed,
+ * apply in-memory point-in-polygon, then paginate. This path keeps the cap
+ * (POLYGON_MAX_ROWS_PER_FEED) because we can't push the polygon down into
+ * OData — the bbox is the closest server-side filter.
+ */
+async function searchWithMultipleFeedsPolygon(
+  filters: ListingFilters,
+  poly: ReadonlyArray<MapPolygonVertex>,
+): Promise<PaginatedResult> {
   const requestedPage = Math.max(1, filters.page ?? 1);
   const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
 
-  // Always pull the full merge cap from each feed so the navigable page set is
-  // stable across page changes. Each feed already returns rows sorted by the
-  // requested key, so taking the top N from each gives the globally-correct
-  // top N up to the cap. This trades a slightly larger first-page fetch for
-  // predictable pagination — pages no longer "go blank" past the cap.
-  const cap = MERGE_MAX_ROWS_PER_FEED;
-
-  const tasks: Array<Promise<{ rows: UnifiedListing[]; total: number; tag: string }>> = [];
+  const tasks: Array<Promise<{ rows: UnifiedListing[]; total: number }>> = [];
   if (isBridgeListingsEnabled()) {
-    tasks.push(
-      bridgeFetchTopUnifiedListings(filters, cap).then((r) => ({ ...r, tag: "bridge" })),
-    );
+    tasks.push(bridgeFetchTopUnifiedListings(filters, POLYGON_MAX_ROWS_PER_FEED));
   }
   if (isSparkListingsEnabled()) {
-    tasks.push(
-      sparkFetchTopUnifiedListings(filters, cap).then((r) => ({ ...r, tag: "spark" })),
-    );
+    tasks.push(sparkFetchTopUnifiedListings(filters, POLYGON_MAX_ROWS_PER_FEED));
   }
 
   const settled = await Promise.allSettled(tasks);
   const allRows: UnifiedListing[] = [];
-  let upstreamTotal = 0;
+  for (const s of settled) {
+    if (s.status === "fulfilled") allRows.push(...s.value.rows);
+    else console.warn("searchWithMultipleFeedsPolygon: feed failed", s.reason);
+  }
+
+  let unified = dedupeUnifiedListings(allRows).filter((u) => {
+    if (u.latitude == null || u.longitude == null) return true;
+    return pointInPolygon(u.latitude, u.longitude, poly);
+  });
+  unified.sort(unifiedSorter(filters.sort));
+
+  const total = unified.length;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+  const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
+  const start = (page - 1) * perPage;
+  let listings = unified.slice(start, start + perPage);
+  listings = applyZipCentroidPinCoords(listings, poly);
+  listings = await enrichListingsWithPhotonGeocode(listings, { polygon: poly });
+
+  return { listings, total, page, perPage, totalPages };
+}
+
+/**
+ * Deep multi-feed pagination. Each feed contributes one page worth of rows
+ * via OData $skip/$top in parallel, plus its $count for the upstream total.
+ * The merged page is sorted globally and sliced — no per-feed cap, so every
+ * page from 1 to ceil((bridgeTotal + sparkTotal) / perPage) is reachable.
+ *
+ * Cross-feed sort is locally consistent (per page) but may have minor
+ * inversions across pages when feed price distributions interleave. In the
+ * Bridge (GAMLS) + Spark (Mid-GA MLS) case the regional split keeps this
+ * a non-issue in practice.
+ */
+async function searchWithMultipleFeeds(filters: ListingFilters): Promise<PaginatedResult> {
+  const poly = filters.mapPolygon;
+  if (poly && poly.length >= 3) return searchWithMultipleFeedsPolygon(filters, poly);
+
+  const requestedPage = Math.max(1, filters.page ?? 1);
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
+  const skip = (requestedPage - 1) * perPage;
+
+  // Over-fetch 2x perPage from each feed so dedupe + cross-feed merge still
+  // yields a full page of `perPage` rows after the in-memory sort.
+  const fetchTake = Math.min(200, perPage * 2);
+
+  const tasks: Array<Promise<{ rows: UnifiedListing[]; total: number }>> = [];
+  if (isBridgeListingsEnabled()) {
+    tasks.push(bridgeFetchUnifiedPage(filters, { skip, take: fetchTake }));
+  }
+  if (isSparkListingsEnabled()) {
+    tasks.push(sparkFetchUnifiedPage(filters, { skip, take: fetchTake }));
+  }
+
+  const settled = await Promise.allSettled(tasks);
+  const allRows: UnifiedListing[] = [];
+  let total = 0;
   for (const s of settled) {
     if (s.status !== "fulfilled") {
       console.warn("searchWithMultipleFeeds: feed failed", s.reason);
       continue;
     }
     allRows.push(...s.value.rows);
-    upstreamTotal += s.value.total;
+    total += s.value.total;
   }
 
-  const poly = filters.mapPolygon;
   let unified = dedupeUnifiedListings(allRows);
-  if (poly && poly.length >= 3) {
-    unified = unified.filter((u) => {
-      if (u.latitude == null || u.longitude == null) return true;
-      return pointInPolygon(u.latitude, u.longitude, poly);
-    });
-  }
-
   unified.sort(unifiedSorter(filters.sort));
 
-  // Reachable rows are bounded by what we actually fetched + dedup'd. Even if
-  // upstream reports thousands of matches, we can only paginate within the
-  // merged window — clamp totalPages so the UI doesn't promise pages we'd
-  // serve as blank.
-  const reachable = Math.min(upstreamTotal, unified.length);
-  const totalPages = reachable === 0 ? 0 : Math.ceil(reachable / perPage);
+  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
   const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
-  const start = (page - 1) * perPage;
-  let listings = unified.slice(start, start + perPage);
-  listings = applyZipCentroidPinCoords(listings, poly);
-  listings = await enrichListingsWithPhotonGeocode(listings, poly ? { polygon: poly } : undefined);
+  let listings = unified.slice(0, perPage);
+  listings = applyZipCentroidPinCoords(listings, undefined);
+  listings = await enrichListingsWithPhotonGeocode(listings);
 
-  return {
-    listings,
-    total: reachable,
-    page,
-    perPage,
-    totalPages,
-    upstreamTotal,
-    truncated: upstreamTotal > reachable,
-  };
+  return { listings, total, page, perPage, totalPages };
 }
 
 /**

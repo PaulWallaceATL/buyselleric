@@ -75,7 +75,7 @@ export default async function ListingsPage({
   // When in map view, fetch the paginated cards AND a wider pin set in parallel
   // so leaflet.markercluster can render a pin for every matching listing.
   const [
-    { listings, total, page, totalPages, mapPolygonWideFetch, upstreamTotal, truncated },
+    { listings, total, page, totalPages, mapPolygonWideFetch },
     mapPinListings,
   ] = await Promise.all([
     searchWithFilters(filters),
@@ -127,14 +127,6 @@ export default async function ListingsPage({
               ? `Showing homes matching "${filters.q}"`
               : "Browse homes across Georgia. Use filters to narrow your search."}
         </p>
-
-        {truncated && upstreamTotal != null && total > 0 ? (
-          <p className="mt-3 rounded-xl border border-border/80 bg-muted/15 px-4 py-3 text-sm text-muted-foreground">
-            Showing the top <strong className="text-foreground">{total.toLocaleString()}</strong> of{" "}
-            <strong className="text-foreground">{upstreamTotal.toLocaleString()}</strong> matching listings
-            across our MLS feeds. Refine your filters (city, price, beds, etc.) to drill into the rest.
-          </p>
-        ) : null}
 
         <div className="mt-8 flex flex-col gap-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
