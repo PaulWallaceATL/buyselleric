@@ -16,13 +16,14 @@ async function probeCount(
   cfg: ReturnType<typeof getSparkODataConfig>,
   label: string,
   filter: string,
+  selectOverride?: string,
 ): Promise<CountedProbe> {
   if (!cfg) return { label, filter, count: null, error: "no_config" };
   try {
     const data = await sparkODataGet<{ value?: Array<Record<string, unknown>>; ["@odata.count"]?: number }>(cfg, {
       $filter: filter,
       $top: "1",
-      $select: "ListingKey,ListingId,City,StateOrProvince",
+      $select: selectOverride ?? "ListingKey,ListingId,City,StateOrProvince",
       $count: "true",
     });
     const sample = data.value?.[0];
@@ -112,6 +113,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "minimal_macon_active_GA",
         "StandardStatus eq 'Active' and City eq 'Macon' and StateOrProvince eq 'GA'",
       ),
+      // Probe the EXACT $select used by lib/spark-listings.ts SELECT_GRID.
+      probeCount(
+        cfg,
+        "buildFilter+SELECT_GRID",
+        `${ACTIVE_FILTER} and ${CITY_MACON_VARIANTS} and ${STATE_GA_VARIANTS}`,
+        "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Latitude,Longitude,ListAgentFullName,ListOfficeName,Media,ModificationTimestamp",
+      ),
+      // Probe with no $select — let the server return everything.
+      probeCount(cfg, "buildFilter+no_select", `${ACTIVE_FILTER} and ${CITY_MACON_VARIANTS} and ${STATE_GA_VARIANTS}`, ""),
     ]);
 
     return NextResponse.json({
