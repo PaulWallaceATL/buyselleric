@@ -80,28 +80,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       });
     }
 
+    // Build filters exactly the way lib/spark-listings.ts does so we can see
+    // what the real query against Spark looks like + whether it returns rows
+    // or silently fails.
+    const ACTIVE_FILTER =
+      "((StandardStatus eq 'Active') or (StandardStatus eq 'active') or (StandardStatus eq 'ACTIVE') or (MlsStatus eq 'Active') or (MlsStatus eq 'active') or (MlsStatus eq 'ACTIVE'))";
+    const CITY_MACON_VARIANTS = "(City eq 'Macon' or City eq 'macon' or City eq 'MACON')";
+    const STATE_GA_VARIANTS = "(StateOrProvince eq 'GA' or StateOrProvince eq 'Georgia')";
+
     const probes = await Promise.all([
       probeCount(cfg, "any", "ListPrice ge 1"),
-      probeCount(cfg, "active_titlecase", "StandardStatus eq 'Active'"),
-      probeCount(cfg, "active_lower_value", "StandardStatus eq 'active'"),
-      probeCount(cfg, "active_upper_value", "StandardStatus eq 'ACTIVE'"),
-      probeCount(cfg, "active_tolower_fn", "tolower(StandardStatus) eq 'active'"),
-      probeCount(
-        cfg,
-        "active_or_variants",
-        "(StandardStatus eq 'Active' or StandardStatus eq 'active' or StandardStatus eq 'ACTIVE')",
-      ),
-      probeCount(cfg, "state_GA", "StateOrProvince eq 'GA'"),
+      probeCount(cfg, "active_eq_Active", "StandardStatus eq 'Active'"),
+      probeCount(cfg, "active_eq_lower", "StandardStatus eq 'active'"),
+      probeCount(cfg, "mlsstatus_eq_Active", "MlsStatus eq 'Active'"),
+      probeCount(cfg, "mlsstatus_eq_lower", "MlsStatus eq 'active'"),
       probeCount(cfg, "city_macon_eq", "City eq 'Macon'"),
+      probeCount(cfg, "city_macon_lower", "City eq 'macon'"),
+      probeCount(cfg, "city_macon_upper", "City eq 'MACON'"),
+      probeCount(cfg, "state_GA_eq", "StateOrProvince eq 'GA'"),
+      probeCount(cfg, "state_Georgia_eq", "StateOrProvince eq 'Georgia'"),
+      // Exact filter shape produced by buildFilter() for q="Macon, GA".
+      probeCount(cfg, "ACTIVE_only", ACTIVE_FILTER),
       probeCount(
         cfg,
-        "active_macon_GA_combined",
-        "(StandardStatus eq 'Active' or StandardStatus eq 'active' or StandardStatus eq 'ACTIVE') and City eq 'Macon' and StateOrProvince eq 'GA'",
+        "exact_buildFilter_macon_GA",
+        `${ACTIVE_FILTER} and ${CITY_MACON_VARIANTS} and ${STATE_GA_VARIANTS}`,
       ),
+      // Minimal that worked before — sanity reference.
       probeCount(
         cfg,
-        "active_GA_only",
-        "(StandardStatus eq 'Active') and StateOrProvince eq 'GA'",
+        "minimal_macon_active_GA",
+        "StandardStatus eq 'Active' and City eq 'Macon' and StateOrProvince eq 'GA'",
       ),
     ]);
 
