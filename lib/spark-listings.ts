@@ -519,30 +519,37 @@ export async function sparkFetchTopUnifiedListings(
     void e1;
   }
 
-  if (rows.length < take && rows.length === SPARK_PROPERTY_PAGE_SIZE) {
-    let skip = SPARK_PROPERTY_PAGE_SIZE;
-    while (rows.length < take) {
-      try {
-        const next = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
+  // Fan out remaining $skip pages in parallel — sequential pagination across 5-15 pages
+  // dominated latency. Parallel keeps deeper fetches under ~1.5s for typical queries.
+  if (rows.length === SPARK_PROPERTY_PAGE_SIZE && total > rows.length && rows.length < take) {
+    const target = Math.min(take, total);
+    const remaining = target - rows.length;
+    const numExtraPages = Math.ceil(remaining / SPARK_PROPERTY_PAGE_SIZE);
+    const skips: number[] = [];
+    for (let i = 1; i <= numExtraPages; i++) skips.push(i * SPARK_PROPERTY_PAGE_SIZE);
+
+    const settled = await Promise.allSettled(
+      skips.map((skip) =>
+        sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
           $filter: filter,
           $select: SELECT_GRID,
-          $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, take - rows.length)),
+          $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, target - skip)),
           $skip: String(skip),
           $orderby: orderBy,
-        });
-        const batch = next.value ?? [];
-        if (batch.length === 0) break;
-        rows.push(...batch);
-        skip += batch.length;
-        if (batch.length < SPARK_PROPERTY_PAGE_SIZE) break;
-      } catch (e) {
-        console.warn("sparkFetchTopUnifiedListings: pagination stopped early", e);
-        break;
+        }),
+      ),
+    );
+
+    for (const s of settled) {
+      if (s.status === "fulfilled") {
+        rows.push(...(s.value.value ?? []));
+      } else {
+        console.warn("sparkFetchTopUnifiedListings: parallel page failed", s.reason);
       }
     }
   }
 
-  return { rows: rows.map((row) => rowToUnified(row)), total };
+  return { rows: rows.slice(0, take).map((row) => rowToUnified(row)), total };
 }
 
 async function suggestQuery(

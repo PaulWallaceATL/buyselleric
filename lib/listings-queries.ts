@@ -72,6 +72,13 @@ export interface PaginatedResult {
   totalPages: number;
   /** Bridge: OData bbox returned nothing (often null coords in MLS); we widened to text filters + ZIP-centroid match inside the draw. */
   mapPolygonWideFetch?: boolean | undefined;
+  /**
+   * Multi-feed merge truncated the result set. `total` reflects what is
+   * navigable; `upstreamTotal` is the real upstream sum reported by each feed
+   * (helpful for "showing top N of M" hints).
+   */
+  upstreamTotal?: number | undefined;
+  truncated?: boolean | undefined;
 }
 
 function manualToUnified(l: ListingRow): UnifiedListing {
@@ -100,20 +107,24 @@ function mlsToUnified(m: MlsListingRow): UnifiedListing {
 }
 
 /**
- * Cap on rows pulled per upstream feed when merging — caps deep-page accuracy
- * but keeps response time bounded. Each feed already returns rows sorted by
- * the requested key, so taking the top N from each gives a globally-correct
- * top N up to this cap.
+ * Cap on rows pulled per upstream feed when merging. Each feed returns rows
+ * sorted by the requested key, so taking the top N from each gives the
+ * globally-correct top N up to this cap. Default tuned for typical Georgia
+ * searches (a few thousand active listings); raise via env if your dataset
+ * is denser.
  */
 const MERGE_MAX_ROWS_PER_FEED = Math.min(
-  1_000,
-  Math.max(48, Number.parseInt(process.env.MULTI_FEED_MERGE_MAX_ROWS?.trim() ?? "400", 10) || 400),
+  4_000,
+  Math.max(48, Number.parseInt(process.env.MULTI_FEED_MERGE_MAX_ROWS?.trim() ?? "1500", 10) || 1500),
 );
 
-/** Map view pulls more rows per feed so cluster pins reflect the full result set, not just one page. */
+/**
+ * Map view pulls more rows per feed so cluster pins reflect the full result set.
+ * Parallel paginated OData fetches keep this fast even at high caps.
+ */
 const MAP_PINS_MAX_ROWS_PER_FEED = Math.min(
-  2_500,
-  Math.max(100, Number.parseInt(process.env.MAP_PINS_MAX_ROWS_PER_FEED?.trim() ?? "750", 10) || 750),
+  4_000,
+  Math.max(100, Number.parseInt(process.env.MAP_PINS_MAX_ROWS_PER_FEED?.trim() ?? "1500", 10) || 1500),
 );
 
 function unifiedSorter(sort: ListingFilters["sort"]) {
@@ -209,6 +220,8 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
     page,
     perPage,
     totalPages,
+    upstreamTotal,
+    truncated: upstreamTotal > reachable,
   };
 }
 

@@ -671,26 +671,37 @@ export async function bridgeFetchTopUnifiedListings(
     void e1;
   }
 
-  while (all.length < take && all.length > 0 && all.length % pageSize === 0) {
-    try {
-      const next = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
-        $filter: filter,
-        $select: select,
-        $top: String(Math.min(pageSize, take - all.length)),
-        $skip: String(all.length),
-        $orderby: orderBy,
-      });
-      const batch = next.value ?? [];
-      if (batch.length === 0) break;
-      all.push(...batch);
-      if (batch.length < pageSize) break;
-    } catch (e) {
-      console.warn("bridgeFetchTopUnifiedListings: pagination stopped early", e);
-      break;
+  // Fan out the remaining $skip pages in parallel — sequential paging at 200/row caps was the
+  // dominant latency in deep fetches (10 calls × ~700ms ≈ 7s). Parallel keeps it ~700-1500ms.
+  if (all.length === pageSize && total > all.length && all.length < take) {
+    const target = Math.min(take, total);
+    const remaining = target - all.length;
+    const numExtraPages = Math.ceil(remaining / pageSize);
+    const skips: number[] = [];
+    for (let i = 1; i <= numExtraPages; i++) skips.push(i * pageSize);
+
+    const settled = await Promise.allSettled(
+      skips.map((skip) =>
+        bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+          $filter: filter,
+          $select: select,
+          $top: String(Math.min(pageSize, target - skip)),
+          $skip: String(skip),
+          $orderby: orderBy,
+        }),
+      ),
+    );
+
+    for (const s of settled) {
+      if (s.status === "fulfilled") {
+        all.push(...(s.value.value ?? []));
+      } else {
+        console.warn("bridgeFetchTopUnifiedListings: parallel page failed", s.reason);
+      }
     }
   }
 
-  return { rows: all.map((row) => rowToUnified(row)), total };
+  return { rows: all.slice(0, take).map((row) => rowToUnified(row)), total };
 }
 
 export async function bridgeSearchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
