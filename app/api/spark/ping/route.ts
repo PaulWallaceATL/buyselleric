@@ -82,17 +82,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const probes = await Promise.all([
       probeCount(cfg, "any", "ListPrice ge 1"),
-      probeCount(cfg, "active_status", "StandardStatus eq 'Active'"),
-      probeCount(cfg, "active_lower", "tolower(StandardStatus) eq 'active'"),
-      probeCount(cfg, "active_mlsstatus", "MlsStatus eq 'Active'"),
-      probeCount(cfg, "state_GA", "StateOrProvince eq 'GA'"),
-      probeCount(cfg, "state_Georgia", "StateOrProvince eq 'Georgia'"),
-      probeCount(cfg, "city_macon_eq", "City eq 'Macon'"),
-      probeCount(cfg, "city_macon_contains", "contains(tolower(City), 'macon')"),
+      probeCount(cfg, "active_titlecase", "StandardStatus eq 'Active'"),
+      probeCount(cfg, "active_lower_value", "StandardStatus eq 'active'"),
+      probeCount(cfg, "active_upper_value", "StandardStatus eq 'ACTIVE'"),
+      probeCount(cfg, "active_tolower_fn", "tolower(StandardStatus) eq 'active'"),
       probeCount(
         cfg,
-        "macon_active_combined",
-        "((StandardStatus eq 'Active') or (tolower(StandardStatus) eq 'active') or (MlsStatus eq 'Active') or (tolower(MlsStatus) eq 'active')) and (contains(tolower(City), 'macon') or contains(tolower(UnparsedAddress), 'macon'))",
+        "active_or_variants",
+        "(StandardStatus eq 'Active' or StandardStatus eq 'active' or StandardStatus eq 'ACTIVE')",
+      ),
+      probeCount(cfg, "state_GA", "StateOrProvince eq 'GA'"),
+      probeCount(cfg, "city_macon_eq", "City eq 'Macon'"),
+      probeCount(
+        cfg,
+        "active_macon_GA_combined",
+        "(StandardStatus eq 'Active' or StandardStatus eq 'active' or StandardStatus eq 'ACTIVE') and City eq 'Macon' and StateOrProvince eq 'GA'",
+      ),
+      probeCount(
+        cfg,
+        "active_GA_only",
+        "(StandardStatus eq 'Active') and StateOrProvince eq 'GA'",
       ),
     ]);
 

@@ -33,9 +33,15 @@ import type { ODataValueResponse } from "@/lib/reso-odata";
 import type { MlsListingRow } from "@/lib/types/db";
 import { US_STATE_ABBR_TO_NAME } from "@/lib/us-state-names";
 
-/** Active-ish listings; defensive against feeds that store status with mixed case / nulls. */
+/**
+ * Active listings filter. Spark's RESO Web API silently treats `tolower()` as
+ * a no-op (it matches every row), so we can't use it for case-insensitive
+ * filtering. Instead we OR the obvious exact-case variants — Mid-Georgia MLS
+ * stores values as title-case 'Active', but defending against 'active' /
+ * 'ACTIVE' is cheap.
+ */
 const ACTIVE =
-  "((StandardStatus eq 'Active') or (tolower(StandardStatus) eq 'active') or (MlsStatus eq 'Active') or (tolower(MlsStatus) eq 'active'))";
+  "((StandardStatus eq 'Active') or (StandardStatus eq 'active') or (StandardStatus eq 'ACTIVE') or (MlsStatus eq 'Active') or (MlsStatus eq 'active') or (MlsStatus eq 'ACTIVE'))";
 
 /**
  * Spark RESO Web API does not reliably support `contains()` or function-chained
