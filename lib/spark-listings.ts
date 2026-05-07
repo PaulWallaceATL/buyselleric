@@ -150,9 +150,12 @@ function rowToMlsListingRow(row: Record<string, unknown>, mapOpts?: BridgeProper
 }
 
 /**
- * Search/grid: fields needed for cards + map + filters + Media.
- * Spark’s RESO endpoint is generally less restrictive than gamls2 IDX, so we
- * include Lat/Lng and agent/office fields by default.
+ * Search/grid: fields needed for cards + map + filters.
+ *
+ * IMPORTANT: Spark RESO Web API treats `Media` as a navigation property, not
+ * a scalar field — putting it in `$select` returns HTTP 400
+ * (`$select contains non-matching element: Media`). Photos for the grid
+ * load inline via `$expand=Media` instead (see SPARK_EXPAND below).
  */
 const SELECT_GRID = [
   "ListingKey",
@@ -183,9 +186,16 @@ const SELECT_GRID = [
   "Longitude",
   "ListAgentFullName",
   "ListOfficeName",
-  "Media",
   "ModificationTimestamp",
 ].join(",");
+
+/** Default `$expand` for Spark Property queries — pulls inline photos with the row. */
+const SPARK_EXPAND = "Media";
+
+/** Helper: returns the standard $select + $expand pair for any Spark Property query. */
+function sparkSelectExpand(): { $select: string; $expand: string } {
+  return { $select: SELECT_GRID, $expand: SPARK_EXPAND };
+}
 
 const SELECT_DETAIL = `${SELECT_GRID},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks,InternetRemarks`;
 
@@ -349,6 +359,7 @@ async function fetchPropertyRows(
     const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
       $filter: filter,
       $select: select,
+      $expand: SPARK_EXPAND,
       $top: String(take),
       $skip: String(odataSkip),
       $orderby: orderBy,
@@ -453,7 +464,7 @@ export async function sparkSearchWithFilters(filters: ListingFilters): Promise<P
 
   const baseQuery: Record<string, string> = {
     $filter: buildFilter(filters),
-    $select: SELECT_GRID,
+    ...sparkSelectExpand(),
     $top: String(perPage),
     $skip: String(skip),
     $orderby: orderByClause(filters.sort),
@@ -529,7 +540,7 @@ export async function sparkFetchUnifiedPage(
   try {
     const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
       $filter: filter,
-      $select: SELECT_GRID,
+      ...sparkSelectExpand(),
       $top: String(top),
       $skip: String(skip),
       $orderby: orderBy,
@@ -545,7 +556,7 @@ export async function sparkFetchUnifiedPage(
     try {
       const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
         $filter: filter,
-        $select: SELECT_GRID,
+        ...sparkSelectExpand(),
         $top: String(top),
         $skip: String(skip),
         $orderby: orderBy,
@@ -587,7 +598,7 @@ export async function sparkFetchTopUnifiedListings(
   try {
     const firstPage = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
       $filter: filter,
-      $select: SELECT_GRID,
+      ...sparkSelectExpand(),
       $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, Math.max(1, take))),
       $skip: "0",
       $orderby: orderBy,
@@ -599,7 +610,7 @@ export async function sparkFetchTopUnifiedListings(
     try {
       const firstPage = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
         $filter: filter,
-        $select: SELECT_GRID,
+        ...sparkSelectExpand(),
         $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, Math.max(1, take))),
         $skip: "0",
         $orderby: orderBy,
@@ -626,7 +637,7 @@ export async function sparkFetchTopUnifiedListings(
       skips.map((skip) =>
         sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
           $filter: filter,
-          $select: SELECT_GRID,
+          ...sparkSelectExpand(),
           $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, target - skip)),
           $skip: String(skip),
           $orderby: orderBy,
@@ -807,6 +818,7 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
     const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(client, {
       $filter: filter,
       $select: select,
+      $expand: SPARK_EXPAND,
       $top: "1",
     });
     return data.value?.[0] ?? null;
