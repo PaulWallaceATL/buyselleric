@@ -1,13 +1,52 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getSparkODataConfig, sparkODataGet } from "@/lib/spark-odata";
 
 export const dynamic = "force-dynamic";
 
+type CountedProbe = {
+  label: string;
+  filter: string;
+  count: number | null;
+  sampleCity?: string | undefined;
+  sampleState?: string | undefined;
+  error?: string | undefined;
+};
+
+async function probeCount(
+  cfg: ReturnType<typeof getSparkODataConfig>,
+  label: string,
+  filter: string,
+): Promise<CountedProbe> {
+  if (!cfg) return { label, filter, count: null, error: "no_config" };
+  try {
+    const data = await sparkODataGet<{ value?: Array<Record<string, unknown>>; ["@odata.count"]?: number }>(cfg, {
+      $filter: filter,
+      $top: "1",
+      $select: "ListingKey,ListingId,City,StateOrProvince",
+      $count: "true",
+    });
+    const sample = data.value?.[0];
+    return {
+      label,
+      filter,
+      count: typeof data["@odata.count"] === "number" ? data["@odata.count"] : null,
+      sampleCity: sample?.City ? String(sample.City) : undefined,
+      sampleState: sample?.StateOrProvince ? String(sample.StateOrProvince) : undefined,
+    };
+  } catch (e) {
+    return { label, filter, count: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /**
- * Lightweight Spark RESO Web API connectivity check (no secrets in response).
- * Open `/api/spark/ping` after deploy to confirm the access token is wired up.
+ * Spark RESO Web API connectivity + content diagnostic.
+ *
+ * - GET /api/spark/ping              → quick smoke test
+ * - GET /api/spark/ping?diag=1       → also probes a handful of canned filters
+ *                                       (active count, city=Macon, state=GA, …)
+ *                                       so you can see which queries return rows.
  */
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   const cfg = getSparkODataConfig();
   if (!cfg) {
     return NextResponse.json(
@@ -20,6 +59,8 @@ export async function GET(): Promise<NextResponse> {
     );
   }
 
+  const wantsDiag = req.nextUrl.searchParams.get("diag") === "1";
+
   try {
     const data = await sparkODataGet<{ value?: unknown[] }>(cfg, {
       $filter: "ListPrice ge 1",
@@ -27,13 +68,41 @@ export async function GET(): Promise<NextResponse> {
       $select: "ListingKey,ListingId,City,StateOrProvince",
     });
     const sampleCount = Array.isArray(data.value) ? data.value.length : 0;
+
+    if (!wantsDiag) {
+      return NextResponse.json({
+        ok: true,
+        apiFeedId: cfg.apiFeedId || null,
+        entityPath: cfg.entityPath,
+        baseUrl: cfg.baseUrl,
+        sampleCount,
+        hint: "Append ?diag=1 to inspect per-filter counts.",
+      });
+    }
+
+    const probes = await Promise.all([
+      probeCount(cfg, "any", "ListPrice ge 1"),
+      probeCount(cfg, "active_status", "StandardStatus eq 'Active'"),
+      probeCount(cfg, "active_lower", "tolower(StandardStatus) eq 'active'"),
+      probeCount(cfg, "active_mlsstatus", "MlsStatus eq 'Active'"),
+      probeCount(cfg, "state_GA", "StateOrProvince eq 'GA'"),
+      probeCount(cfg, "state_Georgia", "StateOrProvince eq 'Georgia'"),
+      probeCount(cfg, "city_macon_eq", "City eq 'Macon'"),
+      probeCount(cfg, "city_macon_contains", "contains(tolower(City), 'macon')"),
+      probeCount(
+        cfg,
+        "macon_active_combined",
+        "((StandardStatus eq 'Active') or (tolower(StandardStatus) eq 'active') or (MlsStatus eq 'Active') or (tolower(MlsStatus) eq 'active')) and (contains(tolower(City), 'macon') or contains(tolower(UnparsedAddress), 'macon'))",
+      ),
+    ]);
+
     return NextResponse.json({
       ok: true,
       apiFeedId: cfg.apiFeedId || null,
       entityPath: cfg.entityPath,
       baseUrl: cfg.baseUrl,
       sampleCount,
-      hint: "If sampleCount=0, your MLS may not have approved listing data yet, or the active filter excludes everything.",
+      probes,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
