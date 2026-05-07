@@ -37,27 +37,50 @@ import { US_STATE_ABBR_TO_NAME } from "@/lib/us-state-names";
 const ACTIVE =
   "((StandardStatus eq 'Active') or (tolower(StandardStatus) eq 'active') or (MlsStatus eq 'Active') or (tolower(MlsStatus) eq 'active'))";
 
-/** Some feeds store full state name ("Georgia") while users type "GA" — handle both. */
+/**
+ * Spark RESO Web API does not reliably support `contains()` or function-chained
+ * filters like `contains(tolower(City), 'macon')` — they silently return zero
+ * rows even when matching data exists (verified against Mid-Georgia MLS feed:
+ * `City eq 'Macon'` → 24,164 rows; `contains(tolower(City), 'macon')` → 0).
+ * For Spark we use exact-match `eq` filters with a small set of case variants.
+ */
+function titleCase(s: string): string {
+  return s
+    .split(/(\s+|-)/)
+    .map((part) => (part.match(/^[A-Za-z]+$/) ? part[0]!.toUpperCase() + part.slice(1).toLowerCase() : part))
+    .join("");
+}
+
 function stateOrProvinceODataClause(stateUser: string): string {
   const s = stateUser.trim();
   if (!s) return "(true)";
-  const parts: string[] = [];
   const upper = s.toUpperCase();
+  const parts: string[] = [];
   if (/^[A-Za-z]{2}$/.test(s) && US_STATE_ABBR_TO_NAME[upper]) {
-    const abbr = s.toLowerCase();
-    const full = US_STATE_ABBR_TO_NAME[upper].toLowerCase();
-    parts.push(`tolower(StateOrProvince) eq '${escapeODataString(abbr)}'`);
-    parts.push(`contains(tolower(StateOrProvince), '${escapeODataString(full)}')`);
+    parts.push(`StateOrProvince eq '${escapeODataString(upper)}'`);
+    parts.push(`StateOrProvince eq '${escapeODataString(US_STATE_ABBR_TO_NAME[upper])}'`);
   } else {
-    parts.push(`contains(tolower(StateOrProvince), '${escapeODataString(s.toLowerCase())}')`);
+    parts.push(`StateOrProvince eq '${escapeODataString(titleCase(s))}'`);
     for (const [abbr, name] of Object.entries(US_STATE_ABBR_TO_NAME)) {
       if (name.toLowerCase() === s.toLowerCase()) {
-        parts.push(`tolower(StateOrProvince) eq '${escapeODataString(abbr.toLowerCase())}'`);
+        parts.push(`StateOrProvince eq '${escapeODataString(abbr.toUpperCase())}'`);
         break;
       }
     }
   }
   return `(${parts.join(" or ")})`;
+}
+
+/** Spark city filter: exact-match variants since `contains()` returns 0 rows. */
+function cityODataClause(cityUser: string): string {
+  const s = cityUser.trim();
+  if (!s) return "(true)";
+  const variants = new Set<string>();
+  variants.add(titleCase(s));
+  variants.add(s);
+  variants.add(s.toUpperCase());
+  variants.add(s.toLowerCase());
+  return `(${[...variants].map((v) => `City eq '${escapeODataString(v)}'`).join(" or ")})`;
 }
 
 export function isSparkListingsEnabled(): boolean {
@@ -207,8 +230,12 @@ function buildFilter(filters: ListingFilters, options?: BuildFilterOptions): str
   if (filters.minSqft != null) parts.push(`LivingArea ge ${Math.floor(filters.minSqft)}`);
   if (filters.maxSqft != null) parts.push(`LivingArea le ${Math.floor(filters.maxSqft)}`);
   if (filters.propertyType?.trim()) {
-    const t = escapeODataString(filters.propertyType.trim().toLowerCase());
-    parts.push(`contains(tolower(PropertyType), '${t}')`);
+    // Spark doesn't support contains(tolower(...)) — fall back to exact eq variants.
+    const raw = filters.propertyType.trim();
+    const variants = new Set([titleCase(raw), raw, raw.toUpperCase(), raw.toLowerCase()]);
+    parts.push(
+      `(${[...variants].map((v) => `PropertyType eq '${escapeODataString(v)}'`).join(" or ")})`,
+    );
   }
 
   const q = filters.q?.trim();
@@ -217,21 +244,19 @@ function buildFilter(filters: ListingFilters, options?: BuildFilterOptions): str
     if (cityState && options?.mapPolygonWide) {
       parts.push(stateOrProvinceODataClause(cityState.state));
     } else if (cityState) {
-      const city = escapeODataString(cityState.city.toLowerCase());
-      parts.push(
-        `(contains(tolower(City), '${city}') or contains(tolower(UnparsedAddress), '${city}'))`,
-      );
+      parts.push(cityODataClause(cityState.city));
       parts.push(stateOrProvinceODataClause(cityState.state));
     } else {
-      const t = escapeODataString(q.toLowerCase());
-      const zipish = /^[\d-]+$/.test(q.replace(/\s/g, ""));
+      const trimmed = q.replace(/\s/g, "");
+      const zipish = /^[\d-]+$/.test(trimmed);
       if (zipish) {
-        const z = escapeODataString(q.replace(/\s/g, ""));
-        parts.push(`contains(PostalCode, '${z}')`);
-      } else {
+        // Exact + startswith both supported on Spark.
         parts.push(
-          `(contains(tolower(City), '${t}') or contains(tolower(UnparsedAddress), '${t}') or contains(tolower(PostalCode), '${t}') or contains(tolower(StateOrProvince), '${t}') or contains(tolower(SubdivisionName), '${t}'))`,
+          `(PostalCode eq '${escapeODataString(trimmed)}' or startswith(PostalCode, '${escapeODataString(trimmed)}'))`,
         );
+      } else {
+        // Plain text without "City, ST" parse — try exact city across common case variants.
+        parts.push(cityODataClause(q));
       }
     }
   }
@@ -646,23 +671,25 @@ export async function sparkGetSearchSuggestions(raw: string): Promise<SearchSugg
   const q = rawClean.toLowerCase();
   if (q.length < 2) return [];
 
-  const esc = escapeODataString(q);
-  const zipish = /^[\d-]+$/.test(q.replace(/\s/g, ""));
+  const trimmed = q.replace(/\s/g, "");
+  const zipish = /^[\d-]+$/.test(trimmed);
   const cityState = parseCityStateSearchQuery(rawClean);
 
+  // Spark RESO Web API doesn't reliably support contains(tolower(...)). Use
+  // exact eq + startswith — slightly less fuzzy but actually returns rows.
   const cityFilter = cityState
-    ? `contains(tolower(City), '${escapeODataString(cityState.city.toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)}`
-    : `contains(tolower(City), '${esc}')`;
+    ? `${cityODataClause(cityState.city)} and ${stateOrProvinceODataClause(cityState.state)}`
+    : `(${cityODataClause(rawClean)} or startswith(City, '${escapeODataString(titleCase(rawClean))}'))`;
 
   const addrFilter = cityState
-    ? `(contains(tolower(UnparsedAddress), '${escapeODataString(cityState.city.toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)})`
-    : `contains(tolower(UnparsedAddress), '${esc}')`;
+    ? `startswith(UnparsedAddress, '${escapeODataString(titleCase(cityState.city))}') and ${stateOrProvinceODataClause(cityState.state)}`
+    : `startswith(UnparsedAddress, '${escapeODataString(titleCase(rawClean))}')`;
 
   const [cityRows, zipRows, addrRows] = await Promise.all([
     suggestQuery(cfg, cityFilter, 28),
     zipish
-      ? suggestQuery(cfg, `startswith(PostalCode, '${escapeODataString(q.replace(/\s/g, ""))}')`, 24)
-      : suggestQuery(cfg, `contains(PostalCode, '${esc}')`, 20),
+      ? suggestQuery(cfg, `startswith(PostalCode, '${escapeODataString(trimmed)}')`, 24)
+      : suggestQuery(cfg, `startswith(PostalCode, '${escapeODataString(trimmed)}')`, 20),
     suggestQuery(cfg, addrFilter, 14),
   ]);
 
