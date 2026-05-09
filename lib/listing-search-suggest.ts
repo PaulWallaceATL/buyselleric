@@ -10,6 +10,13 @@ export interface SearchSuggestion {
   label: string;
   subtitle?: string;
   value: string;
+  /**
+   * When set, picking this suggestion navigates straight to this URL
+   * (e.g. address → MLS detail page) instead of running a `?q=…` search.
+   * Used to avoid the "no results" page when the autosuggest already knows
+   * the canonical listing for an address row.
+   */
+  href?: string;
 }
 
 /** Strip characters that break PostgREST ilike filters. */
@@ -76,13 +83,13 @@ export async function getSearchSuggestions(raw: string): Promise<SearchSuggestio
     supabase.from("mls_listings").select("city, state").eq("status", "active").ilike("city", term).limit(45),
     supabase.from("mls_listings").select("city, state").eq("status", "active").ilike("state", term).limit(20),
     supabase.from("mls_listings").select("postal_code, city, state").eq("status", "active").ilike("postal_code", term).limit(35),
-    supabase.from("mls_listings").select("address_line, city, state, postal_code").eq("status", "active").ilike("address_line", term).limit(16),
-    supabase.from("mls_listings").select("address_line, city, state, postal_code").eq("status", "active").ilike("title", term).limit(10),
+    supabase.from("mls_listings").select("address_line, city, state, postal_code, mls_id").eq("status", "active").ilike("address_line", term).limit(16),
+    supabase.from("mls_listings").select("address_line, city, state, postal_code, mls_id").eq("status", "active").ilike("title", term).limit(10),
     supabase.from("listings").select("city, state").eq("is_published", true).ilike("city", term).limit(25),
     supabase.from("listings").select("city, state").eq("is_published", true).ilike("state", term).limit(12),
     supabase.from("listings").select("postal_code, city, state").eq("is_published", true).ilike("postal_code", term).limit(20),
-    supabase.from("listings").select("address_line, city, state, postal_code").eq("is_published", true).ilike("address_line", term).limit(10),
-    supabase.from("listings").select("address_line, city, state, postal_code").eq("is_published", true).ilike("title", term).limit(8),
+    supabase.from("listings").select("address_line, city, state, postal_code, slug").eq("is_published", true).ilike("address_line", term).limit(10),
+    supabase.from("listings").select("address_line, city, state, postal_code, slug").eq("is_published", true).ilike("title", term).limit(8),
   ]);
 
   const out: SearchSuggestion[] = [];
@@ -122,20 +129,22 @@ export async function getSearchSuggestions(raw: string): Promise<SearchSuggestio
     });
   };
 
-  const addAddr = (line: string, city: string, state: string, zip: string) => {
+  const addAddr = (line: string, city: string, state: string, zip: string, href?: string) => {
     const a = line?.trim();
     if (!a) return;
     const tail = [city, state, zip].filter(Boolean).join(", ");
     const key = `${a.toLowerCase()}|${tail.toLowerCase()}`;
     if (seenAddr.has(key)) return;
     seenAddr.add(key);
-    out.push({
+    const sug: SearchSuggestion = {
       id: `addr-${key.slice(0, 96)}`,
       type: "address",
       label: a,
       subtitle: tail || "Address",
       value: tail ? `${a}, ${tail}` : a,
-    });
+    };
+    if (href) sug.href = href;
+    out.push(sug);
   };
 
   for (const row of (mlsCityRows.data ?? []) as { city?: string; state?: string }[]) {
@@ -162,37 +171,50 @@ export async function getSearchSuggestions(raw: string): Promise<SearchSuggestio
 
   const zips = out.filter((s) => s.type === "zip");
 
+  const mlsAddrHref = (mlsId: string | undefined): string | undefined => {
+    const id = mlsId?.trim();
+    return id ? `/listings/mls/${encodeURIComponent(id)}` : undefined;
+  };
+  const manualAddrHref = (slug: string | undefined): string | undefined => {
+    const s = slug?.trim();
+    return s ? `/listings/${encodeURIComponent(s)}` : undefined;
+  };
+
   for (const row of (mlsAddrLine.data ?? []) as {
     address_line?: string;
     city?: string;
     state?: string;
     postal_code?: string;
+    mls_id?: string;
   }[]) {
-    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "");
+    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "", mlsAddrHref(row.mls_id));
   }
   for (const row of (mlsTitleRows.data ?? []) as {
     address_line?: string;
     city?: string;
     state?: string;
     postal_code?: string;
+    mls_id?: string;
   }[]) {
-    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "");
+    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "", mlsAddrHref(row.mls_id));
   }
   for (const row of (manAddrLine.data ?? []) as {
     address_line?: string;
     city?: string;
     state?: string;
     postal_code?: string;
+    slug?: string;
   }[]) {
-    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "");
+    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "", manualAddrHref(row.slug));
   }
   for (const row of (manTitleRows.data ?? []) as {
     address_line?: string;
     city?: string;
     state?: string;
     postal_code?: string;
+    slug?: string;
   }[]) {
-    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "");
+    addAddr(row.address_line ?? "", row.city ?? "", row.state ?? "", row.postal_code ?? "", manualAddrHref(row.slug));
   }
 
   const addrs = out.filter((s) => s.type === "address");

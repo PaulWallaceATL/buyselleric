@@ -43,8 +43,14 @@ export function HeroSearch() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (activeIndex >= 0 && suggestions[activeIndex]) {
-      goSearch(suggestions[activeIndex].value);
+    const sel = activeIndex >= 0 ? suggestions[activeIndex] : undefined;
+    if (sel?.href) {
+      setOpen(false);
+      router.push(sel.href);
+      return;
+    }
+    if (sel) {
+      goSearch(sel.value);
       return;
     }
     goSearch(query);
@@ -73,6 +79,11 @@ export function HeroSearch() {
   };
 
   const pick = (s: SearchSuggestion) => {
+    if (s.href) {
+      setOpen(false);
+      router.push(s.href);
+      return;
+    }
     setQuery(s.value);
     goSearch(s.value);
   };

@@ -63,8 +63,14 @@ export function ListingsSearchBar({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (activeIndex >= 0 && suggestions[activeIndex]) {
-      goSearch(suggestions[activeIndex].value);
+    const sel = activeIndex >= 0 ? suggestions[activeIndex] : undefined;
+    if (sel?.href) {
+      setOpen(false);
+      router.push(sel.href, { scroll: false });
+      return;
+    }
+    if (sel) {
+      goSearch(sel.value);
       return;
     }
     goSearch(query);
@@ -86,6 +92,11 @@ export function ListingsSearchBar({
   };
 
   const pick = (s: SearchSuggestion) => {
+    if (s.href) {
+      setOpen(false);
+      router.push(s.href, { scroll: false });
+      return;
+    }
     setQuery(s.value);
     goSearch(s.value);
   };

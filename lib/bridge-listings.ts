@@ -926,20 +926,23 @@ export async function bridgeGetSearchSuggestions(raw: string): Promise<SearchSug
     });
   };
 
-  const addAddr = (line: string, city: string, state: string, zip: string) => {
+  const addAddr = (line: string, city: string, state: string, zip: string, mlsId: string) => {
     const a = line?.trim();
     if (!a) return;
     const tail = [city, state, zip].filter(Boolean).join(", ");
     const key = `${a.toLowerCase()}|${tail.toLowerCase()}`;
     if (seenAddr.has(key)) return;
     seenAddr.add(key);
-    out.push({
+    const sug: SearchSuggestion = {
       id: `addr-${key.slice(0, 96)}`,
       type: "address",
       label: a,
       subtitle: tail || "Address",
       value: tail ? `${a}, ${tail}` : a,
-    });
+    };
+    const id = mlsId.trim();
+    if (id) sug.href = `/listings/mls/${encodeURIComponent(id)}`;
+    out.push(sug);
   };
 
   for (const row of cityRows) {
@@ -950,7 +953,9 @@ export async function bridgeGetSearchSuggestions(raw: string): Promise<SearchSug
   }
   for (const row of addrRows) {
     const line = buildAddressLine(row);
-    addAddr(line, String(row.City ?? ""), String(row.StateOrProvince ?? ""), String(row.PostalCode ?? ""));
+    // Bridge MLS detail page resolves either id; ListingId is the user-facing MLS #.
+    const mlsId = String(row.ListingId ?? row.ListingKey ?? "");
+    addAddr(line, String(row.City ?? ""), String(row.StateOrProvince ?? ""), String(row.PostalCode ?? ""), mlsId);
   }
 
   const cities = out.filter((s) => s.type === "city");
