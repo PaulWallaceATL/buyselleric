@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { feedLabelForListing } from "@/lib/feed-labels";
 import { formatPriceUsd } from "@/lib/format";
 import {
@@ -11,11 +14,15 @@ import type { UnifiedListing } from "@/lib/listings-queries";
 
 export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
   const imgs = filterDisplayImageUrls(listing.image_urls);
-  const img = imgs[0] ?? null;
   const location = [listing.city, listing.state].filter(Boolean).join(", ");
 
   const href = listingDetailHref(listing);
   const feed = feedLabelForListing(listing);
+
+  // Try each candidate URL in order; advance to the next when one errors so
+  // a broken upstream URL doesn't leave a broken-image icon on the card.
+  const [imgIdx, setImgIdx] = useState(0);
+  const img = imgs[imgIdx] ?? null;
 
   return (
     <Link
@@ -25,6 +32,7 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted sm:aspect-4/3">
         {img ? (
           <Image
+            key={img}
             src={img}
             alt={listing.title ?? ""}
             fill
@@ -32,6 +40,10 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
             className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
             loading="lazy"
             unoptimized={listingImagePreferUnoptimized(img)}
+            onError={() => {
+              if (imgIdx < imgs.length - 1) setImgIdx(imgIdx + 1);
+              else setImgIdx(imgs.length); // exhaust → show placeholder below
+            }}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-base text-muted-foreground">

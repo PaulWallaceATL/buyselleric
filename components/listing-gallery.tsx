@@ -2,15 +2,34 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { filterDisplayImageUrls, listingImagePreferUnoptimized } from "@/lib/listing-urls";
 
 export function ListingGallery({ urls }: { urls: string[] }) {
-  const clean = filterDisplayImageUrls(urls);
+  const clean = useMemo(() => filterDisplayImageUrls(urls), [urls]);
+
+  // MLS feeds occasionally return URLs that 404, redirect to HTML, or the
+  // Next image optimizer rejects upstream. Track those per render so the
+  // gallery silently skips them instead of leaving blank slots.
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
+  const markFailed = useCallback((url: string) => {
+    setFailedUrls((prev) => {
+      if (prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  }, []);
+
+  const visible = useMemo(
+    () => clean.filter((u) => !failedUrls.has(u)),
+    [clean, failedUrls],
+  );
+
   const [active, setActive] = useState(0);
-  const safeIndex = clean.length === 0 ? 0 : Math.min(active, clean.length - 1);
-  const main = clean[safeIndex];
-  const n = clean.length;
+  const n = visible.length;
+  const safeIndex = n === 0 ? 0 : Math.min(active, n - 1);
+  const main = visible[safeIndex];
   const multi = n > 1;
 
   const goPrev = useCallback(() => {
@@ -21,7 +40,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
     setActive((i) => (n <= 1 ? i : (i + 1) % n));
   }, [n]);
 
-  if (clean.length === 0) {
+  if (n === 0) {
     return (
       <div className="flex aspect-4/3 w-full items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 p-6 text-center text-base text-muted-foreground sm:rounded-3xl sm:text-lg">
         Photos coming soon
@@ -36,6 +55,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
         aria-label={multi ? "Photo gallery" : undefined}
       >
         <Image
+          key={main!}
           src={main!}
           alt=""
           fill
@@ -43,6 +63,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
           className="object-cover"
           priority
           unoptimized={listingImagePreferUnoptimized(main!)}
+          onError={() => markFailed(main!)}
         />
         {multi ? (
           <>
@@ -94,14 +115,14 @@ export function ListingGallery({ urls }: { urls: string[] }) {
           </>
         ) : null}
       </div>
-      {clean.length > 1 ? (
+      {n > 1 ? (
         <div className="flex gap-3 overflow-x-auto pb-2 sm:gap-4">
-          {clean.map((url, i) => (
+          {visible.map((url, i) => (
             <button
               key={`${url}-${i}`}
               type="button"
               onClick={() => setActive(i)}
-              aria-label={`Show photo ${i + 1} of ${clean.length}`}
+              aria-label={`Show photo ${i + 1} of ${n}`}
               className={`relative min-h-[52px] min-w-[4.5rem] shrink-0 overflow-hidden rounded-xl border-2 transition-all sm:min-h-20 sm:min-w-[7.5rem] ${
                 i === safeIndex
                   ? "border-ring ring-2 ring-ring/30"
@@ -116,6 +137,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
                 className="object-cover"
                 loading="lazy"
                 unoptimized={listingImagePreferUnoptimized(url)}
+                onError={() => markFailed(url)}
               />
             </button>
           ))}
