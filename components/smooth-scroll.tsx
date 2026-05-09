@@ -1,9 +1,36 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, type ReactNode } from "react";
 import { features } from "@/lib/config";
 
 export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
+  const pathname = usePathname();
+  // Skip the very first scroll-reset effect tick — that's the initial mount,
+  // and forcing scroll to 0 there breaks deep links like /page#section.
+  const isFirstPathRef = useRef(true);
+
+  // Whenever the route path changes, jump back to the top. Next.js does this
+  // natively via window.scrollTo(0, 0), but Lenis owns the scroll loop and
+  // doesn't always sync its internal targetScroll, so the page stays put.
+  // Same-path navigations (e.g. ?q= changes on /listings) don't trigger this
+  // effect — usePathname stays stable across search-param-only changes.
+  useEffect(() => {
+    if (isFirstPathRef.current) {
+      isFirstPathRef.current = false;
+      return;
+    }
+    // Hash-anchor nav (e.g. /#contact) should land on the section, not 0.
+    if (window.location.hash && window.location.hash !== "#") return;
+
+    const lenis = window.__lenisInstance;
+    if (lenis) {
+      lenis.scrollTo(0, { immediate: true, force: true });
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [pathname]);
+
   useEffect(() => {
     if (!features.smoothScroll) return;
 
@@ -28,6 +55,8 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
           wheelMultiplier: 1,
           touchMultiplier: 2,
         });
+        // Expose so the route-change effect above can reset scroll on nav.
+        window.__lenisInstance = lenis;
 
         function raf(time: number) {
           lenis.raf(time);
@@ -101,6 +130,7 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
         window.__lenisCleanup = () => {
           document.removeEventListener("click", handleAnchorClick);
           lenis.destroy();
+          window.__lenisInstance = undefined;
         };
 
         [0, 50, 150, 400, 900, 1800].forEach((ms) => {
@@ -122,8 +152,17 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
   return <>{children}</>;
 }
 
+interface LenisLike {
+  scrollTo: (
+    target: number | string | HTMLElement,
+    opts?: { immediate?: boolean; force?: boolean; offset?: number },
+  ) => void;
+  destroy: () => void;
+}
+
 declare global {
   interface Window {
     __lenisCleanup?: () => void;
+    __lenisInstance?: LenisLike | undefined;
   }
 }
