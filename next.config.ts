@@ -61,6 +61,13 @@ const nextConfig: NextConfig = {
         hostname: "**.gamls.com",
         pathname: "/**",
       },
+      // Spark Platform / Mid-GA MLS photo CDN
+      // (photos.sparkplatform.com, cdn{,1,2}.photos.sparkplatform.com, cdn.resize.sparkplatform.com, …)
+      {
+        protocol: "https",
+        hostname: "**.sparkplatform.com",
+        pathname: "/**",
+      },
       {
         protocol: "https",
         hostname: "**.cloudfront.net",
