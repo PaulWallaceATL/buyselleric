@@ -8,7 +8,6 @@ import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 
 const Services = dynamic(() => import("@/components/services").then((m) => ({ default: m.Services })));
-const SocialProof = dynamic(() => import("@/components/social-proof").then((m) => ({ default: m.SocialProof })));
 const Faq = dynamic(() => import("@/components/faq").then((m) => ({ default: m.Faq })));
 
 export const metadata: Metadata = createMetadata({
@@ -24,7 +23,6 @@ export default function HomePage(): ReactNode {
       <FeaturedListings />
       {/* Eager mount: hash links (#services) must exist on first paint for scroll + Lenis. */}
       <Services />
-      <SocialProof />
       <LazySection>
         <Faq />
       </LazySection>

@@ -16,7 +16,6 @@ const sections = [
   { id: "featured-listings", label: "Search" },
   { id: "services", label: "Services" },
   { id: "about", label: "About" },
-  { id: "social-proof", label: "Stories" },
   { id: "contact", label: "Contact" },
 ];
 
@@ -26,7 +25,6 @@ const menuItems = [
   { label: "Sell", href: "/sell" },
   { label: "Blog", href: "/blog" },
   { label: "Services", href: "/#services-menu" },
-  { label: "Stories", href: "/#social-proof" },
   { label: "Contact", href: "#contact" },
 ];
 
