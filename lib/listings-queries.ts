@@ -196,15 +196,26 @@ async function searchWithMultipleFeedsPolygon(
 }
 
 /**
- * Deep multi-feed pagination. Each feed contributes one page worth of rows
- * via OData $skip/$top in parallel, plus its $count for the upstream total.
- * The merged page is sorted globally and sliced — no per-feed cap, so every
- * page from 1 to ceil((bridgeTotal + sparkTotal) / perPage) is reachable.
+ * Deep multi-feed pagination using feed-sequential routing.
  *
- * Cross-feed sort is locally consistent (per page) but may have minor
- * inversions across pages when feed price distributions interleave. In the
- * Bridge (GAMLS) + Spark (Mid-GA MLS) case the regional split keeps this
- * a non-issue in practice.
+ * Pages 1..ceil(bridgeTotal/perPage) come from Bridge in Bridge's own sort;
+ * the remaining pages come from Spark in Spark's own sort. This guarantees
+ * every listing across both feeds is reachable via the page nav (a 5k-row
+ * search yields 5k browsable rows) and each page is always full unless it
+ * lands on the very last partial page of the second feed.
+ *
+ * Trade-off: cross-feed price interleaving is sacrificed at the seam between
+ * Bridge's last page and Spark's first page. The previous "fetch the same
+ * $skip from both feeds in parallel and in-memory sort" approach preserved
+ * interleaving for early pages but produced empty pages once one feed ran
+ * out of rows (very common in the Bridge ~5k vs. Spark ~1k case here), so
+ * deep pagination effectively topped out. Sequential routing is the simpler
+ * trade and matches how IDX-style sites typically merge regional MLS feeds.
+ *
+ * Latency: one parallel round trip in the common (early/Bridge) case, plus
+ * a second sequential trip when the page lands in Spark territory. The
+ * speculative Bridge fetch doubles as the data fetch; the Spark probe is a
+ * `$top=1, $count=true` "just give me the total" call.
  */
 async function searchWithMultipleFeeds(filters: ListingFilters): Promise<PaginatedResult> {
   const poly = filters.mapPolygon;
@@ -212,42 +223,71 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
 
   const requestedPage = Math.max(1, filters.page ?? 1);
   const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
-  const skip = (requestedPage - 1) * perPage;
 
-  // Over-fetch 2x perPage from each feed so dedupe + cross-feed merge still
-  // yields a full page of `perPage` rows after the in-memory sort.
-  const fetchTake = Math.min(200, perPage * 2);
+  const bridgeOn = isBridgeListingsEnabled();
+  const sparkOn = isSparkListingsEnabled();
 
-  const tasks: Array<Promise<{ rows: UnifiedListing[]; total: number }>> = [];
-  if (isBridgeListingsEnabled()) {
-    tasks.push(bridgeFetchUnifiedPage(filters, { skip, take: fetchTake }));
-  }
-  if (isSparkListingsEnabled()) {
-    tasks.push(sparkFetchUnifiedPage(filters, { skip, take: fetchTake }));
+  if (!bridgeOn && !sparkOn) {
+    return { listings: [], total: 0, page: 1, perPage, totalPages: 0 };
   }
 
-  const settled = await Promise.allSettled(tasks);
-  const allRows: UnifiedListing[] = [];
-  let total = 0;
-  for (const s of settled) {
-    if (s.status !== "fulfilled") {
-      console.warn("searchWithMultipleFeeds: feed failed", s.reason);
-      continue;
+  // Speculatively fetch the requested page from Bridge and a tiny count
+  // probe from Spark in parallel. If the requested page falls in Bridge's
+  // range (the common case), we already have the rows after one round trip.
+  const speculativeBridgeSkip = (requestedPage - 1) * perPage;
+  const [bridgeRes, sparkProbeRes] = await Promise.allSettled([
+    bridgeOn
+      ? bridgeFetchUnifiedPage(filters, { skip: speculativeBridgeSkip, take: perPage })
+      : Promise.resolve<{ rows: UnifiedListing[]; total: number }>({ rows: [], total: 0 }),
+    sparkOn
+      ? sparkFetchUnifiedPage(filters, { skip: 0, take: 1 })
+      : Promise.resolve<{ rows: UnifiedListing[]; total: number }>({ rows: [], total: 0 }),
+  ]);
+
+  if (bridgeRes.status === "rejected") {
+    console.warn("searchWithMultipleFeeds: bridge probe failed", bridgeRes.reason);
+  }
+  if (sparkProbeRes.status === "rejected") {
+    console.warn("searchWithMultipleFeeds: spark probe failed", sparkProbeRes.reason);
+  }
+
+  const bridgeTotal = bridgeRes.status === "fulfilled" ? bridgeRes.value.total : 0;
+  const sparkTotal = sparkProbeRes.status === "fulfilled" ? sparkProbeRes.value.total : 0;
+
+  const bridgePages = bridgeTotal > 0 ? Math.ceil(bridgeTotal / perPage) : 0;
+  const sparkPages = sparkTotal > 0 ? Math.ceil(sparkTotal / perPage) : 0;
+  const totalPages = bridgePages + sparkPages;
+  const total = bridgeTotal + sparkTotal;
+
+  if (totalPages === 0) {
+    return { listings: [], total: 0, page: 1, perPage, totalPages: 0 };
+  }
+
+  const safePage = Math.min(requestedPage, totalPages);
+
+  let rows: UnifiedListing[] = [];
+  if (safePage <= bridgePages) {
+    if (safePage === requestedPage && bridgeRes.status === "fulfilled") {
+      rows = bridgeRes.value.rows;
+    } else {
+      // page got clamped (requested > totalPages) — refetch at clamped offset.
+      const skip = (safePage - 1) * perPage;
+      const res = await bridgeFetchUnifiedPage(filters, { skip, take: perPage });
+      rows = res.rows;
     }
-    allRows.push(...s.value.rows);
-    total += s.value.total;
+  } else {
+    // Past Bridge → land in Spark. Re-base the page index against Spark's range.
+    const sparkPageIndex = safePage - bridgePages;
+    const skip = Math.max(0, (sparkPageIndex - 1) * perPage);
+    const res = await sparkFetchUnifiedPage(filters, { skip, take: perPage });
+    rows = res.rows;
   }
 
-  let unified = dedupeUnifiedListings(allRows);
-  unified.sort(unifiedSorter(filters.sort));
-
-  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
-  const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
-  let listings = unified.slice(0, perPage);
+  let listings = dedupeUnifiedListings(rows);
   listings = applyZipCentroidPinCoords(listings, undefined);
   listings = await enrichListingsWithPhotonGeocode(listings);
 
-  return { listings, total, page, perPage, totalPages };
+  return { listings, total, page: safePage, perPage, totalPages };
 }
 
 /**

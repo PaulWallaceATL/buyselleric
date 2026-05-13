@@ -10,9 +10,25 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
   // and forcing scroll to 0 there breaks deep links like /page#section.
   const isFirstPathRef = useRef(true);
 
+  // Disable browser scroll restoration once on mount. Browsers default to
+  // "auto" which races with our reset on back/forward (and sometimes on
+  // soft pushes too) — we want full control of where each new route lands.
+  useEffect(() => {
+    if (typeof history !== "undefined" && "scrollRestoration" in history) {
+      try {
+        history.scrollRestoration = "manual";
+      } catch {
+        /* some browsers throw on cross-origin contexts; ignore. */
+      }
+    }
+  }, []);
+
   // Whenever the route path changes, jump back to the top. Next.js does this
   // natively via window.scrollTo(0, 0), but Lenis owns the scroll loop and
   // doesn't always sync its internal targetScroll, so the page stays put.
+  // We retry across a few frames to defeat late layout shifts (lazy data
+  // streaming in, fonts loading, image height settling) that can otherwise
+  // pull scroll back where it was.
   // Same-path navigations (e.g. ?q= changes on /listings) don't trigger this
   // effect — usePathname stays stable across search-param-only changes.
   useEffect(() => {
@@ -23,12 +39,31 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
     // Hash-anchor nav (e.g. /#contact) should land on the section, not 0.
     if (window.location.hash && window.location.hash !== "#") return;
 
-    const lenis = window.__lenisInstance;
-    if (lenis) {
-      lenis.scrollTo(0, { immediate: true, force: true });
-    } else {
+    const reset = () => {
+      // Native first so the document scroll position is true; then tell
+      // Lenis to align its internal animatedScroll/targetScroll. Doing
+      // both is intentional — either alone has been observed to lose to
+      // the other depending on Lenis init state and content streaming.
       window.scrollTo(0, 0);
-    }
+      const lenis = window.__lenisInstance;
+      if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
+    };
+
+    reset();
+    // Defeat late content shifts (server components streaming in, fonts /
+    // images settling) by re-pinning to top across a couple of frames.
+    const raf1 = requestAnimationFrame(() => {
+      reset();
+      requestAnimationFrame(reset);
+    });
+    const t1 = setTimeout(reset, 80);
+    const t2 = setTimeout(reset, 240);
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [pathname]);
 
   useEffect(() => {
