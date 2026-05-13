@@ -68,13 +68,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
           ← Back to listings
         </Link>
 
-        {galleryUrls.length > 0 && (
-          <div className="mt-6">
-            <ListingGallery urls={galleryUrls} />
-          </div>
-        )}
-
-        <div className="mt-8">
+        <div className="mt-6 sm:mt-8">
           <span className="rounded-full bg-ring/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white">
             MLS #{listing.mls_id}
           </span>
@@ -82,13 +76,18 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
             {title}
           </h1>
           <p className="mt-2 text-lg text-muted-foreground">{location}</p>
+          <p className="mt-5 text-3xl font-bold tabular-nums text-foreground sm:text-4xl">
+            {formatPriceUsd(listing.price_cents)}
+          </p>
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-2xl border border-border bg-muted/20 p-4 text-center">
-            <p className="text-2xl font-bold text-foreground sm:text-3xl">{formatPriceUsd(listing.price_cents)}</p>
-            <p className="mt-1 text-sm text-muted-foreground">List price</p>
+        {galleryUrls.length > 0 && (
+          <div className="mt-8">
+            <ListingGallery urls={galleryUrls} />
           </div>
+        )}
+
+        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-border bg-muted/20 p-4 text-center">
             <p className="text-2xl font-bold text-foreground">{listing.bedrooms}</p>
             <p className="mt-1 text-sm text-muted-foreground">Bedrooms</p>

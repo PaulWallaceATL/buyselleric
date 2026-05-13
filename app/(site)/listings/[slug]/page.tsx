@@ -86,31 +86,31 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
         </nav>
 
         <div className="mt-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:text-sm">
+            {statusLabel}
+          </p>
+          <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.5rem] lg:leading-tight xl:text-5xl">
+            {listing.title}
+          </h1>
+          {location ? (
+            <p className="mt-3 text-base leading-relaxed text-muted-foreground sm:text-lg">{location}</p>
+          ) : null}
+          <p className="mt-5 text-3xl font-bold tabular-nums text-foreground sm:text-4xl lg:text-5xl">
+            {formatPriceUsd(listing.price_cents)}
+          </p>
+          <p className="mt-3 text-base text-muted-foreground sm:text-lg">
+            {listing.bedrooms} bed · {listing.bathrooms} bath
+            {listing.square_feet ? ` · ${listing.square_feet.toLocaleString()} sq ft` : ""}
+          </p>
+        </div>
+
+        <div className="mt-8">
           <ListingGallery urls={listing.image_urls} />
         </div>
 
         <div className="mt-8 grid gap-10 sm:mt-10 lg:grid-cols-12 lg:gap-14 lg:gap-y-12">
           <aside className="lg:col-span-5">
             <div className="lg:sticky lg:top-28 lg:space-y-8">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:text-sm">
-                  {statusLabel}
-                </p>
-                <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.125rem] lg:leading-tight xl:text-[2.25rem]">
-                  {listing.title}
-                </h1>
-                <p className="mt-4 text-2xl font-semibold tabular-nums text-foreground sm:text-3xl lg:text-4xl">
-                  {formatPriceUsd(listing.price_cents)}
-                </p>
-                <p className="mt-4 text-lg text-muted-foreground">
-                  {listing.bedrooms} bed · {listing.bathrooms} bath
-                  {listing.square_feet ? ` · ${listing.square_feet.toLocaleString()} sq ft` : ""}
-                </p>
-                {location ? (
-                  <p className="mt-3 text-base leading-relaxed text-muted-foreground">{location}</p>
-                ) : null}
-              </div>
-
               <div className="flex flex-col gap-4 lg:flex-col">
                 <Link
                   href={`mailto:${siteConfig.email}?subject=${encodeURIComponent(`Inquiry: ${listing.title}`)}`}
