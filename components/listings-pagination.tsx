@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 export function ListingsPagination({
@@ -30,6 +32,27 @@ export function ListingsPagination({
     }
   }
 
+  // Pagination is a search-param-only nav (pathname stays /listings), so the
+  // SmoothScroll route-change effect doesn't fire. We explicitly reset scroll
+  // on click and re-pin across a couple of frames to defeat layout shifts as
+  // the new page streams in. Lenis owns the scroll loop, so we sync both the
+  // native scroll position and Lenis's internal state.
+  function scrollToTop() {
+    if (typeof window === "undefined") return;
+    const reset = () => {
+      window.scrollTo(0, 0);
+      const lenis = window.__lenisInstance;
+      if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
+    };
+    reset();
+    requestAnimationFrame(() => {
+      reset();
+      requestAnimationFrame(reset);
+    });
+    setTimeout(reset, 80);
+    setTimeout(reset, 240);
+  }
+
   return (
     <nav className="mt-12 flex flex-col items-center gap-4" aria-label="Pagination">
       <p className="text-sm text-muted-foreground">
@@ -40,6 +63,7 @@ export function ListingsPagination({
           <Link
             href={buildHref(page - 1)}
             scroll={false}
+            onClick={scrollToTop}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
           >
             ← Prev
@@ -53,6 +77,7 @@ export function ListingsPagination({
               key={p}
               href={buildHref(p)}
               scroll={false}
+              onClick={scrollToTop}
               className={`inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 p === page
                   ? "bg-foreground text-background"
@@ -67,6 +92,7 @@ export function ListingsPagination({
           <Link
             href={buildHref(page + 1)}
             scroll={false}
+            onClick={scrollToTop}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
           >
             Next →

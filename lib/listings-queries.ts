@@ -231,11 +231,19 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
     return { listings: [], total: 0, page: 1, perPage, totalPages: 0 };
   }
 
-  // Speculatively fetch the requested page from Bridge and a tiny count
-  // probe from Spark in parallel. If the requested page falls in Bridge's
-  // range (the common case), we already have the rows after one round trip.
+  // Three parallel probes:
+  //   1. Bridge count: cheap `$top=1` purely to read `@odata.count`.
+  //      Decoupled from the data fetch so a transient data-page failure
+  //      (timeout, deep-skip 5xx, etc.) doesn't collapse `totalPages`.
+  //   2. Bridge data at the requested skip — speculative; if the page lands
+  //      in Bridge (common case) we already have the rows after one round
+  //      trip.
+  //   3. Spark count: same cheap `$top=1` probe.
   const speculativeBridgeSkip = (requestedPage - 1) * perPage;
-  const [bridgeRes, sparkProbeRes] = await Promise.allSettled([
+  const [bridgeCountRes, bridgeRes, sparkProbeRes] = await Promise.allSettled([
+    bridgeOn
+      ? bridgeFetchUnifiedPage(filters, { skip: 0, take: 1 })
+      : Promise.resolve<{ rows: UnifiedListing[]; total: number }>({ rows: [], total: 0 }),
     bridgeOn
       ? bridgeFetchUnifiedPage(filters, { skip: speculativeBridgeSkip, take: perPage })
       : Promise.resolve<{ rows: UnifiedListing[]; total: number }>({ rows: [], total: 0 }),
@@ -244,6 +252,9 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
       : Promise.resolve<{ rows: UnifiedListing[]; total: number }>({ rows: [], total: 0 }),
   ]);
 
+  if (bridgeCountRes.status === "rejected") {
+    console.warn("searchWithMultipleFeeds: bridge count probe failed", bridgeCountRes.reason);
+  }
   if (bridgeRes.status === "rejected") {
     console.warn("searchWithMultipleFeeds: bridge probe failed", bridgeRes.reason);
   }
@@ -251,7 +262,13 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
     console.warn("searchWithMultipleFeeds: spark probe failed", sparkProbeRes.reason);
   }
 
-  const bridgeTotal = bridgeRes.status === "fulfilled" ? bridgeRes.value.total : 0;
+  // Prefer the cheap dedicated count probe; fall back to the data fetch's
+  // count if the probe failed but the data fetch succeeded. This keeps
+  // `totalPages` stable across page navigations on flaky connections.
+  const bridgeTotal = Math.max(
+    bridgeCountRes.status === "fulfilled" ? bridgeCountRes.value.total : 0,
+    bridgeRes.status === "fulfilled" ? bridgeRes.value.total : 0,
+  );
   const sparkTotal = sparkProbeRes.status === "fulfilled" ? sparkProbeRes.value.total : 0;
 
   const bridgePages = bridgeTotal > 0 ? Math.ceil(bridgeTotal / perPage) : 0;
