@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, type MouseEvent } from "react";
+import { useListingsNavigate } from "@/components/listings-nav-context";
 
 export function ListingsPagination({
   page,
@@ -14,6 +16,8 @@ export function ListingsPagination({
   total: number;
   baseParams: Record<string, string>;
 }) {
+  const router = useRouter();
+  const navigate = useListingsNavigate();
   const scrollResetGen = useRef(0);
   const scrollTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -74,6 +78,12 @@ export function ListingsPagination({
     scrollTimers.current.push(setTimeout(reset, 80), setTimeout(reset, 240));
   }
 
+  function handleNavClick(e: MouseEvent<HTMLAnchorElement>, href: string) {
+    e.preventDefault();
+    scrollToTop();
+    navigate(href, router.push);
+  }
+
   return (
     <nav className="mt-12 flex flex-col items-center gap-4" aria-label="Pagination">
       <p className="text-sm text-muted-foreground">
@@ -85,7 +95,7 @@ export function ListingsPagination({
             href={buildHref(page - 1)}
             prefetch={false}
             scroll={false}
-            onClick={scrollToTop}
+            onClick={(e) => handleNavClick(e, buildHref(page - 1))}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
           >
             ← Prev
@@ -100,7 +110,7 @@ export function ListingsPagination({
               href={buildHref(p)}
               prefetch={false}
               scroll={false}
-              {...(p !== page ? { onClick: scrollToTop } : {})}
+              {...(p !== page ? { onClick: (e: MouseEvent<HTMLAnchorElement>) => handleNavClick(e, buildHref(p)) } : {})}
               className={`inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 p === page
                   ? "bg-foreground text-background"
@@ -116,7 +126,7 @@ export function ListingsPagination({
             href={buildHref(page + 1)}
             prefetch={false}
             scroll={false}
-            onClick={scrollToTop}
+            onClick={(e) => handleNavClick(e, buildHref(page + 1))}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
           >
             Next →

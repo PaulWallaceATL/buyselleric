@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useListingsNavigate } from "@/components/listings-nav-context";
 import { SearchSuggestionsList } from "@/components/search-suggestions-list";
 import { useListingSearchSuggestions } from "@/components/use-listing-search-suggestions";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
@@ -16,6 +17,7 @@ export function ListingsSearchBar({
   baseParams?: Record<string, string>;
 }) {
   const router = useRouter();
+  const navigate = useListingsNavigate();
   const [query, setQuery] = useState(defaultValue);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -56,9 +58,9 @@ export function ListingsSearchBar({
       else p.delete("q");
       p.delete("page");
       const qs = p.toString();
-      router.push(qs ? `/listings?${qs}` : "/listings", { scroll: false });
+      navigate(qs ? `/listings?${qs}` : "/listings", router.push);
     },
-    [router, baseParams],
+    [router, baseParams, navigate],
   );
 
   const handleSubmit = (e: FormEvent) => {
@@ -66,7 +68,7 @@ export function ListingsSearchBar({
     const sel = activeIndex >= 0 ? suggestions[activeIndex] : undefined;
     if (sel?.href) {
       setOpen(false);
-      router.push(sel.href, { scroll: false });
+      navigate(sel.href, router.push);
       return;
     }
     if (sel) {
@@ -94,7 +96,7 @@ export function ListingsSearchBar({
   const pick = (s: SearchSuggestion) => {
     if (s.href) {
       setOpen(false);
-      router.push(s.href, { scroll: false });
+      navigate(s.href, router.push);
       return;
     }
     setQuery(s.value);

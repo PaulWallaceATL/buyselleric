@@ -19,7 +19,6 @@ import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
-import { cache } from "react";
 
 /**
  * Live MLS feeds we currently merge from. `manual` covers Eric's hand-curated
@@ -151,64 +150,137 @@ function dedupeUnifiedListings(rows: UnifiedListing[]): UnifiedListing[] {
   return out;
 }
 
-async function probeFeedTotal(
-  fetchPage: (
-    filters: ListingFilters,
-    options: { skip: number; take: number },
-  ) => Promise<{ rows: UnifiedListing[]; total: number }>,
+/**
+ * For open searches (no map polygon), fetch up to this many rows per feed in
+ * parallel, merge + sort in memory, then paginate. Fixes flaky feed-sequential
+ * totals (33 vs 303 on mobile) and is faster than multi-probe count retries.
+ */
+const MULTI_FEED_MERGE_MAX_ROWS = Math.min(
+  500,
+  Math.max(100, Number.parseInt(process.env.MULTI_FEED_MERGE_MAX_ROWS?.trim() ?? "400", 10) || 400),
+);
+
+async function fetchSequentialFeedPage(
   filters: ListingFilters,
-  maxAttempts = 5,
-): Promise<number> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const res = await fetchPage(filters, { skip: 0, take: 1 });
-    if (res.total > 0) return res.total;
-    if (attempt < maxAttempts - 1) {
-      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+  safePage: number,
+  bridgeTotal: number,
+  sparkTotal: number,
+  perPage: number,
+  sparkOn: boolean,
+): Promise<UnifiedListing[]> {
+  const bridgePages = bridgeTotal > 0 ? Math.ceil(bridgeTotal / perPage) : 0;
+
+  if (safePage <= bridgePages) {
+    const globalOffset = (safePage - 1) * perPage;
+    let res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
+    if (res.rows.length === 0) {
+      res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
     }
+    if (res.rows.length === 0 && sparkOn && sparkTotal > 0) {
+      const effectiveBridgeRows =
+        bridgeTotal > 0 && bridgeTotal <= globalOffset ? bridgeTotal : globalOffset;
+      const sparkSkip = Math.max(0, globalOffset - effectiveBridgeRows);
+      const sparkRes = await sparkFetchUnifiedPage(filters, { skip: sparkSkip, take: perPage });
+      return sparkRes.rows;
+    }
+    return res.rows;
   }
+
+  const sparkPageIndex = safePage - bridgePages;
+  const skip = Math.max(0, (sparkPageIndex - 1) * perPage);
+  const res = await sparkFetchUnifiedPage(filters, { skip, take: perPage });
+  return res.rows;
+}
+
+function effectiveFeedTotal(reported: number, rowCount: number, enabled: boolean): number {
+  if (!enabled) return 0;
+  if (reported > 0) return reported;
+  if (rowCount > 0 && rowCount < MULTI_FEED_MERGE_MAX_ROWS) return rowCount;
   return 0;
 }
 
-async function probeBridgeTotalRobust(filters: ListingFilters): Promise<number> {
-  let total = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
-  if (total > 0) return total;
-
-  await new Promise((r) => setTimeout(r, 400));
-  total = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
-  if (total > 0) return total;
-
-  const top = await bridgeFetchTopUnifiedListings(filters, 1);
-  if (top.total > 0) return top.total;
-
-  const page = await bridgeSearchWithFilters({ ...filters, page: 1, perPage: 1 });
-  return page.total > 0 ? page.total : 0;
-}
-
-async function fetchMultiFeedTotals(
-  filters: ListingFilters,
-  bridgeOn: boolean,
-  sparkOn: boolean,
-): Promise<{ bridgeTotal: number; sparkTotal: number }> {
-  let bridgeTotal = 0;
-  let sparkTotal = 0;
-  if (bridgeOn) {
-    bridgeTotal = await probeBridgeTotalRobust(filters);
-  }
-  if (sparkOn) {
-    sparkTotal = await probeFeedTotal(sparkFetchUnifiedPage, filters, 3);
-  }
-  if (bridgeOn && bridgeTotal === 0 && sparkOn && sparkTotal > 0) {
-    await new Promise((r) => setTimeout(r, 500));
-    bridgeTotal = await probeBridgeTotalRobust(filters);
-  }
-  return { bridgeTotal, sparkTotal };
-}
-
 /**
- * Per-request dedupe only (React cache). Avoids unstable_cache serving a poisoned
- * Spark-only total across devices when Bridge's count probe failed once.
+ * Multi-feed open search: parallel top-of-feed fetch, in-memory sort + page slice.
+ * Deep pages beyond the merged window fall back to per-feed $skip for that page only.
  */
-const getMultiFeedTotals = cache(fetchMultiFeedTotals);
+async function searchWithMultipleFeeds(
+  filters: ListingFilters,
+  options?: { skipAddressGeocode?: boolean },
+): Promise<PaginatedResult> {
+  const poly = filters.mapPolygon;
+  if (poly && poly.length >= 3) return searchWithMultipleFeedsPolygon(filters, poly);
+
+  const requestedPage = Math.max(1, filters.page ?? 1);
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
+
+  const bridgeOn = isBridgeListingsEnabled();
+  const sparkOn = isSparkListingsEnabled();
+
+  if (!bridgeOn && !sparkOn) {
+    return { listings: [], total: 0, page: 1, perPage, totalPages: 0 };
+  }
+
+  const [bridgeRes, sparkRes] = await Promise.all([
+    bridgeOn
+      ? bridgeFetchTopUnifiedListings(filters, MULTI_FEED_MERGE_MAX_ROWS)
+      : Promise.resolve<{ rows: UnifiedListing[]; total: number }>({ rows: [], total: 0 }),
+    sparkOn
+      ? sparkFetchTopUnifiedListings(filters, MULTI_FEED_MERGE_MAX_ROWS)
+      : Promise.resolve<{ rows: UnifiedListing[]; total: number }>({ rows: [], total: 0 }),
+  ]);
+
+  const bridgeTotal = effectiveFeedTotal(bridgeRes.total, bridgeRes.rows.length, bridgeOn);
+  const sparkTotal = effectiveFeedTotal(sparkRes.total, sparkRes.rows.length, sparkOn);
+
+  let unified = dedupeUnifiedListings([...bridgeRes.rows, ...sparkRes.rows]);
+  unified.sort(unifiedSorter(filters.sort));
+
+  const bridgeExhausted =
+    !bridgeOn ||
+    (bridgeTotal > 0 && bridgeRes.rows.length >= bridgeTotal) ||
+    bridgeRes.rows.length < MULTI_FEED_MERGE_MAX_ROWS;
+  const sparkExhausted =
+    !sparkOn ||
+    (sparkTotal > 0 && sparkRes.rows.length >= sparkTotal) ||
+    sparkRes.rows.length < MULTI_FEED_MERGE_MAX_ROWS;
+
+  let total = bridgeTotal + sparkTotal;
+  if (bridgeOn && bridgeRes.rows.length > 0 && total <= sparkTotal) {
+    total = bridgeRes.rows.length + sparkTotal;
+  }
+  if (bridgeExhausted && sparkExhausted) {
+    total = Math.max(total, unified.length);
+  }
+
+  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+
+  if (totalPages === 0) {
+    return { listings: [], total: 0, page: 1, perPage, totalPages: 0 };
+  }
+
+  const safePage = Math.min(requestedPage, totalPages);
+  const start = (safePage - 1) * perPage;
+
+  let rows: UnifiedListing[];
+  if (start + perPage <= unified.length) {
+    rows = unified.slice(start, start + perPage);
+  } else {
+    rows = await fetchSequentialFeedPage(filters, safePage, bridgeTotal, sparkTotal, perPage, sparkOn);
+  }
+
+  let listings = dedupeUnifiedListings(rows);
+  listings = applyZipCentroidPinCoords(listings, undefined);
+  const needsGeocode =
+    !options?.skipAddressGeocode &&
+    (filters.mapPolygon != null && filters.mapPolygon.length >= 3);
+  if (needsGeocode) {
+    listings = await enrichListingsWithPhotonGeocode(listings, {
+      polygon: filters.mapPolygon,
+    });
+  }
+
+  return { listings, total, page: safePage, perPage, totalPages };
+}
 
 /**
  * Polygon-aware multi-feed merge. We fetch a wider window from each feed,
@@ -253,91 +325,6 @@ async function searchWithMultipleFeedsPolygon(
   listings = await enrichListingsWithPhotonGeocode(listings, { polygon: poly });
 
   return { listings, total, page, perPage, totalPages };
-}
-
-/**
- * Deep multi-feed pagination using feed-sequential routing.
- *
- * Pages 1..ceil(bridgeTotal/perPage) come from Bridge in Bridge's own sort;
- * the remaining pages come from Spark in Spark's own sort. This guarantees
- * every listing across both feeds is reachable via the page nav (a 5k-row
- * search yields 5k browsable rows) and each page is always full unless it
- * lands on the very last partial page of the second feed.
- *
- * Trade-off: cross-feed price interleaving is sacrificed at the seam between
- * Bridge's last page and Spark's first page. The previous "fetch the same
- * $skip from both feeds in parallel and in-memory sort" approach preserved
- * interleaving for early pages but produced empty pages once one feed ran
- * out of rows (very common in the Bridge ~5k vs. Spark ~1k case here), so
- * deep pagination effectively topped out. Sequential routing is the simpler
- * trade and matches how IDX-style sites typically merge regional MLS feeds.
- *
- * Latency: one parallel round trip in the common (early/Bridge) case, plus
- * a second sequential trip when the page lands in Spark territory. The
- * speculative Bridge fetch doubles as the data fetch; the Spark probe is a
- * `$top=1, $count=true` "just give me the total" call.
- */
-async function searchWithMultipleFeeds(filters: ListingFilters): Promise<PaginatedResult> {
-  const poly = filters.mapPolygon;
-  if (poly && poly.length >= 3) return searchWithMultipleFeedsPolygon(filters, poly);
-
-  const requestedPage = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
-
-  const bridgeOn = isBridgeListingsEnabled();
-  const sparkOn = isSparkListingsEnabled();
-
-  if (!bridgeOn && !sparkOn) {
-    return { listings: [], total: 0, page: 1, perPage, totalPages: 0 };
-  }
-
-  // Resolve feed totals first (cached, skip=0 only). Never derive totals from the
-  // page-data fetch at skip>0 — OData without @odata.count reports skip+rows.
-  // Running count + deep skip in parallel also causes Bridge to drop counts.
-  const { bridgeTotal, sparkTotal } = await getMultiFeedTotals(filters, bridgeOn, sparkOn);
-
-  const bridgePages = bridgeTotal > 0 ? Math.ceil(bridgeTotal / perPage) : 0;
-  const sparkPages = sparkTotal > 0 ? Math.ceil(sparkTotal / perPage) : 0;
-  const totalPages = bridgePages + sparkPages;
-  const total = bridgeTotal + sparkTotal;
-
-  if (totalPages === 0) {
-    return { listings: [], total: 0, page: 1, perPage, totalPages: 0 };
-  }
-
-  const safePage = Math.min(requestedPage, totalPages);
-
-  let rows: UnifiedListing[] = [];
-  if (safePage <= bridgePages) {
-    const globalOffset = (safePage - 1) * perPage;
-    let res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
-    if (res.rows.length === 0) {
-      res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
-    }
-    rows = res.rows;
-
-    // Bridge count can overstate depth or deep $skip can flake — if we're still
-    // empty inside Bridge territory, serve the Spark slice for this global offset.
-    if (rows.length === 0 && sparkOn && sparkTotal > 0) {
-      const effectiveBridgeRows =
-        bridgeTotal > 0 && bridgeTotal <= globalOffset ? bridgeTotal : globalOffset;
-      const sparkSkip = Math.max(0, globalOffset - effectiveBridgeRows);
-      const sparkRes = await sparkFetchUnifiedPage(filters, { skip: sparkSkip, take: perPage });
-      rows = sparkRes.rows;
-    }
-  } else {
-    // Past Bridge → land in Spark. Re-base the page index against Spark's range.
-    const sparkPageIndex = safePage - bridgePages;
-    const skip = Math.max(0, (sparkPageIndex - 1) * perPage);
-    const res = await sparkFetchUnifiedPage(filters, { skip, take: perPage });
-    rows = res.rows;
-  }
-
-  let listings = dedupeUnifiedListings(rows);
-  listings = applyZipCentroidPinCoords(listings, undefined);
-  listings = await enrichListingsWithPhotonGeocode(listings);
-
-  return { listings, total, page: safePage, perPage, totalPages };
 }
 
 /**
@@ -413,12 +400,15 @@ function filterManualByListingFilters(rows: UnifiedListing[], filters: ListingFi
   });
 }
 
-export async function searchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
+export async function searchWithFilters(
+  filters: ListingFilters,
+  options?: { skipAddressGeocode?: boolean },
+): Promise<PaginatedResult> {
   const bridgeOn = isBridgeListingsEnabled();
   const sparkOn = isSparkListingsEnabled();
 
   if (bridgeOn && sparkOn) {
-    return searchWithMultipleFeeds(filters);
+    return searchWithMultipleFeeds(filters, options);
   }
   if (bridgeOn) {
     return bridgeSearchWithFilters(filters);

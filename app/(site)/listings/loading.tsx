@@ -1,3 +1,4 @@
+import { ListingsSpinner } from "@/components/listings-spinner";
 import { siteContainer } from "@/lib/ui";
 import type { ReactNode } from "react";
 
@@ -5,7 +6,12 @@ import type { ReactNode } from "react";
 export default function ListingsLoading(): ReactNode {
   return (
     <div className={siteContainer} aria-busy="true" aria-label="Loading listings">
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex flex-col items-center justify-center py-16 sm:py-20">
+        <ListingsSpinner />
+        <p className="mt-4 text-sm font-medium text-foreground">Loading homes…</p>
+        <p className="mt-1 text-xs text-muted-foreground">Searching MLS listings</p>
+      </div>
+      <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, i) => (
           <div
             key={i}

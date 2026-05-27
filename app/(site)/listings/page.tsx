@@ -72,13 +72,15 @@ export default async function ListingsPage({
 
   const view = typeof params.view === "string" ? params.view : "list";
 
+  const skipAddressGeocode = view !== "map" && !mapPolygon;
+
   // When in map view, fetch the paginated cards AND a wider pin set in parallel
   // so leaflet.markercluster can render a pin for every matching listing.
   const [
     { listings, total, page, totalPages, mapPolygonWideFetch },
     mapPinListings,
   ] = await Promise.all([
-    searchWithFilters(filters),
+    searchWithFilters(filters, { skipAddressGeocode }),
     view === "map" ? fetchAllPinsForMap(filters) : Promise.resolve<undefined>(undefined),
   ]);
 
