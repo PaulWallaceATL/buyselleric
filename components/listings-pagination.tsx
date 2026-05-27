@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 
 export function ListingsPagination({
   page,
@@ -13,6 +14,16 @@ export function ListingsPagination({
   total: number;
   baseParams: Record<string, string>;
 }) {
+  const scrollResetGen = useRef(0);
+  const scrollTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      scrollTimers.current.forEach(clearTimeout);
+      scrollTimers.current = [];
+    };
+  }, []);
+
   if (totalPages <= 1) return null;
 
   function buildHref(p: number) {
@@ -37,20 +48,30 @@ export function ListingsPagination({
   // on click and re-pin across a couple of frames to defeat layout shifts as
   // the new page streams in. Lenis owns the scroll loop, so we sync both the
   // native scroll position and Lenis's internal state.
+  //
+  // prefetch={false} on every link — Next.js prefetches in-viewport page links
+  // and can cache a transient empty RSC payload; clicking then shows "no results"
+  // while pagination still reports the full total.
   function scrollToTop() {
     if (typeof window === "undefined") return;
+
+    scrollTimers.current.forEach(clearTimeout);
+    scrollTimers.current = [];
+
+    const gen = ++scrollResetGen.current;
     const reset = () => {
+      if (scrollResetGen.current !== gen) return;
       window.scrollTo(0, 0);
       const lenis = window.__lenisInstance;
       if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
     };
+
     reset();
     requestAnimationFrame(() => {
       reset();
       requestAnimationFrame(reset);
     });
-    setTimeout(reset, 80);
-    setTimeout(reset, 240);
+    scrollTimers.current.push(setTimeout(reset, 80), setTimeout(reset, 240));
   }
 
   return (
@@ -62,6 +83,7 @@ export function ListingsPagination({
         {page > 1 && (
           <Link
             href={buildHref(page - 1)}
+            prefetch={false}
             scroll={false}
             onClick={scrollToTop}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
@@ -76,8 +98,9 @@ export function ListingsPagination({
             <Link
               key={p}
               href={buildHref(p)}
+              prefetch={false}
               scroll={false}
-              onClick={scrollToTop}
+              {...(p !== page ? { onClick: scrollToTop } : {})}
               className={`inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 p === page
                   ? "bg-foreground text-background"
@@ -91,6 +114,7 @@ export function ListingsPagination({
         {page < totalPages && (
           <Link
             href={buildHref(page + 1)}
+            prefetch={false}
             scroll={false}
             onClick={scrollToTop}
             className="inline-flex min-h-[40px] items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"

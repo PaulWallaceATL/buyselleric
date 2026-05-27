@@ -184,7 +184,10 @@ export default async function ListingsPage({
         ) : listings.length === 0 ? (
           <EmptyState hasFilters={hasFilters} query={filters.q} />
         ) : (
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            key={`listings-p${page}-${filters.q ?? ""}`}
+            className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          >
             {listings.map((l) => (
               <UnifiedListingCard key={l.id} listing={l} />
             ))}

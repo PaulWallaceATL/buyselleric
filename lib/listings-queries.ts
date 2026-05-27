@@ -19,6 +19,7 @@ import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
+import { unstable_noStore as noStore } from "next/cache";
 
 /**
  * Live MLS feeds we currently merge from. `manual` covers Eric's hand-curated
@@ -263,12 +264,17 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
   }
 
   // Prefer the cheap dedicated count probe; fall back to the data fetch's
-  // count if the probe failed but the data fetch succeeded. This keeps
-  // `totalPages` stable across page navigations on flaky connections.
-  const bridgeTotal = Math.max(
-    bridgeCountRes.status === "fulfilled" ? bridgeCountRes.value.total : 0,
-    bridgeRes.status === "fulfilled" ? bridgeRes.value.total : 0,
-  );
+  // count if the probe failed but the data fetch succeeded. Never take the
+  // max of both — an inflated count probe creates phantom Bridge pages at the
+  // Bridge→Spark seam (page N empty, page N+1 fine) while totals stay high.
+  const bridgeCountTotal =
+    bridgeCountRes.status === "fulfilled" ? bridgeCountRes.value.total : 0;
+  const bridgeDataTotal =
+    bridgeRes.status === "fulfilled" ? bridgeRes.value.total : 0;
+  let bridgeTotal = bridgeCountTotal || bridgeDataTotal;
+  if (bridgeCountTotal > 0 && bridgeDataTotal > 0 && bridgeDataTotal < bridgeCountTotal) {
+    bridgeTotal = bridgeDataTotal;
+  }
   const sparkTotal = sparkProbeRes.status === "fulfilled" ? sparkProbeRes.value.total : 0;
 
   const bridgePages = bridgeTotal > 0 ? Math.ceil(bridgeTotal / perPage) : 0;
@@ -284,21 +290,39 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
 
   let rows: UnifiedListing[] = [];
   if (safePage <= bridgePages) {
+    const globalOffset = (safePage - 1) * perPage;
     const haveSpeculativeRows =
       safePage === requestedPage &&
       bridgeRes.status === "fulfilled" &&
       bridgeRes.value.rows.length > 0;
+    let bridgePageTotal = bridgeDataTotal;
     if (haveSpeculativeRows) {
       rows = (bridgeRes as PromiseFulfilledResult<{ rows: UnifiedListing[]; total: number }>).value.rows;
+      bridgePageTotal = bridgeRes.value.total;
     } else {
       // Either the page was clamped (requested > totalPages) or the speculative
       // bridge data probe failed/returned empty (the parallel count probe still
       // gave us a real total, so the page IS supposed to have rows). Refetch
       // sequentially — a fresh request without the parallel count probe in
       // flight tends to succeed when the parallel pair didn't.
-      const skip = (safePage - 1) * perPage;
-      const res = await bridgeFetchUnifiedPage(filters, { skip, take: perPage });
+      let res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
+      if (res.rows.length === 0) {
+        res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
+      }
       rows = res.rows;
+      bridgePageTotal = res.total;
+    }
+
+    // Bridge count can overstate depth or deep $skip can flake — if we're still
+    // empty inside Bridge territory, serve the Spark slice for this global offset.
+    if (rows.length === 0 && sparkOn && sparkTotal > 0) {
+      const effectiveBridgeRows =
+        bridgePageTotal > 0 && bridgePageTotal <= globalOffset
+          ? bridgePageTotal
+          : globalOffset;
+      const sparkSkip = Math.max(0, globalOffset - effectiveBridgeRows);
+      const sparkRes = await sparkFetchUnifiedPage(filters, { skip: sparkSkip, take: perPage });
+      rows = sparkRes.rows;
     }
   } else {
     // Past Bridge → land in Spark. Re-base the page index against Spark's range.
@@ -389,6 +413,7 @@ function filterManualByListingFilters(rows: UnifiedListing[], filters: ListingFi
 }
 
 export async function searchWithFilters(filters: ListingFilters): Promise<PaginatedResult> {
+  noStore();
   const bridgeOn = isBridgeListingsEnabled();
   const sparkOn = isSparkListingsEnabled();
 
