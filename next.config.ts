@@ -22,6 +22,13 @@ const supabasePattern = supabaseStorageImagePattern();
 
 const nextConfig: NextConfig = {
   productionBrowserSourceMaps: false,
+  // Don't reuse soft-nav RSC payloads for dynamic routes (listings ?page= changes).
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+      static: 180,
+    },
+  },
   // Strip noisy logs in production, but keep error/warn for Vercel diagnostics and Bridge debugging.
   compiler: {
     removeConsole:
