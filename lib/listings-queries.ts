@@ -263,17 +263,14 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
     console.warn("searchWithMultipleFeeds: spark probe failed", sparkProbeRes.reason);
   }
 
-  // Prefer the cheap dedicated count probe; fall back to the data fetch's
-  // count if the probe failed but the data fetch succeeded. Never take the
-  // max of both — an inflated count probe creates phantom Bridge pages at the
-  // Bridge→Spark seam (page N empty, page N+1 fine) while totals stay high.
-  const bridgeCountTotal =
+  // Totals come ONLY from the skip=0 count probes. The speculative data fetch
+  // runs at (page-1)*perPage; when @odata.count is absent its fallback total is
+  // skip+rows (e.g. 33 on page 2) — never use that for pagination math.
+  let bridgeTotal =
     bridgeCountRes.status === "fulfilled" ? bridgeCountRes.value.total : 0;
-  const bridgeDataTotal =
-    bridgeRes.status === "fulfilled" ? bridgeRes.value.total : 0;
-  let bridgeTotal = bridgeCountTotal || bridgeDataTotal;
-  if (bridgeCountTotal > 0 && bridgeDataTotal > 0 && bridgeDataTotal < bridgeCountTotal) {
-    bridgeTotal = bridgeDataTotal;
+  if (bridgeTotal === 0 && bridgeOn) {
+    const retry = await bridgeFetchUnifiedPage(filters, { skip: 0, take: 1 });
+    bridgeTotal = retry.total;
   }
   const sparkTotal = sparkProbeRes.status === "fulfilled" ? sparkProbeRes.value.total : 0;
 
@@ -295,10 +292,8 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
       safePage === requestedPage &&
       bridgeRes.status === "fulfilled" &&
       bridgeRes.value.rows.length > 0;
-    let bridgePageTotal = bridgeDataTotal;
     if (haveSpeculativeRows) {
       rows = (bridgeRes as PromiseFulfilledResult<{ rows: UnifiedListing[]; total: number }>).value.rows;
-      bridgePageTotal = bridgeRes.value.total;
     } else {
       // Either the page was clamped (requested > totalPages) or the speculative
       // bridge data probe failed/returned empty (the parallel count probe still
@@ -310,16 +305,13 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
         res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
       }
       rows = res.rows;
-      bridgePageTotal = res.total;
     }
 
     // Bridge count can overstate depth or deep $skip can flake — if we're still
     // empty inside Bridge territory, serve the Spark slice for this global offset.
     if (rows.length === 0 && sparkOn && sparkTotal > 0) {
       const effectiveBridgeRows =
-        bridgePageTotal > 0 && bridgePageTotal <= globalOffset
-          ? bridgePageTotal
-          : globalOffset;
+        bridgeTotal > 0 && bridgeTotal <= globalOffset ? bridgeTotal : globalOffset;
       const sparkSkip = Math.max(0, globalOffset - effectiveBridgeRows);
       const sparkRes = await sparkFetchUnifiedPage(filters, { skip: sparkSkip, take: perPage });
       rows = sparkRes.rows;
