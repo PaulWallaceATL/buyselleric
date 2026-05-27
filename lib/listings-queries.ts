@@ -169,25 +169,37 @@ async function probeFeedTotal(
   return 0;
 }
 
+async function probeBridgeTotalRobust(filters: ListingFilters): Promise<number> {
+  let total = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
+  if (total > 0) return total;
+
+  await new Promise((r) => setTimeout(r, 400));
+  total = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
+  if (total > 0) return total;
+
+  const top = await bridgeFetchTopUnifiedListings(filters, 1);
+  if (top.total > 0) return top.total;
+
+  const page = await bridgeSearchWithFilters({ ...filters, page: 1, perPage: 1 });
+  return page.total > 0 ? page.total : 0;
+}
+
 async function fetchMultiFeedTotals(
   filters: ListingFilters,
   bridgeOn: boolean,
   sparkOn: boolean,
 ): Promise<{ bridgeTotal: number; sparkTotal: number }> {
-  // Probe Bridge first (sequential) — parallel count + deep $skip caused flaky Bridge totals.
   let bridgeTotal = 0;
   let sparkTotal = 0;
   if (bridgeOn) {
-    bridgeTotal = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
+    bridgeTotal = await probeBridgeTotalRobust(filters);
   }
   if (sparkOn) {
     sparkTotal = await probeFeedTotal(sparkFetchUnifiedPage, filters, 3);
   }
-  // When Bridge is enabled but returned 0 while Spark has rows, Bridge likely flaked
-  // (common on mobile edge requests). Retry before accepting a Spark-only total (33 vs 303).
   if (bridgeOn && bridgeTotal === 0 && sparkOn && sparkTotal > 0) {
-    await new Promise((r) => setTimeout(r, 400));
-    bridgeTotal = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
+    await new Promise((r) => setTimeout(r, 500));
+    bridgeTotal = await probeBridgeTotalRobust(filters);
   }
   return { bridgeTotal, sparkTotal };
 }

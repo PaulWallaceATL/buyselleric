@@ -29,6 +29,28 @@ const nextConfig: NextConfig = {
       static: 180,
     },
   },
+  async headers() {
+    return [
+      {
+        source: "/listings",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
+      {
+        source: "/listings/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
+    ];
+  },
   // Strip noisy logs in production, but keep error/warn for Vercel diagnostics and Bridge debugging.
   compiler: {
     removeConsole:

@@ -25,7 +25,14 @@ export function sanitizeSuggestQuery(raw: string): string {
   return raw.replace(/[%_,]/g, " ").replace(/\s+/g, " ").trim().slice(0, 64);
 }
 
-/** Merge suggestions from multiple feeds, dedupe by id, keep ordering by type. */
+/** Merge suggestions from multiple feeds; dedupe by canonical city/zip value, not feed-specific ids. */
+function suggestionDedupeKey(s: SearchSuggestion): string {
+  const v = s.value.trim().toLowerCase().replace(/\s+/g, " ");
+  if (s.type === "city") return `city:${v}`;
+  if (s.type === "zip") return `zip:${v.replace(/\D/g, "")}`;
+  return `addr:${s.id}`;
+}
+
 function mergeSuggestionsByType(...lists: SearchSuggestion[][]): SearchSuggestion[] {
   const seen = new Set<string>();
   const cities: SearchSuggestion[] = [];
@@ -33,8 +40,9 @@ function mergeSuggestionsByType(...lists: SearchSuggestion[][]): SearchSuggestio
   const addrs: SearchSuggestion[] = [];
   for (const list of lists) {
     for (const s of list) {
-      if (seen.has(s.id)) continue;
-      seen.add(s.id);
+      const key = suggestionDedupeKey(s);
+      if (seen.has(key)) continue;
+      seen.add(key);
       if (s.type === "city") cities.push(s);
       else if (s.type === "zip") zips.push(s);
       else addrs.push(s);

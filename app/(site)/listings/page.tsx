@@ -129,8 +129,26 @@ export default async function ListingsPage({
         </p>
 
         <div className="mt-8 flex flex-col gap-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <ListingsSearchBar defaultValue={filters.q ?? ""} baseParams={baseParams} />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <ListingsSearchBar defaultValue={filters.q ?? ""} baseParams={baseParams} />
+              {(hasFilters || total > 0) && (
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {total.toLocaleString()}
+                  </span>{" "}
+                  {total === 1 ? "home" : "homes"} found
+                  {totalPages > 1 ? (
+                    <>
+                      {" "}
+                      · Page{" "}
+                      <span className="font-medium text-foreground">{page}</span> of{" "}
+                      <span className="font-medium text-foreground">{totalPages}</span>
+                    </>
+                  ) : null}
+                </p>
+              )}
+            </div>
             <ViewToggle baseParams={baseParams} activeView={view} />
           </div>
           <Suspense>
