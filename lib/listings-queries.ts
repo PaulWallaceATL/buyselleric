@@ -284,10 +284,18 @@ async function searchWithMultipleFeeds(filters: ListingFilters): Promise<Paginat
 
   let rows: UnifiedListing[] = [];
   if (safePage <= bridgePages) {
-    if (safePage === requestedPage && bridgeRes.status === "fulfilled") {
-      rows = bridgeRes.value.rows;
+    const haveSpeculativeRows =
+      safePage === requestedPage &&
+      bridgeRes.status === "fulfilled" &&
+      bridgeRes.value.rows.length > 0;
+    if (haveSpeculativeRows) {
+      rows = (bridgeRes as PromiseFulfilledResult<{ rows: UnifiedListing[]; total: number }>).value.rows;
     } else {
-      // page got clamped (requested > totalPages) — refetch at clamped offset.
+      // Either the page was clamped (requested > totalPages) or the speculative
+      // bridge data probe failed/returned empty (the parallel count probe still
+      // gave us a real total, so the page IS supposed to have rows). Refetch
+      // sequentially — a fresh request without the parallel count probe in
+      // flight tends to succeed when the parallel pair didn't.
       const skip = (safePage - 1) * perPage;
       const res = await bridgeFetchUnifiedPage(filters, { skip, take: perPage });
       rows = res.rows;
