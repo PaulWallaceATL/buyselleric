@@ -695,29 +695,22 @@ export async function bridgeProbeExactTotal(filters: ListingFilters): Promise<nu
 
   const filter = buildFilter(filters);
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
-        $filter: filter,
-        $select: "ListingKey",
-        $top: "1",
-        $skip: "0",
-        $count: "true",
-      });
-      if (typeof data["@odata.count"] === "number") return data["@odata.count"];
-      const batch = data.value ?? [];
-      if (batch.length === 0) return 0;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!/429|request limit/i.test(msg) || attempt === 2) break;
-    }
+  try {
+    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+      $filter: filter,
+      $select: "ListingKey",
+      $top: "1",
+      $skip: "0",
+      $count: "true",
+    });
+    if (typeof data["@odata.count"] === "number") return data["@odata.count"];
+    const batch = data.value ?? [];
+    if (batch.length === 0) return 0;
+  } catch {
+    return 0;
   }
 
-  const window = await bridgeFetchUnifiedPage(filters, { skip: 0, take: BRIDGE_PROPERTY_PAGE_SIZE });
-  if (window.rows.length === 0) return 0;
-  if (window.total > window.rows.length) return window.total;
-  if (window.rows.length < BRIDGE_PROPERTY_PAGE_SIZE) return window.rows.length;
-  return window.total > 0 ? window.total : window.rows.length;
+  return 0;
 }
 
 /**

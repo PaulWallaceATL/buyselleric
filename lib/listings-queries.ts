@@ -90,7 +90,7 @@ function manualToUnified(l: ListingRow): UnifiedListing {
   };
 }
 
-function mlsToUnified(m: MlsListingRow): UnifiedListing {
+function mlsToUnified(m: MlsListingRow, feed: ListingFeed = "bridge"): UnifiedListing {
   return {
     id: m.id, slug: null, mls_id: m.mls_id,
     title: m.title || `${m.address_line}, ${m.city}`,
@@ -99,8 +99,122 @@ function mlsToUnified(m: MlsListingRow): UnifiedListing {
     bedrooms: m.bedrooms, bathrooms: m.bathrooms,
     square_feet: m.square_feet, latitude: m.latitude,
     longitude: m.longitude, image_urls: m.image_urls, source: "mls",
+    feed,
     listing_agent: m.listing_agent, listing_office: m.listing_office,
   };
+}
+
+/** GAMLS rows synced via RETS — used when Bridge live OData is rate-limited (429). */
+async function countGamlsListingsFromSupabase(filters: ListingFilters): Promise<number> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return 0;
+
+  let q = supabase.from("mls_listings").select("*", { count: "exact", head: true }).eq("status", "active");
+
+  if (filters.q) {
+    const trimmed = filters.q.trim();
+    const cityState = parseCityStateSearchQuery(trimmed);
+    if (cityState) {
+      q = q.ilike("city", `%${cityState.city}%`).ilike("state", `%${cityState.state}%`);
+    } else {
+      const term = `%${trimmed}%`;
+      q = q.or(
+        `address_line.ilike.${term},city.ilike.${term},state.ilike.${term},postal_code.ilike.${term},title.ilike.${term}`,
+      );
+    }
+  }
+  if (filters.minPrice) q = q.gte("price_cents", filters.minPrice * 100);
+  if (filters.maxPrice) q = q.lte("price_cents", filters.maxPrice * 100);
+  if (filters.minBeds) q = q.gte("bedrooms", filters.minBeds);
+  if (filters.minBaths) q = q.gte("bathrooms", filters.minBaths);
+  if (filters.minSqft) q = q.gte("square_feet", filters.minSqft);
+  if (filters.maxSqft) q = q.lte("square_feet", filters.maxSqft);
+  if (filters.propertyType) q = q.ilike("property_type", `%${filters.propertyType}%`);
+
+  const { count, error } = await q;
+  if (error) {
+    console.warn("countGamlsListingsFromSupabase", error.message);
+    return 0;
+  }
+  return count ?? 0;
+}
+
+async function fetchGamlsListingsFromSupabase(
+  filters: ListingFilters,
+  opts: { skip: number; take: number },
+): Promise<{ rows: UnifiedListing[]; total: number }> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { rows: [], total: 0 };
+
+  const take = Math.max(1, opts.take);
+  let q = supabase.from("mls_listings").select("*", { count: "exact" }).eq("status", "active");
+
+  if (filters.q) {
+    const trimmed = filters.q.trim();
+    const cityState = parseCityStateSearchQuery(trimmed);
+    if (cityState) {
+      q = q.ilike("city", `%${cityState.city}%`).ilike("state", `%${cityState.state}%`);
+    } else {
+      const term = `%${trimmed}%`;
+      q = q.or(
+        `address_line.ilike.${term},city.ilike.${term},state.ilike.${term},postal_code.ilike.${term},title.ilike.${term}`,
+      );
+    }
+  }
+  if (filters.minPrice) q = q.gte("price_cents", filters.minPrice * 100);
+  if (filters.maxPrice) q = q.lte("price_cents", filters.maxPrice * 100);
+  if (filters.minBeds) q = q.gte("bedrooms", filters.minBeds);
+  if (filters.minBaths) q = q.gte("bathrooms", filters.minBaths);
+  if (filters.minSqft) q = q.gte("square_feet", filters.minSqft);
+  if (filters.maxSqft) q = q.lte("square_feet", filters.maxSqft);
+  if (filters.propertyType) q = q.ilike("property_type", `%${filters.propertyType}%`);
+
+  switch (filters.sort) {
+    case "price_asc":
+      q = q.order("price_cents", { ascending: true });
+      break;
+    case "sqft_desc":
+      q = q.order("square_feet", { ascending: false, nullsFirst: false });
+      break;
+    case "newest":
+      q = q.order("synced_at", { ascending: false });
+      break;
+    case "price_desc":
+    default:
+      q = q.order("price_cents", { ascending: false });
+      break;
+  }
+
+  const { data, count, error } = await q.range(opts.skip, opts.skip + take - 1);
+
+  if (error) {
+    console.warn("fetchGamlsListingsFromSupabase", error.message);
+    return { rows: [], total: 0 };
+  }
+
+  const rows = ((data ?? []) as MlsListingRow[]).map((m) => mlsToUnified(m, "bridge"));
+  return { rows, total: count ?? rows.length };
+}
+
+async function resolveBridgeTotal(
+  filters: ListingFilters,
+  bridgeOn: boolean,
+): Promise<number> {
+  if (!bridgeOn) return 0;
+  const live = await bridgeProbeExactTotal(filters);
+  if (live > 0) return live;
+  return countGamlsListingsFromSupabase(filters);
+}
+
+async function fetchBridgeListingsPage(
+  filters: ListingFilters,
+  skip: number,
+  take: number,
+): Promise<{ rows: UnifiedListing[]; total: number }> {
+  const live = await bridgeFetchUnifiedPage(filters, { skip, take });
+  if (live.rows.length > 0) return live;
+  if (skip === 0 && live.total > 0) return live;
+  return fetchGamlsListingsFromSupabase(filters, { skip, take });
 }
 
 /**
@@ -157,18 +271,10 @@ async function resolveMultiFeedTotals(
   bridgeOn: boolean,
   sparkOn: boolean,
 ): Promise<{ bridgeTotal: number; sparkTotal: number }> {
-  // Sequential probes — parallel Bridge calls were exhausting the gamls2 rate limit (429).
-  let bridgeTotal = 0;
-  let sparkTotal = 0;
-
-  if (bridgeOn) {
-    bridgeTotal = await bridgeProbeExactTotal(filters);
-  }
-
-  if (sparkOn) {
-    sparkTotal = await sparkProbeExactTotal(filters);
-  }
-
+  const [bridgeTotal, sparkTotal] = await Promise.all([
+    resolveBridgeTotal(filters, bridgeOn),
+    sparkOn ? sparkProbeExactTotal(filters) : Promise.resolve(0),
+  ]);
   return { bridgeTotal, sparkTotal };
 }
 
@@ -219,10 +325,7 @@ async function searchWithMultipleFeeds(
   let rows: UnifiedListing[] = [];
   if (safePage <= bridgePages) {
     const globalOffset = (safePage - 1) * perPage;
-    let res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
-    if (res.rows.length === 0) {
-      res = await bridgeFetchUnifiedPage(filters, { skip: globalOffset, take: perPage });
-    }
+    const res = await fetchBridgeListingsPage(filters, globalOffset, perPage);
     rows = res.rows;
 
     if (rows.length === 0 && sparkOn && sparkTotal > 0) {
@@ -450,7 +553,7 @@ export async function searchWithFilters(
   if (filters.propertyType) mlsQuery = mlsQuery.ilike("property_type", `%${filters.propertyType}%`);
 
   const mlsResult = await mlsQuery.limit(5000);
-  const mls = ((mlsResult.data ?? []) as MlsListingRow[]).map(mlsToUnified);
+  const mls = ((mlsResult.data ?? []) as MlsListingRow[]).map((m) => mlsToUnified(m));
   allListings.push(...mls);
 
   const poly = filters.mapPolygon;

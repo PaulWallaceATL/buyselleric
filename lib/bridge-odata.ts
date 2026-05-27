@@ -91,7 +91,11 @@ export async function bridgeODataGetAbsolute<T>(cfg: BridgeODataConfig, requestU
 
     const body = await res.text().catch(() => "");
     lastError = new Error(`Bridge OData ${res.status}: ${body.slice(0, 400)}`);
-    if (!isBridgeRateLimitError(res.status, body) || attempt === 2) {
+    // Never retry rate limits — backoff burns serverless time and blocks combined results.
+    if (isBridgeRateLimitError(res.status, body)) {
+      throw lastError;
+    }
+    if (attempt === 2) {
       throw lastError;
     }
     await new Promise((resolve) => setTimeout(resolve, bridgeRateLimitDelayMs(attempt)));
