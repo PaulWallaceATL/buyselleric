@@ -872,14 +872,16 @@ export async function bridgeGetSearchSuggestions(raw: string): Promise<SearchSug
   const esc = escapeODataString(q);
   const zipish = /^[\d-]+$/.test(q.replace(/\s/g, ""));
   const cityState = parseCityStateSearchQuery(rawClean);
+  const cityPrefix = rawClean.charAt(0).toUpperCase() + rawClean.slice(1).toLowerCase();
 
+  // Bridge gamls2 often returns 0 rows for contains(tolower(City), …) — use startswith.
   const cityFilter = cityState
-    ? `contains(tolower(City), '${escapeODataString(cityState.city.toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)}`
-    : `contains(tolower(City), '${esc}')`;
+    ? `(startswith(City, '${escapeODataString(cityState.city.charAt(0).toUpperCase() + cityState.city.slice(1).toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)})`
+    : `startswith(City, '${escapeODataString(cityPrefix)}')`;
 
   const addrFilter = cityState
-    ? `(contains(tolower(UnparsedAddress), '${escapeODataString(cityState.city.toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)})`
-    : `contains(tolower(UnparsedAddress), '${esc}')`;
+    ? `(startswith(UnparsedAddress, '${escapeODataString(cityState.city.charAt(0).toUpperCase() + cityState.city.slice(1).toLowerCase())}') and ${stateOrProvinceODataClause(cityState.state)})`
+    : `startswith(UnparsedAddress, '${escapeODataString(cityPrefix)}')`;
 
   const [cityRows, zipRows, addrRows] = await Promise.all([
     suggestQuery(cfg, cityFilter, 28),

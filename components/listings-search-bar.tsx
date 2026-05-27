@@ -101,7 +101,7 @@ export function ListingsSearchBar({
     goSearch(s.value);
   };
 
-  const panelOpen = open && query.trim().length >= 2 && (loading || suggestions.length > 0);
+  const panelOpen = open && query.trim().length >= 2;
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-md">

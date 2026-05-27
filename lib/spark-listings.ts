@@ -692,11 +692,9 @@ export async function sparkGetSearchSuggestions(raw: string): Promise<SearchSugg
   const zipish = /^[\d-]+$/.test(trimmed);
   const cityState = parseCityStateSearchQuery(rawClean);
 
-  // Spark RESO Web API doesn't reliably support contains(tolower(...)). Use
-  // exact eq + startswith — slightly less fuzzy but actually returns rows.
   const cityFilter = cityState
     ? `${cityODataClause(cityState.city)} and ${stateOrProvinceODataClause(cityState.state)}`
-    : `(${cityODataClause(rawClean)} or startswith(City, '${escapeODataString(titleCase(rawClean))}'))`;
+    : `startswith(City, '${escapeODataString(titleCase(rawClean))}')`;
 
   const addrFilter = cityState
     ? `startswith(UnparsedAddress, '${escapeODataString(titleCase(cityState.city))}') and ${stateOrProvinceODataClause(cityState.state)}`

@@ -344,7 +344,7 @@ export function Hero({ startColors, endColors }: HeroProps = {}) {
           Eric Adams is your partner for buying and selling real estate—local insight, honest
           pricing conversations, and hands-on support from tour to keys.
         </p>
-        <div className="relative z-[45] mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
+        <div className="relative z-[70] mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
           <HeroSearch />
         </div>
         <div

@@ -1,4 +1,5 @@
 import { bridgeGetSearchSuggestions, isBridgeListingsEnabled } from "@/lib/bridge-listings";
+import { localGaSearchSuggestions } from "@/lib/ga-location-suggest";
 import { isSparkListingsEnabled, sparkGetSearchSuggestions } from "@/lib/spark-listings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -46,6 +47,8 @@ export async function getSearchSuggestions(raw: string): Promise<SearchSuggestio
   const q = sanitizeSuggestQuery(raw);
   if (q.length < 2) return [];
 
+  const local = localGaSearchSuggestions(q);
+
   const bridgeOn = isBridgeListingsEnabled();
   const sparkOn = isSparkListingsEnabled();
 
@@ -55,13 +58,13 @@ export async function getSearchSuggestions(raw: string): Promise<SearchSuggestio
       sparkGetSearchSuggestions(q),
     ]);
     const lists = settled.map((s) => (s.status === "fulfilled" ? s.value : []));
-    return mergeSuggestionsByType(...lists);
+    return mergeSuggestionsByType(local, ...lists);
   }
   if (bridgeOn) {
-    return bridgeGetSearchSuggestions(q);
+    return mergeSuggestionsByType(local, await bridgeGetSearchSuggestions(q));
   }
   if (sparkOn) {
-    return sparkGetSearchSuggestions(q);
+    return mergeSuggestionsByType(local, await sparkGetSearchSuggestions(q));
   }
 
   const term = `%${q}%`;
@@ -219,5 +222,8 @@ export async function getSearchSuggestions(raw: string): Promise<SearchSuggestio
 
   const addrs = out.filter((s) => s.type === "address");
 
-  return [...cities.slice(0, 6), ...zips.slice(0, 4), ...addrs.slice(0, 5)].slice(0, 12);
+  return mergeSuggestionsByType(
+    local,
+    [...cities.slice(0, 6), ...zips.slice(0, 4), ...addrs.slice(0, 5)].slice(0, 12),
+  );
 }
