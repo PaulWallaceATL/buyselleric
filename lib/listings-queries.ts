@@ -19,7 +19,7 @@ import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
-import { unstable_cache } from "next/cache";
+import { cache } from "react";
 
 /**
  * Live MLS feeds we currently merge from. `manual` covers Eric's hand-curated
@@ -151,68 +151,52 @@ function dedupeUnifiedListings(rows: UnifiedListing[]): UnifiedListing[] {
   return out;
 }
 
-/** Cache key for feed totals — pagination params must not affect upstream counts. */
-function multiFeedTotalsCacheKey(filters: ListingFilters): string {
-  return JSON.stringify({
-    q: filters.q ?? "",
-    minPrice: filters.minPrice ?? null,
-    maxPrice: filters.maxPrice ?? null,
-    minBeds: filters.minBeds ?? null,
-    minBaths: filters.minBaths ?? null,
-    minSqft: filters.minSqft ?? null,
-    maxSqft: filters.maxSqft ?? null,
-    propertyType: filters.propertyType ?? "",
-    sort: filters.sort ?? "price_desc",
-    mapPolygon: filters.mapPolygon ?? null,
-  });
-}
-
 async function probeFeedTotal(
   fetchPage: (
     filters: ListingFilters,
     options: { skip: number; take: number },
   ) => Promise<{ rows: UnifiedListing[]; total: number }>,
   filters: ListingFilters,
+  maxAttempts = 5,
 ): Promise<number> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const res = await fetchPage(filters, { skip: 0, take: 1 });
     if (res.total > 0) return res.total;
-    if (attempt < 2) {
-      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    if (attempt < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
     }
   }
   return 0;
 }
 
-async function fetchMultiFeedTotalsUncached(
-  filtersKey: string,
-  bridgeOn: boolean,
-  sparkOn: boolean,
-): Promise<{ bridgeTotal: number; sparkTotal: number }> {
-  const filters = JSON.parse(filtersKey) as ListingFilters;
-  const [bridgeTotal, sparkTotal] = await Promise.all([
-    bridgeOn ? probeFeedTotal(bridgeFetchUnifiedPage, filters) : Promise.resolve(0),
-    sparkOn ? probeFeedTotal(sparkFetchUnifiedPage, filters) : Promise.resolve(0),
-  ]);
-  return { bridgeTotal, sparkTotal };
-}
-
-/**
- * Stable Bridge + Spark totals for a filter set. Cached across requests so page
- * 3 doesn't re-probe in parallel with a deep $skip and lose Bridge's count.
- */
-function getMultiFeedTotals(
+async function fetchMultiFeedTotals(
   filters: ListingFilters,
   bridgeOn: boolean,
   sparkOn: boolean,
 ): Promise<{ bridgeTotal: number; sparkTotal: number }> {
-  const filtersKey = multiFeedTotalsCacheKey(filters);
-  return unstable_cache(
-    () => fetchMultiFeedTotalsUncached(filtersKey, bridgeOn, sparkOn),
-    ["multi-feed-totals", filtersKey, bridgeOn ? "b1" : "b0", sparkOn ? "s1" : "s0"],
-    { revalidate: 120 },
-  )();
+  // Probe Bridge first (sequential) — parallel count + deep $skip caused flaky Bridge totals.
+  let bridgeTotal = 0;
+  let sparkTotal = 0;
+  if (bridgeOn) {
+    bridgeTotal = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
+  }
+  if (sparkOn) {
+    sparkTotal = await probeFeedTotal(sparkFetchUnifiedPage, filters, 3);
+  }
+  // When Bridge is enabled but returned 0 while Spark has rows, Bridge likely flaked
+  // (common on mobile edge requests). Retry before accepting a Spark-only total (33 vs 303).
+  if (bridgeOn && bridgeTotal === 0 && sparkOn && sparkTotal > 0) {
+    await new Promise((r) => setTimeout(r, 400));
+    bridgeTotal = await probeFeedTotal(bridgeFetchUnifiedPage, filters, 5);
+  }
+  return { bridgeTotal, sparkTotal };
 }
+
+/**
+ * Per-request dedupe only (React cache). Avoids unstable_cache serving a poisoned
+ * Spark-only total across devices when Bridge's count probe failed once.
+ */
+const getMultiFeedTotals = cache(fetchMultiFeedTotals);
 
 /**
  * Polygon-aware multi-feed merge. We fetch a wider window from each feed,
