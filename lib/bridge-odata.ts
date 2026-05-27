@@ -59,6 +59,14 @@ export async function bridgeODataGet<T>(cfg: BridgeODataConfig, query: Record<st
   return bridgeODataGetAbsolute<T>(cfg, url.toString());
 }
 
+function bridgeRateLimitDelayMs(attempt: number): number {
+  return Math.min(4_000, 800 * (attempt + 1));
+}
+
+function isBridgeRateLimitError(status: number, body: string): boolean {
+  return status === 429 || /request limit/i.test(body);
+}
+
 /** Any OData URL under the same auth (Property, Media, @odata.nextLink, …). */
 export async function bridgeODataGetAbsolute<T>(cfg: BridgeODataConfig, requestUrl: string): Promise<T> {
   const url = new URL(requestUrl);
@@ -66,20 +74,30 @@ export async function bridgeODataGetAbsolute<T>(cfg: BridgeODataConfig, requestU
     url.searchParams.set("access_token", cfg.serverToken);
   }
 
-  const res = await fetch(url.toString(), {
+  const requestInit = {
     headers: {
       Authorization: `Bearer ${cfg.serverToken}`,
       Accept: "application/json",
     },
     next: { revalidate: 0 },
-  });
+  } as const;
 
-  if (!res.ok) {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url.toString(), requestInit);
+    if (res.ok) {
+      return (await res.json()) as T;
+    }
+
     const body = await res.text().catch(() => "");
-    throw new Error(`Bridge OData ${res.status}: ${body.slice(0, 400)}`);
+    lastError = new Error(`Bridge OData ${res.status}: ${body.slice(0, 400)}`);
+    if (!isBridgeRateLimitError(res.status, body) || attempt === 2) {
+      throw lastError;
+    }
+    await new Promise((resolve) => setTimeout(resolve, bridgeRateLimitDelayMs(attempt)));
   }
 
-  return (await res.json()) as T;
+  throw lastError ?? new Error("Bridge OData request failed");
 }
 
 export function odataResourceCollectionUrl(cfg: BridgeODataConfig, resourcePath: string): string {

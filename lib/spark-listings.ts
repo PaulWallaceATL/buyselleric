@@ -572,6 +572,41 @@ export async function sparkFetchUnifiedPage(
   }
 }
 
+/** Lightweight skip=0 count probe for multi-feed pagination totals. */
+export async function sparkProbeExactTotal(filters: ListingFilters): Promise<number> {
+  const cfg = getSparkODataConfig();
+  if (!cfg) return 0;
+
+  const hasMapPolygon = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
+  if (hasMapPolygon) {
+    const result = await sparkSearchWithMapPolygon(cfg, { ...filters, page: 1, perPage: 1 });
+    return result.total;
+  }
+
+  const filter = buildFilter(filters);
+
+  try {
+    const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
+      $filter: filter,
+      $select: "ListingKey",
+      $top: "1",
+      $skip: "0",
+      $count: "true",
+    });
+    if (typeof data["@odata.count"] === "number") return data["@odata.count"];
+    const batch = data.value ?? [];
+    if (batch.length === 0) return 0;
+  } catch (e) {
+    console.warn("sparkProbeExactTotal", e);
+  }
+
+  const window = await sparkFetchUnifiedPage(filters, { skip: 0, take: SPARK_PROPERTY_PAGE_SIZE });
+  if (window.rows.length === 0) return 0;
+  if (window.total > window.rows.length) return window.total;
+  if (window.rows.length < SPARK_PROPERTY_PAGE_SIZE) return window.rows.length;
+  return window.total > 0 ? window.total : window.rows.length;
+}
+
 /**
  * Cross-feed merge helper — fetches up to `take` rows + a total count.
  * Skips per-pin geocode enrichment (the merged page enriches at the end).
@@ -624,33 +659,24 @@ export async function sparkFetchTopUnifiedListings(
     void e1;
   }
 
-  // Fan out remaining $skip pages in parallel — sequential pagination across 5-15 pages
-  // dominated latency. Parallel keeps deeper fetches under ~1.5s for typical queries.
-  if (rows.length === SPARK_PROPERTY_PAGE_SIZE && total > rows.length && rows.length < take) {
+  while (rows.length === SPARK_PROPERTY_PAGE_SIZE && total > rows.length && rows.length < take) {
     const target = Math.min(take, total);
-    const remaining = target - rows.length;
-    const numExtraPages = Math.ceil(remaining / SPARK_PROPERTY_PAGE_SIZE);
-    const skips: number[] = [];
-    for (let i = 1; i <= numExtraPages; i++) skips.push(i * SPARK_PROPERTY_PAGE_SIZE);
-
-    const settled = await Promise.allSettled(
-      skips.map((skip) =>
-        sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
-          $filter: filter,
-          ...sparkSelectExpand(),
-          $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, target - skip)),
-          $skip: String(skip),
-          $orderby: orderBy,
-        }),
-      ),
-    );
-
-    for (const s of settled) {
-      if (s.status === "fulfilled") {
-        rows.push(...(s.value.value ?? []));
-      } else {
-        console.warn("sparkFetchTopUnifiedListings: parallel page failed", s.reason);
-      }
+    const skip = rows.length;
+    const nextTop = Math.min(SPARK_PROPERTY_PAGE_SIZE, target - skip);
+    try {
+      const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
+        $filter: filter,
+        ...sparkSelectExpand(),
+        $top: String(nextTop),
+        $skip: String(skip),
+        $orderby: orderBy,
+      });
+      const batch = data.value ?? [];
+      rows.push(...batch);
+      if (batch.length === 0 || batch.length < nextTop) break;
+    } catch (e) {
+      console.warn("sparkFetchTopUnifiedListings: sequential page failed", e);
+      break;
     }
   }
 

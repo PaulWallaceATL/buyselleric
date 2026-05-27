@@ -680,6 +680,47 @@ export async function bridgeFetchUnifiedPage(
 }
 
 /**
+ * Lightweight total for multi-feed pagination — one small skip=0 request with
+ * `$count=true`. Never call at skip>0 (OData without count reports skip+rows).
+ */
+export async function bridgeProbeExactTotal(filters: ListingFilters): Promise<number> {
+  const cfg = getBridgeODataConfig();
+  if (!cfg) return 0;
+
+  const hasMapPolygon = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
+  if (hasMapPolygon) {
+    const result = await bridgeSearchWithMapPolygon(cfg, { ...filters, page: 1, perPage: 1 });
+    return result.total;
+  }
+
+  const filter = buildFilter(filters);
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+        $filter: filter,
+        $select: "ListingKey",
+        $top: "1",
+        $skip: "0",
+        $count: "true",
+      });
+      if (typeof data["@odata.count"] === "number") return data["@odata.count"];
+      const batch = data.value ?? [];
+      if (batch.length === 0) return 0;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/429|request limit/i.test(msg) || attempt === 2) break;
+    }
+  }
+
+  const window = await bridgeFetchUnifiedPage(filters, { skip: 0, take: BRIDGE_PROPERTY_PAGE_SIZE });
+  if (window.rows.length === 0) return 0;
+  if (window.total > window.rows.length) return window.total;
+  if (window.rows.length < BRIDGE_PROPERTY_PAGE_SIZE) return window.rows.length;
+  return window.total > 0 ? window.total : window.rows.length;
+}
+
+/**
  * Cross-feed merge helper — fetches up to `take` rows + a total count.
  * Skips per-pin geocode enrichment (the merged page enriches at the end).
  */
@@ -739,33 +780,25 @@ export async function bridgeFetchTopUnifiedListings(
     void e1;
   }
 
-  // Fan out the remaining $skip pages in parallel — sequential paging at 200/row caps was the
-  // dominant latency in deep fetches (10 calls × ~700ms ≈ 7s). Parallel keeps it ~700-1500ms.
-  if (all.length === pageSize && total > all.length && all.length < take) {
+  // Page remaining rows sequentially — parallel fan-out was tripping Bridge 429 rate limits.
+  while (all.length === pageSize && total > all.length && all.length < take) {
     const target = Math.min(take, total);
-    const remaining = target - all.length;
-    const numExtraPages = Math.ceil(remaining / pageSize);
-    const skips: number[] = [];
-    for (let i = 1; i <= numExtraPages; i++) skips.push(i * pageSize);
-
-    const settled = await Promise.allSettled(
-      skips.map((skip) =>
-        bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
-          $filter: filter,
-          $select: select,
-          $top: String(Math.min(pageSize, target - skip)),
-          $skip: String(skip),
-          $orderby: orderBy,
-        }),
-      ),
-    );
-
-    for (const s of settled) {
-      if (s.status === "fulfilled") {
-        all.push(...(s.value.value ?? []));
-      } else {
-        console.warn("bridgeFetchTopUnifiedListings: parallel page failed", s.reason);
-      }
+    const skip = all.length;
+    const nextTop = Math.min(pageSize, target - skip);
+    try {
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
+        $filter: filter,
+        $select: select,
+        $top: String(nextTop),
+        $skip: String(skip),
+        $orderby: orderBy,
+      });
+      const batch = data.value ?? [];
+      all.push(...batch);
+      if (batch.length === 0 || batch.length < nextTop) break;
+    } catch (e) {
+      console.warn("bridgeFetchTopUnifiedListings: sequential page failed", e);
+      break;
     }
   }
 
