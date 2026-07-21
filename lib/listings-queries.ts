@@ -843,10 +843,25 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
   }
 
   // Bridge IDX often blanks agent/broker; ConnectMLS RETS is the compliance source for firm name.
-  if (merged && (!hasListingFirmName(merged) || attributionNeedsRetsResolve(merged)) && isRetsConfigured()) {
-    const withRets = await applyRetsAttribution(id, merged);
-    if (withRets) {
-      merged = withRets;
+  if (merged && (!hasListingFirmName(merged) || attributionNeedsRetsResolve(merged))) {
+    if (isRetsConfigured()) {
+      const withRets = await applyRetsAttribution(id, merged);
+      if (withRets) {
+        merged = withRets;
+        void persistMlsListingCache(merged);
+      }
+    } else {
+      merged = {
+        ...merged,
+        raw_data: {
+          ...merged.raw_data,
+          _retsAttribution: {
+            ok: false,
+            reason: "rets_not_configured",
+            at: new Date().toISOString(),
+          },
+        },
+      };
       void persistMlsListingCache(merged);
     }
   }
@@ -878,18 +893,49 @@ async function applyRetsAttribution(
       fetchRetsAttributionForMlsId(id),
       new Promise<null>((r) => setTimeout(() => r(null), 12_000)),
     ]);
-    if (!attr) return null;
+    if (!attr) {
+      return {
+        ...seed,
+        raw_data: {
+          ...seed.raw_data,
+          _retsAttribution: {
+            ok: false,
+            reason: "timeout_or_empty",
+            at: new Date().toISOString(),
+          },
+        },
+      };
+    }
     return {
       ...seed,
       listing_agent: preferAttributionText(attr.listing_agent, seed.listing_agent),
       listing_agent_phone: preferAttributionText(attr.listing_agent_phone, seed.listing_agent_phone),
       listing_office: preferAttributionText(attr.listing_office, seed.listing_office),
       listing_office_phone: preferAttributionText(attr.listing_office_phone, seed.listing_office_phone),
-      raw_data: { ...seed.raw_data, ...attr.raw_data },
+      raw_data: {
+        ...seed.raw_data,
+        ...attr.raw_data,
+        _retsAttribution: {
+          ok: true,
+          listing_agent: attr.listing_agent,
+          listing_office: attr.listing_office,
+          at: new Date().toISOString(),
+        },
+      },
     };
   } catch (e) {
     console.warn("applyRetsAttribution", e);
-    return null;
+    return {
+      ...seed,
+      raw_data: {
+        ...seed.raw_data,
+        _retsAttribution: {
+          ok: false,
+          reason: e instanceof Error ? e.message : String(e),
+          at: new Date().toISOString(),
+        },
+      },
+    };
   }
 }
 

@@ -872,7 +872,20 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
     (await retsSearchFirst("Property", "RESI", `(ListingId=${id})`, RETS_ATTR_SELECT));
   if (!prop) {
     console.warn(`fetchRetsAttributionForMlsId: no Property row for ${id}`);
-    return null;
+    return {
+      listing_agent: "",
+      listing_agent_phone: "",
+      listing_office: "",
+      listing_office_phone: "",
+      raw_data: {
+        _retsAttribution: {
+          ok: false,
+          reason: "property_not_found",
+          mls_id: id,
+          at: new Date().toISOString(),
+        },
+      },
+    };
   }
 
   const agentCode = pickRetsField(prop, ["ListAgent", "ListAgentMlsId", "ListAgentKey", "ListAgentId"]);
@@ -916,7 +929,21 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
     console.warn(`fetchRetsAttributionForMlsId: Property ${id} has no agent/office fields`, {
       keys: Object.keys(prop).slice(0, 40),
     });
-    return null;
+    return {
+      listing_agent: "",
+      listing_agent_phone: "",
+      listing_office: "",
+      listing_office_phone: "",
+      raw_data: {
+        ...prop,
+        _retsAttribution: {
+          ok: false,
+          reason: "property_missing_agent_office_fields",
+          keys: Object.keys(prop).slice(0, 60),
+          at: new Date().toISOString(),
+        },
+      },
+    };
   }
 
   const raw_data: Record<string, unknown> = {
