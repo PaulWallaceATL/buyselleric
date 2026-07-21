@@ -20,8 +20,8 @@ const ctaMortgageOnVideo =
 
 function shouldLoadHeroVideo(): boolean {
   if (typeof window === "undefined") return false;
+  // Still respect a11y + extreme bandwidth — but play on mobile (user prefers video over PSI).
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
-  if (window.matchMedia("(max-width: 768px)").matches) return false;
   const conn = (
     navigator as Navigator & {
       connection?: { saveData?: boolean; effectiveType?: string };
@@ -32,7 +32,7 @@ function shouldLoadHeroVideo(): boolean {
   return true;
 }
 
-/** Desktop-only video overlay — poster is server-rendered for LCP. */
+/** Video overlay after idle — poster stays server-rendered for LCP. Plays on mobile too. */
 function HeroVideoOverlay() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [loadVideo, setLoadVideo] = useState(false);
@@ -48,7 +48,11 @@ function HeroVideoOverlay() {
       if (!cancelled) setLoadVideo(true);
     };
 
-    if ("requestIdleCallback" in window) {
+    // Mobile: start sooner so the aerial isn't stuck on the still for long.
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    if (isMobile) {
+      timeoutId = setTimeout(enable, 200);
+    } else if ("requestIdleCallback" in window) {
       idleId = window.requestIdleCallback(enable, { timeout: 1800 });
     } else {
       timeoutId = setTimeout(enable, 900);
