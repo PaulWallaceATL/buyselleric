@@ -1029,16 +1029,22 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
     const enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
     const inlinePhotos = extractMediaUrls(enriched.Media);
     let mediaUrls: string[] = [];
+    // Prefer inline Media; only hit the Media entity briefly so detail TTFB stays snappy.
     if (inlinePhotos.length === 0) {
       const listingKey = String(enriched.ListingKey ?? "").trim();
       const listingId = String(enriched.ListingId ?? "").trim();
       if (listingKey || listingId) {
         try {
-          mediaUrls = await fetchBridgeMediaUrlsForListing(
-            client,
-            listingKey || listingId,
-            listingId || listingKey,
-          );
+          mediaUrls = await Promise.race([
+            fetchBridgeMediaUrlsForListing(
+              client,
+              listingKey || listingId,
+              listingId || listingKey,
+            ),
+            new Promise<string[]>((resolve) => {
+              setTimeout(() => resolve([]), 2_000);
+            }),
+          ]);
         } catch (e) {
           console.warn("bridgeGetMlsListingById: media fetch failed (page still loads)", e);
         }
@@ -1051,8 +1057,11 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
 
   const filters = listingIdFilterVariants(id, esc);
   const selects = detailSelectCandidates();
+  // Keep the hot path short: primary filter+select, then at most a few fallbacks.
   const primaryFilter = filters[0]!;
   const primarySelect = selects[0]!;
+  const fallbackFilters = filters.slice(0, 3);
+  const fallbackSelects = selects.slice(0, 3);
 
   try {
     const row = await fetchRow(primaryFilter, primarySelect);
@@ -1064,8 +1073,8 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
     );
   }
 
-  for (const filter of filters) {
-    for (const select of selects) {
+  for (const filter of fallbackFilters) {
+    for (const select of fallbackSelects) {
       if (filter === primaryFilter && select === primarySelect) continue;
       try {
         const row = await fetchRow(filter, select);

@@ -306,7 +306,7 @@ async function searchWithMultipleFeeds(
   if (poly && poly.length >= 3) return searchWithMultipleFeedsPolygon(filters, poly);
 
   const requestedPage = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 12));
 
   const bridgeOn = isBridgeListingsEnabled();
   const sparkOn = isSparkListingsEnabled();
@@ -373,7 +373,7 @@ async function searchWithMultipleFeedsPolygon(
   poly: ReadonlyArray<MapPolygonVertex>,
 ): Promise<PaginatedResult> {
   const requestedPage = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 12));
 
   const allRows: UnifiedListing[] = [];
   if (isBridgeListingsEnabled()) {
@@ -502,10 +502,10 @@ export async function searchWithFilters(
   }
 
   const supabase = await createSupabaseServerClient();
-  if (!supabase) return { listings: [], total: 0, page: 1, perPage: 24, totalPages: 0 };
+  if (!supabase) return { listings: [], total: 0, page: 1, perPage: 12, totalPages: 0 };
 
   const page = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 24));
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 12));
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
 
@@ -669,29 +669,35 @@ function isWarmMlsCache(row: MlsListingRow): boolean {
   return Array.isArray(row.image_urls) && row.image_urls.length > 0;
 }
 
+/** Enough to render the detail page without waiting on live MLS. */
+function isUsableMlsCache(row: MlsListingRow): boolean {
+  return Boolean(row.mls_id || row.address_line || row.city) && row.price_cents >= 0;
+}
+
 /**
  * Resolve a single MLS listing. Deduped per request via React.cache so
  * generateMetadata + the page body share one lookup.
+ *
+ * Races Supabase + live feeds and returns the first usable hit so detail
+ * pages do not wait for the slowest MLS API.
  */
 export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListingRow | null> => {
   const id = mlsId.trim();
   if (!id) return null;
 
-  const cached = await getMlsListingFromSupabase(id);
-  if (cached && isWarmMlsCache(cached)) {
-    return cached;
-  }
+  const cachedPromise = getMlsListingFromSupabase(id).then((row) =>
+    row && isUsableMlsCache(row) ? row : null,
+  );
 
   const liveLookups: Array<Promise<MlsListingRow | null>> = [];
   if (isBridgeListingsEnabled()) liveLookups.push(bridgeGetMlsListingById(id));
   if (isSparkListingsEnabled()) liveLookups.push(sparkGetMlsListingById(id));
 
-  if (liveLookups.length > 0) {
-    const live = await raceFirstNonNull(liveLookups);
-    if (live) return live;
-  }
+  // Prefer a warm cached row (with photos) if Supabase answers first.
+  const warmFirst = cachedPromise.then((row) => (row && isWarmMlsCache(row) ? row : null));
 
-  return cached;
+  const winner = await raceFirstNonNull([warmFirst, ...liveLookups, cachedPromise]);
+  return winner;
 });
 
 async function listFeaturedSlots(): Promise<

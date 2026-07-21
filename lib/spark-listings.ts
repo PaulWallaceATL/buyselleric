@@ -877,11 +877,16 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
       const listingId = String(enriched.ListingId ?? "").trim();
       if (listingKey || listingId) {
         try {
-          mediaUrls = await fetchSparkMediaUrlsForListing(
-            client,
-            listingKey || listingId,
-            listingId || listingKey,
-          );
+          mediaUrls = await Promise.race([
+            fetchSparkMediaUrlsForListing(
+              client,
+              listingKey || listingId,
+              listingId || listingKey,
+            ),
+            new Promise<string[]>((resolve) => {
+              setTimeout(() => resolve([]), 2_000);
+            }),
+          ]);
         } catch (e) {
           console.warn("sparkGetMlsListingById: media fetch failed (page still loads)", e);
         }
@@ -896,6 +901,8 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
   const selects = detailSelectCandidates();
   const primaryFilter = filters[0]!;
   const primarySelect = selects[0]!;
+  const fallbackFilters = filters.slice(0, 3);
+  const fallbackSelects = selects.slice(0, 3);
 
   try {
     const row = await fetchRow(primaryFilter, primarySelect);
@@ -907,8 +914,8 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
     );
   }
 
-  for (const filter of filters) {
-    for (const select of selects) {
+  for (const filter of fallbackFilters) {
+    for (const select of fallbackSelects) {
       if (filter === primaryFilter && select === primarySelect) continue;
       try {
         const row = await fetchRow(filter, select);
