@@ -122,11 +122,11 @@ function rowToMlsListingRow(row: Record<string, unknown>, mapOpts?: BridgeProper
  * `gamls2` (IDX) rejects several standard RESO fields on $select — omit anything Bridge returns 400 for.
  */
 const SELECT_GRID =
-  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp";
+  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp,ListAgentFirstName,ListAgentLastName,ListOfficePhone,ListAgentPreferredPhone,ListAgentDirectPhone,ListAgentCellPhone";
 
-/** Attribution fields for detail pages — not on grid (some feeds reject extras on search). */
+/** Attribution fields for detail pages — not blocked on gamls2 IDX. */
 const SELECT_ATTRIBUTION =
-  "ListAgentFirstName,ListAgentLastName,ListOfficePhone,ListAgentPreferredPhone,ListAgentDirectPhone,ListAgentCellPhone";
+  "ListAgentFirstName,ListAgentLastName,ListOfficePhone,ListAgentPreferredPhone,ListAgentDirectPhone,ListAgentCellPhone,ListOfficeFax,CoListAgentFirstName,CoListAgentLastName";
 
 /** gamls2 IDX rejects these on $select (see Bridge 400). Strip from env overrides too. */
 const GAMLS_BLOCKED_SELECT_FIELDS = new Set([
@@ -1026,10 +1026,29 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
   }
 
   async function finalize(row: Record<string, unknown>, filter: string): Promise<MlsListingRow> {
-    const enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
+    let enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
+
+    // Second pass for agent/broker fields (often omitted from sparse selects).
+    try {
+      const attrSelect = sanitizeBridgePropertySelect(
+        `ListingKey,ListingId,${SELECT_ATTRIBUTION}`,
+      );
+      if (attrSelect.includes("ListAgent") || attrSelect.includes("ListOffice")) {
+        const extra = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(
+          client,
+          { $filter: filter, $select: attrSelect, $top: "1" },
+          { revalidate: DETAIL_REVALIDATE },
+        );
+        const attrRow = extra.value?.[0];
+        if (attrRow) enriched = { ...enriched, ...attrRow };
+      }
+    } catch {
+      /* attribution fields may be blocked on some IDX contracts */
+    }
+
     const inlinePhotos = extractMediaUrls(enriched.Media);
     let mediaUrls: string[] = [];
-    // Prefer inline Media; only hit the Media entity briefly so detail TTFB stays snappy.
+    // Prefer inline Media; allow a longer Media-entity wait so detail photos stay sharp.
     if (inlinePhotos.length === 0) {
       const listingKey = String(enriched.ListingKey ?? "").trim();
       const listingId = String(enriched.ListingId ?? "").trim();
@@ -1042,7 +1061,7 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
               listingId || listingKey,
             ),
             new Promise<string[]>((resolve) => {
-              setTimeout(() => resolve([]), 2_000);
+              setTimeout(() => resolve([]), 8_000);
             }),
           ]);
         } catch (e) {

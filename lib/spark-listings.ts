@@ -884,7 +884,7 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
               listingId || listingKey,
             ),
             new Promise<string[]>((resolve) => {
-              setTimeout(() => resolve([]), 2_000);
+              setTimeout(() => resolve([]), 8_000);
             }),
           ]);
         } catch (e) {

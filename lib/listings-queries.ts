@@ -20,6 +20,11 @@ import { applyZipCentroidPinCoords } from "@/lib/map-pin-coords";
 import { pointInPolygon } from "@/lib/geo";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
+import {
+  hasMlsAttribution,
+  mergeMlsListingRows,
+  scoreMlsListingCompleteness,
+} from "@/lib/mls-attribution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
 
@@ -306,7 +311,7 @@ async function searchWithMultipleFeeds(
   if (poly && poly.length >= 3) return searchWithMultipleFeedsPolygon(filters, poly);
 
   const requestedPage = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 12));
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 10));
 
   const bridgeOn = isBridgeListingsEnabled();
   const sparkOn = isSparkListingsEnabled();
@@ -373,7 +378,7 @@ async function searchWithMultipleFeedsPolygon(
   poly: ReadonlyArray<MapPolygonVertex>,
 ): Promise<PaginatedResult> {
   const requestedPage = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 12));
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 10));
 
   const allRows: UnifiedListing[] = [];
   if (isBridgeListingsEnabled()) {
@@ -502,10 +507,10 @@ export async function searchWithFilters(
   }
 
   const supabase = await createSupabaseServerClient();
-  if (!supabase) return { listings: [], total: 0, page: 1, perPage: 12, totalPages: 0 };
+  if (!supabase) return { listings: [], total: 0, page: 1, perPage: 10, totalPages: 0 };
 
   const page = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 12));
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 10));
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
 
@@ -611,28 +616,8 @@ export async function getPublishedListingBySlug(slug: string): Promise<ListingRo
   return data as ListingRow | null;
 }
 
-function raceFirstNonNull<T>(promises: Array<Promise<T | null>>): Promise<T | null> {
-  if (promises.length === 0) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    let pending = promises.length;
-    let done = false;
-    for (const p of promises) {
-      p.then((value) => {
-        if (done) return;
-        if (value != null) {
-          done = true;
-          resolve(value);
-          return;
-        }
-        pending -= 1;
-        if (pending === 0) resolve(null);
-      }).catch(() => {
-        if (done) return;
-        pending -= 1;
-        if (pending === 0) resolve(null);
-      });
-    }
-  });
+function isUsableMlsCache(row: MlsListingRow): boolean {
+  return Boolean(row.mls_id || row.address_line || row.city) && row.price_cents >= 0;
 }
 
 async function getMlsListingFromSupabase(mlsId: string): Promise<MlsListingRow | null> {
@@ -669,35 +654,114 @@ function isWarmMlsCache(row: MlsListingRow): boolean {
   return Array.isArray(row.image_urls) && row.image_urls.length > 0;
 }
 
-/** Enough to render the detail page without waiting on live MLS. */
-function isUsableMlsCache(row: MlsListingRow): boolean {
-  return Boolean(row.mls_id || row.address_line || row.city) && row.price_cents >= 0;
+function isDetailReady(row: MlsListingRow): boolean {
+  return isWarmMlsCache(row) && hasMlsAttribution(row) && Boolean(row.description?.length);
+}
+
+async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
+  try {
+    const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    const client = createSupabaseAdminClient();
+    if (!client || !row.mls_id) return;
+    const now = new Date().toISOString();
+    await client.from("mls_listings").upsert(
+      {
+        mls_id: row.mls_id,
+        title: row.title,
+        address_line: row.address_line,
+        city: row.city,
+        state: row.state,
+        postal_code: row.postal_code,
+        price_cents: row.price_cents,
+        bedrooms: row.bedrooms,
+        bathrooms: row.bathrooms,
+        square_feet: row.square_feet,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        description: row.description,
+        property_type: row.property_type,
+        status: row.status || "active",
+        image_urls: row.image_urls ?? [],
+        listing_agent: row.listing_agent ?? "",
+        listing_agent_phone: row.listing_agent_phone ?? "",
+        listing_office: row.listing_office ?? "",
+        listing_office_phone: row.listing_office_phone ?? "",
+        raw_data: row.raw_data ?? {},
+        synced_at: now,
+        updated_at: now,
+      },
+      { onConflict: "mls_id" },
+    );
+  } catch (e) {
+    console.warn("persistMlsListingCache", e);
+  }
 }
 
 /**
  * Resolve a single MLS listing. Deduped per request via React.cache so
  * generateMetadata + the page body share one lookup.
  *
- * Races Supabase + live feeds and returns the first usable hit so detail
- * pages do not wait for the slowest MLS API.
+ * Collects cache + live feed results for a short window and merges the richest
+ * row (photos + agent/broker + remarks) instead of returning the first sparse hit.
  */
 export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListingRow | null> => {
   const id = mlsId.trim();
   if (!id) return null;
 
-  const cachedPromise = getMlsListingFromSupabase(id).then((row) =>
-    row && isUsableMlsCache(row) ? row : null,
-  );
+  const sources: Array<Promise<MlsListingRow | null>> = [
+    getMlsListingFromSupabase(id).then((row) => (row && isUsableMlsCache(row) ? row : null)),
+  ];
+  if (isBridgeListingsEnabled()) sources.push(bridgeGetMlsListingById(id));
+  if (isSparkListingsEnabled()) sources.push(sparkGetMlsListingById(id));
 
-  const liveLookups: Array<Promise<MlsListingRow | null>> = [];
-  if (isBridgeListingsEnabled()) liveLookups.push(bridgeGetMlsListingById(id));
-  if (isSparkListingsEnabled()) liveLookups.push(sparkGetMlsListingById(id));
+  const collected: MlsListingRow[] = [];
+  const DETAIL_WAIT_MS = 5_500;
 
-  // Prefer a warm cached row (with photos) if Supabase answers first.
-  const warmFirst = cachedPromise.then((row) => (row && isWarmMlsCache(row) ? row : null));
+  await new Promise<void>((resolve) => {
+    let pending = sources.length;
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const timer = setTimeout(done, DETAIL_WAIT_MS);
 
-  const winner = await raceFirstNonNull([warmFirst, ...liveLookups, cachedPromise]);
-  return winner;
+    for (const p of sources) {
+      p.then((row) => {
+        if (row) {
+          collected.push(row);
+          // Early exit once we have a complete detail-ready listing.
+          if (collected.some(isDetailReady) || scoreMlsListingCompleteness(row) >= 50) {
+            clearTimeout(timer);
+            done();
+          }
+        }
+      })
+        .catch(() => undefined)
+        .finally(() => {
+          pending -= 1;
+          if (pending === 0) {
+            clearTimeout(timer);
+            done();
+          }
+        });
+    }
+  });
+
+  // Allow in-flight promises a moment more if we still have nothing.
+  if (collected.length === 0) {
+    const settled = await Promise.allSettled(sources);
+    for (const r of settled) {
+      if (r.status === "fulfilled" && r.value) collected.push(r.value);
+    }
+  }
+
+  const merged = mergeMlsListingRows(collected);
+  if (merged && (isWarmMlsCache(merged) || hasMlsAttribution(merged))) {
+    void persistMlsListingCache(merged);
+  }
+  return merged;
 });
 
 async function listFeaturedSlots(): Promise<

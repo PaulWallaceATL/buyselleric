@@ -66,7 +66,7 @@ export default async function ListingsPage({
     propertyType: typeof params.propertyType === "string" ? params.propertyType : undefined,
     sort: (typeof params.sort === "string" ? params.sort : "price_desc") as ListingFilters["sort"],
     page: parseNum(params.page) ?? 1,
-    perPage: 12,
+    perPage: 10,
     mapPolygon,
   };
 

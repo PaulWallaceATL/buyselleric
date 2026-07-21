@@ -59,9 +59,10 @@ export function ListingGallery({ urls }: { urls: string[] }) {
           src={main!}
           alt=""
           fill
-          sizes="(max-width: 768px) 100vw, 80vw"
+          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 90vw, 1100px"
           className="object-cover"
           priority
+          quality={90}
           unoptimized={listingImagePreferUnoptimized(main!)}
           onError={() => markFailed(main!)}
         />

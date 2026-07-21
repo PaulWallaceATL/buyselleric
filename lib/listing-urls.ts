@@ -18,14 +18,19 @@ export function filterDisplayImageUrls(urls: string[] | null | undefined): strin
 }
 
 /**
- * Some CDNs (e.g. Zillow) allow browser hotlinks but block Next’s image optimizer fetch.
- * Use with next/image `unoptimized` so the URL loads in the browser like admin previews (no optimizer proxy).
+ * Some CDNs allow browser hotlinks but block Next’s image optimizer (or return
+ * soft/blurry proxies). Prefer the original URL in the browser for MLS photos.
  */
 export function listingImagePreferUnoptimized(src: string): boolean {
   try {
     const h = new URL(src.trim()).hostname.toLowerCase();
     if (h === "zillowstatic.com" || h.endsWith(".zillowstatic.com")) return true;
     if (h.endsWith(".cdninstagram.com") || h.endsWith(".fbcdn.net")) return true;
+    // GAMLS / ConnectMLS / Bridge photo hosts — optimizer often downscales soft
+    if (h.endsWith(".connectmls.com") || h.endsWith(".cdn-connectmls.com")) return true;
+    if (h.endsWith(".gamls.com") || h.includes("gamls")) return true;
+    if (h.endsWith(".sparkplatform.com") || h.endsWith(".bridgedataoutput.com")) return true;
+    if (h.endsWith(".amazonaws.com") || h.endsWith(".cloudfront.net")) return true;
     return false;
   } catch {
     return false;

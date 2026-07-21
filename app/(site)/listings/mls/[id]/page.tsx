@@ -8,6 +8,7 @@ import { buildMlsListingJsonLd } from "@/lib/jsonld-mls-listing";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getMlsListingById } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
+import { resolveMlsAttribution } from "@/lib/mls-attribution";
 import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
 import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
@@ -53,6 +54,13 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   const galleryUrls = filterDisplayImageUrls(listing.image_urls);
   const pageUrl = `${siteConfig.url}/listings/mls/${id}`;
   const jsonLd = buildMlsListingJsonLd(listing, pageUrl, siteConfig.url);
+  const attribution = resolveMlsAttribution(listing);
+  const attributionParts = [
+    (attribution.listing_agent || attribution.listing_agent_phone) &&
+      `Listing agent: ${[attribution.listing_agent, attribution.listing_agent_phone].filter(Boolean).join(" · ")}`,
+    (attribution.listing_office || attribution.listing_office_phone) &&
+      `Broker: ${[attribution.listing_office, attribution.listing_office_phone].filter(Boolean).join(" · ")}`,
+  ].filter(Boolean) as string[];
 
   return (
     <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
@@ -145,21 +153,13 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
           </div>
         </div>
 
-        {(listing.listing_agent ||
-          listing.listing_agent_phone ||
-          listing.listing_office ||
-          listing.listing_office_phone) && (
-          <p className="mt-6 text-xs leading-relaxed text-muted-foreground/80">
-            {[
-              (listing.listing_agent || listing.listing_agent_phone) &&
-                `Listing agent: ${[listing.listing_agent, listing.listing_agent_phone].filter(Boolean).join(" · ")}`,
-              (listing.listing_office || listing.listing_office_phone) &&
-                `Broker: ${[listing.listing_office, listing.listing_office_phone].filter(Boolean).join(" · ")}`,
-            ]
-              .filter(Boolean)
-              .join("  ·  ")}
-          </p>
-        )}
+        <p className="mt-6 text-xs leading-relaxed text-muted-foreground/80">
+          {attributionParts.length > 0
+            ? attributionParts.join("  ·  ")
+            : "Listing agent and broker details are shown when provided by the MLS feed for this property."}
+          {attributionParts.length > 0 ? "  ·  " : " "}
+          MLS #{listing.mls_id}
+        </p>
       </div>
     </main>
   );
