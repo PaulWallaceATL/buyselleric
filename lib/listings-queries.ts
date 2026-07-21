@@ -655,7 +655,9 @@ function isWarmMlsCache(row: MlsListingRow): boolean {
 }
 
 function isDetailReady(row: MlsListingRow): boolean {
-  return isWarmMlsCache(row) && hasMlsAttribution(row) && Boolean(row.description?.length);
+  // Photos are enough to paint the page; attribution can arrive from a richer merge
+  // or stay empty when the IDX feed omits it. Don't block navigation on agent fields.
+  return isWarmMlsCache(row) && Boolean(row.address_line || row.city);
 }
 
 async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
@@ -701,8 +703,8 @@ async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
  * Resolve a single MLS listing. Deduped per request via React.cache so
  * generateMetadata + the page body share one lookup.
  *
- * Collects cache + live feed results for a short window and merges the richest
- * row (photos + agent/broker + remarks) instead of returning the first sparse hit.
+ * Collects cache + live feed results briefly and merges the richest row.
+ * Returns as soon as a photo-ready row appears so search-bar deep links feel snappy.
  */
 export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListingRow | null> => {
   const id = mlsId.trim();
@@ -715,7 +717,7 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
   if (isSparkListingsEnabled()) sources.push(sparkGetMlsListingById(id));
 
   const collected: MlsListingRow[] = [];
-  const DETAIL_WAIT_MS = 5_500;
+  const DETAIL_WAIT_MS = 2_800;
 
   await new Promise<void>((resolve) => {
     let pending = sources.length;
@@ -731,8 +733,7 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
       p.then((row) => {
         if (row) {
           collected.push(row);
-          // Early exit once we have a complete detail-ready listing.
-          if (collected.some(isDetailReady) || scoreMlsListingCompleteness(row) >= 50) {
+          if (collected.some(isDetailReady) || scoreMlsListingCompleteness(row) >= 24) {
             clearTimeout(timer);
             done();
           }
@@ -749,7 +750,6 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
     }
   });
 
-  // Allow in-flight promises a moment more if we still have nothing.
   if (collected.length === 0) {
     const settled = await Promise.allSettled(sources);
     for (const r of settled) {

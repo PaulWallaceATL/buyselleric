@@ -1,6 +1,8 @@
 "use client";
 
 import { MapPin, Home, Hash } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 
 function SuggestIcon({ type }: { type: SearchSuggestion["type"] }) {
@@ -22,7 +24,22 @@ export function SearchSuggestionsList({
   loading: boolean;
   variant?: "hero" | "bar";
 }) {
+  const router = useRouter();
   const show = loading || items.length > 0;
+
+  // Warm the Next.js RSC cache for address → MLS detail deep links so click feels instant.
+  useEffect(() => {
+    for (const s of items) {
+      if (s.href?.startsWith("/listings/mls/") || s.href?.startsWith("/listings/")) {
+        try {
+          router.prefetch(s.href);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }, [items, router]);
+
   if (!show) return null;
 
   const pad = variant === "hero" ? "py-2.5" : "py-2";
@@ -48,6 +65,15 @@ export function SearchSuggestionsList({
             className={`flex w-full items-start gap-3 px-4 text-left transition-colors ${
               pad
             } ${i === activeIndex ? "bg-muted/80" : "hover:bg-muted/50"}`}
+            onMouseEnter={() => {
+              if (s.href) {
+                try {
+                  router.prefetch(s.href);
+                } catch {
+                  /* ignore */
+                }
+              }
+            }}
             onMouseDown={(e) => {
               e.preventDefault();
               onPick(s);

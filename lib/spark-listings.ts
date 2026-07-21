@@ -12,6 +12,7 @@
 import {
   bridgePropertyToCoreFields,
   bridgeRowHasRemarkFields,
+  extractMediaUrls,
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
 import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
@@ -870,9 +871,10 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
   async function finalize(row: Record<string, unknown>, filter: string): Promise<MlsListingRow> {
     const enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
     let mediaUrls: string[] = [];
-    // Detail: always hit Media entity so we prefer Full/HiRes over inline midsize.
     const listingKey = String(enriched.ListingKey ?? "").trim();
     const listingId = String(enriched.ListingId ?? "").trim();
+    const inlinePhotos = extractMediaUrls(enriched.Media);
+    const mediaWaitMs = inlinePhotos.length > 0 ? 1_200 : 8_000;
     if (listingKey || listingId) {
       try {
         mediaUrls = await Promise.race([
@@ -882,7 +884,7 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
             listingId || listingKey,
           ),
           new Promise<string[]>((resolve) => {
-            setTimeout(() => resolve([]), 8_000);
+            setTimeout(() => resolve([]), mediaWaitMs);
           }),
         ]);
       } catch (e) {

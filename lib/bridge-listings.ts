@@ -4,6 +4,7 @@ import {
   bridgePropertyToCoreFields,
   bridgeRowHasRemarkFields,
   escapeODataString,
+  extractMediaUrls,
   fetchBridgeMediaUrlsForListing,
   getBridgeODataConfig,
   type BridgeODataConfig,
@@ -1028,44 +1029,52 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
     let enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
 
     // Second pass for agent/broker fields (often omitted from sparse selects).
-    try {
-      const attrSelect = sanitizeBridgePropertySelect(
-        `ListingKey,ListingId,${SELECT_ATTRIBUTION}`,
-      );
-      if (attrSelect.includes("ListAgent") || attrSelect.includes("ListOffice")) {
+    // Run in parallel with media so attribution does not add sequential latency.
+    const attrPromise = (async (): Promise<Record<string, unknown> | null> => {
+      try {
+        const attrSelect = sanitizeBridgePropertySelect(
+          `ListingKey,ListingId,${SELECT_ATTRIBUTION}`,
+        );
+        if (!attrSelect.includes("ListAgent") && !attrSelect.includes("ListOffice")) return null;
         const extra = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(
           client,
           { $filter: filter, $select: attrSelect, $top: "1" },
           { revalidate: DETAIL_REVALIDATE },
         );
-        const attrRow = extra.value?.[0];
-        if (attrRow) enriched = { ...enriched, ...attrRow };
+        return extra.value?.[0] ?? null;
+      } catch {
+        return null;
       }
-    } catch {
-      /* attribution fields may be blocked on some IDX contracts */
-    }
+    })();
 
     let mediaUrls: string[] = [];
-    // Detail: always hit the Media entity. Inline Property.Media is often midsize
-    // (?width=1080); Media rows expose Full/HiRes/Original more reliably.
+    // Prefer a fast paint: use inline Property.Media when present (ConnectMLS
+    // gallery bumps ?width= to 2400). Only wait briefly for the Media entity.
     const listingKey = String(enriched.ListingKey ?? "").trim();
     const listingId = String(enriched.ListingId ?? "").trim();
-    if (listingKey || listingId) {
-      try {
-        mediaUrls = await Promise.race([
-          fetchBridgeMediaUrlsForListing(
-            client,
-            listingKey || listingId,
-            listingId || listingKey,
-          ),
-          new Promise<string[]>((resolve) => {
-            setTimeout(() => resolve([]), 8_000);
-          }),
-        ]);
-      } catch (e) {
-        console.warn("bridgeGetMlsListingById: media fetch failed (page still loads)", e);
-      }
-    }
+    const inlinePhotos = extractMediaUrls(enriched.Media);
+    const mediaWaitMs = inlinePhotos.length > 0 ? 1_200 : 8_000;
+    const mediaPromise =
+      listingKey || listingId
+        ? Promise.race([
+            fetchBridgeMediaUrlsForListing(
+              client,
+              listingKey || listingId,
+              listingId || listingKey,
+            ),
+            new Promise<string[]>((resolve) => {
+              setTimeout(() => resolve([]), mediaWaitMs);
+            }),
+          ]).catch((e) => {
+            console.warn("bridgeGetMlsListingById: media fetch failed (page still loads)", e);
+            return [] as string[];
+          })
+        : Promise.resolve([] as string[]);
+
+    const [attrRow, media] = await Promise.all([attrPromise, mediaPromise]);
+    if (attrRow) enriched = { ...enriched, ...attrRow };
+    mediaUrls = media;
+
     // Prefer Media-entity URLs; fall back to inline Property.Media if entity is empty/slow.
     if (mediaUrls.length > 0) {
       const { Media: _drop, ...rest } = enriched;
