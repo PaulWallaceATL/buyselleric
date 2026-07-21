@@ -1,12 +1,25 @@
 "use client";
 
 import { MapPin, Search, Sparkles } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { DreamHomePrompt } from "@/components/dream-home-prompt";
 import { SearchSuggestionsList } from "@/components/search-suggestions-list";
 import { useListingSearchSuggestions } from "@/components/use-listing-search-suggestions";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
+
+const DreamHomePrompt = dynamic(
+  () => import("@/components/dream-home-prompt").then((m) => m.DreamHomePrompt),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="rounded-3xl border-2 border-foreground/20 bg-background/80 p-4 shadow-lg backdrop-blur-md sm:min-h-[160px]"
+        aria-hidden
+      />
+    ),
+  },
+);
 
 type SearchMode = "location" | "dream";
 
@@ -105,10 +118,10 @@ export function HeroSearch() {
         <button
           type="button"
           onClick={() => setMode("location")}
-          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
+          className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
             mode === "location"
               ? "bg-white text-neutral-950 shadow-sm"
-              : "text-white hover:bg-white/10"
+              : "text-white/85 hover:bg-white/10 hover:text-white"
           }`}
         >
           <Search className="h-3.5 w-3.5" aria-hidden />
@@ -117,10 +130,10 @@ export function HeroSearch() {
         <button
           type="button"
           onClick={() => setMode("dream")}
-          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
+          className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
             mode === "dream"
               ? "bg-white text-neutral-950 shadow-sm"
-              : "text-white hover:bg-white/10"
+              : "text-white/85 hover:bg-white/10 hover:text-white"
           }`}
         >
           <Sparkles className="h-3.5 w-3.5" aria-hidden />
@@ -158,15 +171,15 @@ export function HeroSearch() {
                 <button
                   type="button"
                   onClick={handleMapClick}
-                  className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:h-11 sm:w-11"
                   aria-label="Search on map"
                   title="Map view"
                 >
-                  <MapPin className="h-5 w-5" aria-hidden />
+                  <MapPin className="h-5 w-5" />
                 </button>
                 <button
                   type="submit"
-                  className="flex h-11 items-center justify-center rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:px-6 sm:text-base"
+                  className="flex h-10 items-center justify-center rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:h-11 sm:px-6 sm:text-base"
                 >
                   Search
                 </button>

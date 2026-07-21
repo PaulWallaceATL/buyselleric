@@ -11,7 +11,7 @@ export function HeroPoster(): ReactNode {
         width={960}
         height={540}
         fetchPriority="high"
-        decoding="async"
+        decoding="sync"
         className="absolute inset-0 h-full w-full object-cover"
       />
     </div>

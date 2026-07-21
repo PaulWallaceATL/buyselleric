@@ -110,7 +110,7 @@ export function HeroContent(): ReactNode {
         <h1 className="text-balance text-[clamp(2rem,6.5vw,10rem)] leading-[1.06] tracking-tight text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)] sm:text-[clamp(2.5rem,7vw,11rem)]">
           <span className="block overflow-hidden pb-[0.1em]">
             <span
-              className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.3s_both]"
+              className="hero-anim-reveal block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.3s_both]"
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
               Find the home
@@ -118,7 +118,7 @@ export function HeroContent(): ReactNode {
           </span>
           <span className="block overflow-hidden pb-[0.1em]">
             <span
-              className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.5s_both]"
+              className="hero-anim-reveal block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.5s_both]"
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
               that fits your life
@@ -126,7 +126,7 @@ export function HeroContent(): ReactNode {
           </span>
           <span className="block overflow-hidden pb-[0.1em]">
             <span
-              className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.7s_both]"
+              className="hero-anim-reveal block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.7s_both]"
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
               <em className="font-serif">or sell with a plan.</em>
@@ -134,14 +134,14 @@ export function HeroContent(): ReactNode {
           </span>
         </h1>
 
-        <p className="mt-3 max-w-md text-pretty text-[clamp(0.95rem,2.3vw,1.35rem)] leading-relaxed text-white drop-shadow-sm sm:mt-5 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]">
+        <p className="hero-anim-fade mt-3 max-w-md text-pretty text-[clamp(0.95rem,2.3vw,1.35rem)] leading-relaxed text-white drop-shadow-sm sm:mt-5 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]">
           Eric Adams is your partner for buying and selling real estate local insight, honest
           pricing conversations, and hands-on support from tour to keys.
         </p>
-        <div className="relative z-[70] mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
+        <div className="hero-anim-fade relative z-[70] mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
           <HeroSearch />
         </div>
-        <div className="hero-ctas relative z-10 mt-3 flex flex-row flex-wrap gap-2 sm:mt-4 sm:gap-3 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.5s_both]">
+        <div className="hero-anim-fade hero-ctas relative z-10 mt-3 flex flex-row flex-wrap gap-2 sm:mt-4 sm:gap-3 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.5s_both]">
           <Link href="/listings" className={ctaPrimaryOnVideo}>
             View listings
           </Link>

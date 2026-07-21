@@ -139,6 +139,19 @@ body {
   }
 }
 
+/*
+ * Mobile PSI / Slow 4G: entrance animations keep LCP text + CTAs at opacity 0 for ~1.5s,
+ * which tanks LCP and Speed Index. Keep motion on desktop only.
+ */
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+  .hero-anim-reveal,
+  .hero-anim-fade {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 @keyframes heroGradient {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
