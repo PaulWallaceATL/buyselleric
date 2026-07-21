@@ -12,7 +12,6 @@
 import {
   bridgePropertyToCoreFields,
   bridgeRowHasRemarkFields,
-  extractMediaUrls,
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
 import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
@@ -870,31 +869,31 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
 
   async function finalize(row: Record<string, unknown>, filter: string): Promise<MlsListingRow> {
     const enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
-    const inlinePhotos = extractMediaUrls(enriched.Media);
     let mediaUrls: string[] = [];
-    if (inlinePhotos.length === 0) {
-      const listingKey = String(enriched.ListingKey ?? "").trim();
-      const listingId = String(enriched.ListingId ?? "").trim();
-      if (listingKey || listingId) {
-        try {
-          mediaUrls = await Promise.race([
-            fetchSparkMediaUrlsForListing(
-              client,
-              listingKey || listingId,
-              listingId || listingKey,
-            ),
-            new Promise<string[]>((resolve) => {
-              setTimeout(() => resolve([]), 8_000);
-            }),
-          ]);
-        } catch (e) {
-          console.warn("sparkGetMlsListingById: media fetch failed (page still loads)", e);
-        }
+    // Detail: always hit Media entity so we prefer Full/HiRes over inline midsize.
+    const listingKey = String(enriched.ListingKey ?? "").trim();
+    const listingId = String(enriched.ListingId ?? "").trim();
+    if (listingKey || listingId) {
+      try {
+        mediaUrls = await Promise.race([
+          fetchSparkMediaUrlsForListing(
+            client,
+            listingKey || listingId,
+            listingId || listingKey,
+          ),
+          new Promise<string[]>((resolve) => {
+            setTimeout(() => resolve([]), 8_000);
+          }),
+        ]);
+      } catch (e) {
+        console.warn("sparkGetMlsListingById: media fetch failed (page still loads)", e);
       }
     }
-    const mapOpts: BridgePropertyMapOptions =
-      mediaUrls.length > 0 ? { supplementalImageUrls: mediaUrls } : {};
-    return rowToMlsListingRow(enriched, mapOpts);
+    if (mediaUrls.length > 0) {
+      const { Media: _drop, ...rest } = enriched;
+      return rowToMlsListingRow(rest, { supplementalImageUrls: mediaUrls });
+    }
+    return rowToMlsListingRow(enriched);
   }
 
   const filters = listingIdFilterVariants(id, esc);

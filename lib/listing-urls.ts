@@ -18,6 +18,46 @@ export function filterDisplayImageUrls(urls: string[] | null | undefined): strin
 }
 
 /**
+ * ConnectMLS / GAMLS CDN often returns soft midsize URLs like `?width=1080`.
+ * Detail galleries render wider than that — bump the resize param so intrinsic
+ * width meets the layout (and retina). No-op for other hosts or already-large widths.
+ */
+export function upgradeMlsPhotoUrlForDetail(src: string): string {
+  const raw = src.trim();
+  if (!raw) return raw;
+  try {
+    const u = new URL(raw);
+    const h = u.hostname.toLowerCase();
+    const isConnectMls =
+      h.endsWith(".connectmls.com") ||
+      h.endsWith(".cdn-connectmls.com") ||
+      h.includes("connectmls");
+    if (!isConnectMls) return raw;
+
+    const DETAIL_WIDTH = 2400;
+    const existing = u.searchParams.get("width");
+    if (existing != null) {
+      const n = Number.parseInt(existing, 10);
+      if (Number.isFinite(n) && n > 0 && n < DETAIL_WIDTH) {
+        u.searchParams.set("width", String(DETAIL_WIDTH));
+        return u.toString();
+      }
+      return raw;
+    }
+    // Some ConnectMLS variants only expose a default midsize without width —
+    // requesting an explicit large width usually returns a sharper asset.
+    u.searchParams.set("width", String(DETAIL_WIDTH));
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+export function upgradeMlsPhotoUrlsForDetail(urls: string[]): string[] {
+  return urls.map(upgradeMlsPhotoUrlForDetail);
+}
+
+/**
  * Some CDNs allow browser hotlinks but block Next’s image optimizer (or return
  * soft/blurry proxies). Prefer the original URL in the browser for MLS photos.
  */

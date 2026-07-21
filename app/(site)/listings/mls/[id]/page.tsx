@@ -62,6 +62,12 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
       `Broker: ${[attribution.listing_office, attribution.listing_office_phone].filter(Boolean).join(" · ")}`,
   ].filter(Boolean) as string[];
 
+  if (attributionParts.length === 0) {
+    console.warn(
+      `MLS attribution empty for ${listing.mls_id} — feed likely omits agent/office on this IDX contract`,
+    );
+  }
+
   return (
     <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <script

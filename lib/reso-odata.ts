@@ -36,9 +36,8 @@ export function bestPhotoUrlFromMediaRow(m: Record<string, unknown>): string {
     const v = m[k];
     if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
   }
-  for (const v of Object.values(m)) {
-    if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
-  }
+  // Do not fall back to arbitrary string fields — that often picks thumbnails
+  // or document URLs ahead of real photo fields when Full/HiRes are absent.
   return "";
 }
 

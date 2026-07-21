@@ -3,10 +3,13 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
-import { filterDisplayImageUrls, listingImagePreferUnoptimized } from "@/lib/listing-urls";
+import { filterDisplayImageUrls, listingImagePreferUnoptimized, upgradeMlsPhotoUrlsForDetail } from "@/lib/listing-urls";
 
 export function ListingGallery({ urls }: { urls: string[] }) {
-  const clean = useMemo(() => filterDisplayImageUrls(urls), [urls]);
+  const clean = useMemo(
+    () => upgradeMlsPhotoUrlsForDetail(filterDisplayImageUrls(urls)),
+    [urls],
+  );
 
   // MLS feeds occasionally return URLs that 404, redirect to HTML, or the
   // Next image optimizer rejects upstream. Track those per render so the
