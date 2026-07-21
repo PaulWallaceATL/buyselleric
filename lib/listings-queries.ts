@@ -704,8 +704,9 @@ async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
  * Resolve a single MLS listing. Deduped per request via React.cache so
  * generateMetadata + the page body share one lookup.
  *
- * Fast path: Supabase + Bridge Property (inline Media) only — return as soon as
- * photos exist. Spark and Media-entity enrichment run after the response via `after()`.
+ * Fast path: return as soon as a photo-ready row appears (Supabase or live Property).
+ * Never abandon an in-flight live fetch — that was causing soft-404s under MLS latency.
+ * Media-entity / attribution polish runs after the response via `after()`.
  */
 export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListingRow | null> => {
   const id = mlsId.trim();
@@ -716,7 +717,6 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
   );
   const bridgeOn = isBridgeListingsEnabled();
   const sparkOn = isSparkListingsEnabled();
-  // Prefer Bridge for first paint when both feeds are on; Spark alone uses Spark.
   const primaryLiveP = bridgeOn
     ? bridgeGetMlsListingById(id, { fullEnrich: false })
     : sparkOn
@@ -724,7 +724,7 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
       : Promise.resolve(null);
 
   const collected: MlsListingRow[] = [];
-  const FAST_WAIT_MS = 2_200;
+  const FAST_WAIT_MS = 2_500;
 
   await new Promise<void>((resolve) => {
     let pending = 2;
@@ -760,36 +760,54 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
   });
 
   let merged = mergeMlsListingRows(collected);
+  if (merged && isDetailReady(merged)) {
+    void persistMlsListingCache(merged);
+    scheduleBackgroundMlsEnrich(id, merged);
+    return merged;
+  }
 
-  // Dual-feed: Bridge miss / no photos — try Spark without waiting forever.
+  // Dual-feed fallback while primary may still be running.
   if ((!merged || !isDetailReady(merged)) && sparkOn && bridgeOn) {
     const sparkRow = await Promise.race([
       sparkGetMlsListingById(id, { fullEnrich: false }),
-      new Promise<null>((r) => setTimeout(() => r(null), 2_500)),
+      new Promise<null>((r) => setTimeout(() => r(null), 3_000)),
     ]);
+    if (sparkRow) {
+      collected.push(sparkRow);
+      merged = mergeMlsListingRows(collected);
+      if (merged && isDetailReady(merged)) {
+        void persistMlsListingCache(merged);
+        scheduleBackgroundMlsEnrich(id, merged);
+        return merged;
+      }
+    }
+  }
+
+  // Critical: if still empty, wait for the primary live promise to finish.
+  // A short race here previously returned null → soft 404 while Bridge was still in flight.
+  if (collected.length === 0) {
+    const primaryRow = await Promise.race([
+      primaryLiveP.catch(() => null),
+      new Promise<null>((r) => setTimeout(() => r(null), 18_000)),
+    ]);
+    if (primaryRow) collected.push(primaryRow);
+    const supabaseRow = await supabaseP.catch(() => null);
+    if (supabaseRow) collected.push(supabaseRow);
+    merged = mergeMlsListingRows(collected);
+  } else {
+    merged = mergeMlsListingRows(collected);
+  }
+
+  // Last resort: Spark if Bridge primary produced nothing.
+  if (!merged && sparkOn && bridgeOn) {
+    const sparkRow = await sparkGetMlsListingById(id, { fullEnrich: false }).catch(() => null);
     if (sparkRow) {
       collected.push(sparkRow);
       merged = mergeMlsListingRows(collected);
     }
   }
 
-  // Still empty: brief late wait for in-flight primary (avoid allSettled forever).
-  if (collected.length === 0) {
-    const late = await Promise.race([
-      Promise.allSettled([supabaseP, primaryLiveP]).then((results) => {
-        for (const r of results) {
-          if (r.status === "fulfilled" && r.value) collected.push(r.value);
-        }
-        return true;
-      }),
-      new Promise<boolean>((r) => setTimeout(() => r(false), 3_500)),
-    ]);
-    if (late) merged = mergeMlsListingRows(collected);
-  } else {
-    merged = mergeMlsListingRows(collected);
-  }
-
-  if (merged && (isWarmMlsCache(merged) || hasMlsAttribution(merged))) {
+  if (merged && (isWarmMlsCache(merged) || hasMlsAttribution(merged) || isUsableMlsCache(merged))) {
     void persistMlsListingCache(merged);
   }
   if (merged && isDetailReady(merged)) {
@@ -800,12 +818,16 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
 
 async function enrichMlsListingInBackground(id: string, seed: MlsListingRow): Promise<void> {
   try {
+    // Only hit Media-entity when we still need better photos; avoid rate-limit storms.
+    const needsMedia = !isWarmMlsCache(seed);
+    if (!needsMedia && hasMlsAttribution(seed)) return;
+
     const parts: MlsListingRow[] = [seed];
     if (isBridgeListingsEnabled()) {
-      const row = await bridgeGetMlsListingById(id, { fullEnrich: true }).catch(() => null);
+      const row = await bridgeGetMlsListingById(id, { fullEnrich: needsMedia }).catch(() => null);
       if (row) parts.push(row);
     }
-    if (isSparkListingsEnabled()) {
+    if (isSparkListingsEnabled() && needsMedia) {
       const row = await sparkGetMlsListingById(id, { fullEnrich: true }).catch(() => null);
       if (row) parts.push(row);
     }

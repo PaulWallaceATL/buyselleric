@@ -700,7 +700,7 @@ async function suggestQuery(
   const query: Record<string, string> = {
     $filter: `${ACTIVE} and (${filterExtra})`,
     $top: String(top),
-    $select: "City,StateOrProvince,PostalCode,UnparsedAddress,StreetNumber,StreetName,ListingKey",
+    $select: "City,StateOrProvince,PostalCode,UnparsedAddress,StreetNumber,StreetName,ListingKey,ListingId",
   };
   try {
     const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, query);

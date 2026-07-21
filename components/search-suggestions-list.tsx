@@ -33,9 +33,9 @@ export function SearchSuggestionsList({
   const show = loading || items.length > 0;
   const warmedRef = useRef<Set<string>>(new Set());
 
-  // Warm RSC + Supabase cache for address → MLS detail so click hits a ready row.
+  // Prefetch RSC for deep links. Warm Supabase only on hover (batch warm was
+  // hammering Bridge and contributing to detail 404s under rate limits).
   useEffect(() => {
-    let warmed = 0;
     for (const s of items) {
       if (!s.href) continue;
       if (s.href.startsWith("/listings/mls/") || s.href.startsWith("/listings/")) {
@@ -45,16 +45,6 @@ export function SearchSuggestionsList({
           /* ignore */
         }
       }
-      const mlsId = s.type === "address" ? mlsIdFromHref(s.href) : null;
-      if (!mlsId || warmed >= 3 || warmedRef.current.has(mlsId)) continue;
-      warmedRef.current.add(mlsId);
-      warmed += 1;
-      void fetch("/api/listings/warm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: mlsId }),
-        keepalive: true,
-      }).catch(() => undefined);
     }
   }, [items, router]);
 
