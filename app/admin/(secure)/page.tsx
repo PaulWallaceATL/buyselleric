@@ -48,7 +48,7 @@ export default async function AdminDashboardPage(): Promise<ReactNode> {
         </p>
       ) : null}
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-5">
         <Link
           href="/admin/listings"
           className="rounded-2xl border border-border bg-muted/20 p-6 transition-colors hover:bg-muted/40"
@@ -56,6 +56,13 @@ export default async function AdminDashboardPage(): Promise<ReactNode> {
           <p className="text-sm text-muted-foreground">Listings</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{listingCount}</p>
           <p className="mt-2 text-sm font-medium text-foreground">Manage homes →</p>
+        </Link>
+        <Link
+          href="/admin/featured"
+          className="rounded-2xl border border-border bg-muted/20 p-6 transition-colors hover:bg-muted/40"
+        >
+          <p className="text-sm text-muted-foreground">Featured</p>
+          <p className="mt-2 text-sm font-medium text-foreground">Pick MLS or manual →</p>
         </Link>
         <Link
           href="/admin/submissions"

@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { ListingCard } from "@/components/listing-card";
+import { UnifiedListingCard } from "@/components/unified-listing-card";
 import { siteConfig } from "@/lib/config";
 import { ctaMutedOutline, ctaPrimary } from "@/lib/cta-styles";
-import { getPublishedListings } from "@/lib/listings-queries";
+import { getFeaturedUnifiedListings } from "@/lib/listings-queries";
 import { eyebrow, lead, sectionTitle, sectionY, siteContainer } from "@/lib/ui";
 
 export async function FeaturedListings() {
-  const listings = await getPublishedListings();
-  const featured = listings.slice(0, 3);
+  const featured = await getFeaturedUnifiedListings();
 
   return (
     <section id="featured-listings" className={`featured-listings bg-background ${sectionY}`}>
@@ -26,19 +25,19 @@ export async function FeaturedListings() {
         </div>
 
         {featured.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-border bg-muted/20 p-8 text-center sm:p-12">
-            <p className="text-foreground font-medium">Listings will appear here once published.</p>
+          <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-8 text-center sm:px-8 sm:py-10">
+            <p className="text-foreground font-medium">Featured homes will show here once you pick them.</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Connect Supabase and add homes from the admin panel.
+              Choose MLS or manual listings in the admin Featured panel.
             </p>
-            <Link href="/sell" className={`${ctaMutedOutline} mt-6`}>
-              Sell with Eric
+            <Link href="/listings" className={`${ctaMutedOutline} mt-6`}>
+              Browse all listings
             </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
             {featured.map((l) => (
-              <ListingCard key={l.id} listing={l} />
+              <UnifiedListingCard key={`${l.source}-${l.mls_id ?? l.id}`} listing={l} />
             ))}
           </div>
         )}

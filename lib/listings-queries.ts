@@ -1,3 +1,4 @@
+import { cache } from "react";
 import {
   bridgeFetchTopUnifiedListings,
   bridgeFetchUnifiedPage,
@@ -49,7 +50,9 @@ export interface UnifiedListing {
   /** Which upstream feed produced the row — drives the per-card source badge. */
   feed?: ListingFeed;
   listing_agent?: string;
+  listing_agent_phone?: string;
   listing_office?: string;
+  listing_office_phone?: string;
 }
 
 export interface ListingFilters {
@@ -100,7 +103,10 @@ function mlsToUnified(m: MlsListingRow, feed: ListingFeed = "bridge"): UnifiedLi
     square_feet: m.square_feet, latitude: m.latitude,
     longitude: m.longitude, image_urls: m.image_urls, source: "mls",
     feed,
-    listing_agent: m.listing_agent, listing_office: m.listing_office,
+    listing_agent: m.listing_agent,
+    listing_agent_phone: m.listing_agent_phone,
+    listing_office: m.listing_office,
+    listing_office_phone: m.listing_office_phone,
   };
 }
 
@@ -605,29 +611,134 @@ export async function getPublishedListingBySlug(slug: string): Promise<ListingRo
   return data as ListingRow | null;
 }
 
-export async function getMlsListingById(mlsId: string): Promise<MlsListingRow | null> {
-  // Try live feeds in parallel — first non-null wins. Order is deterministic
-  // (Bridge before Spark) so that overlapping listings have a consistent
-  // canonical source for SEO/JSON-LD.
-  const liveLookups: Array<Promise<MlsListingRow | null>> = [];
-  if (isBridgeListingsEnabled()) liveLookups.push(bridgeGetMlsListingById(mlsId));
-  if (isSparkListingsEnabled()) liveLookups.push(sparkGetMlsListingById(mlsId));
-  if (liveLookups.length > 0) {
-    const results = await Promise.allSettled(liveLookups);
-    for (const r of results) {
-      if (r.status === "fulfilled" && r.value) return r.value;
+function raceFirstNonNull<T>(promises: Array<Promise<T | null>>): Promise<T | null> {
+  if (promises.length === 0) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let pending = promises.length;
+    let done = false;
+    for (const p of promises) {
+      p.then((value) => {
+        if (done) return;
+        if (value != null) {
+          done = true;
+          resolve(value);
+          return;
+        }
+        pending -= 1;
+        if (pending === 0) resolve(null);
+      }).catch(() => {
+        if (done) return;
+        pending -= 1;
+        if (pending === 0) resolve(null);
+      });
     }
-  }
+  });
+}
 
+async function getMlsListingFromSupabase(mlsId: string): Promise<MlsListingRow | null> {
   const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
   const client = createSupabaseAdminClient();
   if (!client) {
     const supabase = await createSupabaseServerClient();
     if (!supabase) return null;
     const { data } = await supabase.from("mls_listings").select("*").eq("mls_id", mlsId).maybeSingle();
-    return data as MlsListingRow | null;
+    return normalizeMlsListingRow(data);
   }
   const { data, error } = await client.from("mls_listings").select("*").eq("mls_id", mlsId).maybeSingle();
-  if (error) { console.error("getMlsListingById", error.message); return null; }
-  return data as MlsListingRow | null;
+  if (error) {
+    console.error("getMlsListingFromSupabase", error.message);
+    return null;
+  }
+  return normalizeMlsListingRow(data);
+}
+
+function normalizeMlsListingRow(data: unknown): MlsListingRow | null {
+  if (!data || typeof data !== "object") return null;
+  const row = data as MlsListingRow;
+  return {
+    ...row,
+    listing_agent: row.listing_agent ?? "",
+    listing_agent_phone: row.listing_agent_phone ?? "",
+    listing_office: row.listing_office ?? "",
+    listing_office_phone: row.listing_office_phone ?? "",
+    image_urls: Array.isArray(row.image_urls) ? row.image_urls : [],
+  };
+}
+
+function isWarmMlsCache(row: MlsListingRow): boolean {
+  return Array.isArray(row.image_urls) && row.image_urls.length > 0;
+}
+
+/**
+ * Resolve a single MLS listing. Deduped per request via React.cache so
+ * generateMetadata + the page body share one lookup.
+ */
+export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListingRow | null> => {
+  const id = mlsId.trim();
+  if (!id) return null;
+
+  const cached = await getMlsListingFromSupabase(id);
+  if (cached && isWarmMlsCache(cached)) {
+    return cached;
+  }
+
+  const liveLookups: Array<Promise<MlsListingRow | null>> = [];
+  if (isBridgeListingsEnabled()) liveLookups.push(bridgeGetMlsListingById(id));
+  if (isSparkListingsEnabled()) liveLookups.push(sparkGetMlsListingById(id));
+
+  if (liveLookups.length > 0) {
+    const live = await raceFirstNonNull(liveLookups);
+    if (live) return live;
+  }
+
+  return cached;
+});
+
+async function listFeaturedSlots(): Promise<
+  Array<{ slot_index: number; source: "mls" | "manual"; mls_id: string | null; listing_id: string | null }>
+> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("featured_slots")
+    .select("slot_index, source, mls_id, listing_id")
+    .order("slot_index", { ascending: true });
+  if (error) {
+    console.error("listFeaturedSlots", error.message);
+    return [];
+  }
+  return (data ?? []) as Array<{
+    slot_index: number;
+    source: "mls" | "manual";
+    mls_id: string | null;
+    listing_id: string | null;
+  }>;
+}
+
+/** Homepage featured homes — curated hybrid slots (MLS or manual). */
+export async function getFeaturedUnifiedListings(): Promise<UnifiedListing[]> {
+  const slots = await listFeaturedSlots();
+  if (slots.length === 0) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const out: UnifiedListing[] = [];
+
+  for (const slot of slots) {
+    if (slot.source === "manual" && slot.listing_id) {
+      if (!supabase) continue;
+      const { data } = await supabase
+        .from("listings")
+        .select("*")
+        .eq("id", slot.listing_id)
+        .eq("is_published", true)
+        .maybeSingle();
+      if (data) out.push(manualToUnified(data as ListingRow));
+      continue;
+    }
+    if (slot.source === "mls" && slot.mls_id) {
+      const mls = await getMlsListingById(slot.mls_id);
+      if (mls) out.push(mlsToUnified(mls));
+    }
+  }
+  return out;
 }

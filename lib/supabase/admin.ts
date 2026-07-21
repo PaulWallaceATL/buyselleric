@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type {
   BlogPostRow,
+  FeaturedSlotRow,
   ListingRow,
   SeoAgentActivityLevel,
   SeoAgentActivityRow,
@@ -126,4 +127,45 @@ export async function adminGetLatestSeoAgentRunSummary(
   if (error) throw error;
   if (!data) return null;
   return data as { run_id: string; created_at: string };
+}
+
+export async function adminListFeaturedSlots(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+): Promise<FeaturedSlotRow[]> {
+  const { data, error } = await client
+    .from("featured_slots")
+    .select("*")
+    .order("slot_index", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as FeaturedSlotRow[];
+}
+
+export async function adminUpsertFeaturedSlot(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  slot: {
+    slot_index: number;
+    source: "mls" | "manual";
+    mls_id: string | null;
+    listing_id: string | null;
+  },
+): Promise<void> {
+  const { error } = await client.from("featured_slots").upsert(
+    {
+      slot_index: slot.slot_index,
+      source: slot.source,
+      mls_id: slot.source === "mls" ? slot.mls_id : null,
+      listing_id: slot.source === "manual" ? slot.listing_id : null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "slot_index" },
+  );
+  if (error) throw error;
+}
+
+export async function adminDeleteFeaturedSlot(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  slotIndex: number,
+): Promise<void> {
+  const { error } = await client.from("featured_slots").delete().eq("slot_index", slotIndex);
+  if (error) throw error;
 }

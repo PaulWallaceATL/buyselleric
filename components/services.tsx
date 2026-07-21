@@ -3,28 +3,10 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { sectionY, siteContainer } from "@/lib/ui";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
-}
-
-function SplitText({ children }: { children: string }) {
-  return (
-    <>
-      {children.split(" ").map((word, wi) => (
-        <span key={wi} className="inline-block whitespace-nowrap">
-          {word.split("").map((char, ci) => (
-            <span key={ci} className="char inline-block">
-              {char}
-            </span>
-          ))}
-          {wi < children.split(" ").length - 1 && (
-            <span className="char inline-block">&nbsp;</span>
-          )}
-        </span>
-      ))}
-    </>
-  );
 }
 
 const services = [
@@ -198,65 +180,22 @@ function ServiceItem({ title, href, index }: { title: string; href: string; inde
 }
 
 export function Services() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    if (!titleRef.current || !sectionRef.current || !contentRef.current) return;
-
-    const title = titleRef.current;
-    const chars = title.querySelectorAll(".char");
-    const section = sectionRef.current;
-    const content = contentRef.current;
-
-    gsap.fromTo(
-      chars,
-      {
-        willChange: "transform",
-        transformOrigin: "50% 100%",
-        scaleY: 0,
-      },
-      {
-        ease: "power3.in",
-        opacity: 1,
-        scaleY: 1,
-        stagger: 0.05,
-        scrollTrigger: {
-          trigger: section,
-          start: "top top",
-          end: "+=150%",
-          scrub: true,
-          pin: content,
-          anticipatePin: 1,
-        },
-      }
-    );
-
-    return () => {
-      ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
-    };
-  }, []);
-
   return (
     <section
-      ref={sectionRef}
       id="services"
-      className="services relative scroll-mt-28 overflow-hidden bg-background sm:scroll-mt-32"
+      className={`services relative scroll-mt-28 overflow-hidden bg-background sm:scroll-mt-32 ${sectionY}`}
     >
-      <div
-        ref={contentRef}
-        className="flex min-h-screen items-center justify-center px-6 sm:px-12 lg:px-24"
-      >
-        <h2
-          ref={titleRef}
-          className="text-center text-[clamp(2.5rem,7vw,7rem)] font-medium leading-[1.1] tracking-tight text-foreground max-w-350"
-        >
-          <SplitText>Guidance for buyers. Strategy for sellers. Calm at every step.</SplitText>
+      <div className={`${siteContainer} mb-10 sm:mb-14`}>
+        <h2 className="max-w-3xl text-balance text-[clamp(1.75rem,4.5vw,3.25rem)] font-medium leading-[1.15] tracking-tight text-foreground">
+          Guidance for buyers. Strategy for sellers. Calm at every step.
         </h2>
+        <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+          From first tour to closing day—clear advice, steady advocacy, and a plan that fits how you
+          buy or sell.
+        </p>
       </div>
 
-      <div id="services-menu" className="w-full scroll-mt-28 pb-24 sm:scroll-mt-32">
+      <div id="services-menu" className="w-full scroll-mt-28 sm:scroll-mt-32">
         <div className="w-full">
           {services.map((service, index) => (
             <ServiceItem key={service.id} title={service.title} href={service.href} index={index} />

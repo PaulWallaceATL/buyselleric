@@ -4,6 +4,7 @@ import {
   bridgePropertyToCoreFields,
   bridgeRowHasRemarkFields,
   escapeODataString,
+  extractMediaUrls,
   fetchBridgeMediaUrlsForListing,
   getBridgeODataConfig,
   type BridgeODataConfig,
@@ -78,7 +79,9 @@ function rowToUnified(row: Record<string, unknown>, mapOpts?: BridgePropertyMapO
     feed: "bridge",
   };
   if (c.listing_agent) base.listing_agent = c.listing_agent;
+  if (c.listing_agent_phone) base.listing_agent_phone = c.listing_agent_phone;
   if (c.listing_office) base.listing_office = c.listing_office;
+  if (c.listing_office_phone) base.listing_office_phone = c.listing_office_phone;
   return base;
 }
 
@@ -104,7 +107,9 @@ function rowToMlsListingRow(row: Record<string, unknown>, mapOpts?: BridgeProper
     status: c.status,
     image_urls: c.image_urls,
     listing_agent: c.listing_agent,
+    listing_agent_phone: c.listing_agent_phone,
     listing_office: c.listing_office,
+    listing_office_phone: c.listing_office_phone,
     raw_data: row,
     synced_at: now,
     created_at: now,
@@ -118,6 +123,10 @@ function rowToMlsListingRow(row: Record<string, unknown>, mapOpts?: BridgeProper
  */
 const SELECT_GRID =
   "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,Media,ModificationTimestamp";
+
+/** Attribution fields for detail pages — not on grid (some feeds reject extras on search). */
+const SELECT_ATTRIBUTION =
+  "ListAgentFirstName,ListAgentLastName,ListOfficePhone,ListAgentPreferredPhone,ListAgentDirectPhone,ListAgentCellPhone";
 
 /** gamls2 IDX rejects these on $select (see Bridge 400). Strip from env overrides too. */
 const GAMLS_BLOCKED_SELECT_FIELDS = new Set([
@@ -196,12 +205,12 @@ async function enrichPropertyRowWithRemarksIfNeeded(
  * gamls2 often rejects extra RESO columns — add more only via BRIDGE_PROPERTY_SELECT_DETAIL.
  */
 const SELECT_DETAIL_SAFE = sanitizeBridgePropertySelect(
-  `${SELECT_GRID},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`,
+  `${SELECT_GRID},${SELECT_ATTRIBUTION},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks`,
 );
 
 /** Lighter detail if SAFE fails; keep `Media` so gallery can load without a separate Media query. */
 const SELECT_DETAIL_SPARSE = sanitizeBridgePropertySelect(
-  "ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,ModificationTimestamp,Media",
+  `ListingKey,ListingId,UnparsedAddress,StreetNumber,StreetDirPrefix,StreetName,StreetSuffix,StreetDirSuffix,UnitNumber,City,StateOrProvince,PostalCode,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,BathroomsTotalDecimal,LivingArea,PropertyType,PropertySubType,StandardStatus,MlsStatus,SubdivisionName,ModificationTimestamp,Media,${SELECT_ATTRIBUTION}`,
 );
 
 /** If ModificationTimestamp or subdivision is blocked on $select for some rows. */
@@ -1001,30 +1010,38 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
   if (!id) return null;
 
   const esc = escapeODataString(id);
+  const DETAIL_REVALIDATE = 60;
 
   async function fetchRow(filter: string, select: string): Promise<Record<string, unknown> | null> {
-    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(client, {
-      $filter: filter,
-      $select: select,
-      $top: "1",
-    });
+    const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(
+      client,
+      {
+        $filter: filter,
+        $select: select,
+        $top: "1",
+      },
+      { revalidate: DETAIL_REVALIDATE },
+    );
     return data.value?.[0] ?? null;
   }
 
   async function finalize(row: Record<string, unknown>, filter: string): Promise<MlsListingRow> {
     const enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
-    const listingKey = String(enriched.ListingKey ?? "").trim();
-    const listingId = String(enriched.ListingId ?? "").trim();
+    const inlinePhotos = extractMediaUrls(enriched.Media);
     let mediaUrls: string[] = [];
-    if (listingKey || listingId) {
-      try {
-        mediaUrls = await fetchBridgeMediaUrlsForListing(
-          client,
-          listingKey || listingId,
-          listingId || listingKey,
-        );
-      } catch (e) {
-        console.warn("bridgeGetMlsListingById: media fetch failed (page still loads)", e);
+    if (inlinePhotos.length === 0) {
+      const listingKey = String(enriched.ListingKey ?? "").trim();
+      const listingId = String(enriched.ListingId ?? "").trim();
+      if (listingKey || listingId) {
+        try {
+          mediaUrls = await fetchBridgeMediaUrlsForListing(
+            client,
+            listingKey || listingId,
+            listingId || listingKey,
+          );
+        } catch (e) {
+          console.warn("bridgeGetMlsListingById: media fetch failed (page still loads)", e);
+        }
       }
     }
     const mapOpts: BridgePropertyMapOptions =
@@ -1032,8 +1049,24 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
     return rowToMlsListingRow(enriched, mapOpts);
   }
 
-  for (const filter of listingIdFilterVariants(id, esc)) {
-    for (const select of detailSelectCandidates()) {
+  const filters = listingIdFilterVariants(id, esc);
+  const selects = detailSelectCandidates();
+  const primaryFilter = filters[0]!;
+  const primarySelect = selects[0]!;
+
+  try {
+    const row = await fetchRow(primaryFilter, primarySelect);
+    if (row) return await finalize(row, primaryFilter);
+  } catch (e) {
+    console.warn(
+      `bridgeGetMlsListingById: primary attempt failed filter=${primaryFilter.slice(0, 100)}…`,
+      e,
+    );
+  }
+
+  for (const filter of filters) {
+    for (const select of selects) {
+      if (filter === primaryFilter && select === primarySelect) continue;
       try {
         const row = await fetchRow(filter, select);
         if (row) return await finalize(row, filter);

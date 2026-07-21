@@ -60,19 +60,27 @@ function buildHeaders(cfg: SparkODataConfig): HeadersInit {
   };
 }
 
-export async function sparkODataGet<T>(cfg: SparkODataConfig, query: Record<string, string>): Promise<T> {
+export async function sparkODataGet<T>(
+  cfg: SparkODataConfig,
+  query: Record<string, string>,
+  options?: { revalidate?: number },
+): Promise<T> {
   const url = new URL(entityCollectionUrl(cfg));
   for (const [k, v] of Object.entries(query)) {
     if (v !== "") url.searchParams.set(k, v);
   }
-  return sparkODataGetAbsolute<T>(cfg, url.toString());
+  return sparkODataGetAbsolute<T>(cfg, url.toString(), options);
 }
 
 /** Any OData URL under the same auth (Property, Media, @odata.nextLink, …). */
-export async function sparkODataGetAbsolute<T>(cfg: SparkODataConfig, requestUrl: string): Promise<T> {
+export async function sparkODataGetAbsolute<T>(
+  cfg: SparkODataConfig,
+  requestUrl: string,
+  options?: { revalidate?: number },
+): Promise<T> {
   const res = await fetch(requestUrl, {
     headers: buildHeaders(cfg),
-    next: { revalidate: 0 },
+    next: { revalidate: options?.revalidate ?? 0 },
   });
 
   if (!res.ok) {

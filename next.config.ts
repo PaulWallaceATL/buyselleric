@@ -41,7 +41,16 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/listings/:path*",
+        source: "/listings/mls/:id",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=60, stale-while-revalidate=300",
+          },
+        ],
+      },
+      {
+        source: "/listings/:slug",
         headers: [
           {
             key: "Cache-Control",

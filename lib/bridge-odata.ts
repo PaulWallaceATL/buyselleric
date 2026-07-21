@@ -50,15 +50,6 @@ function entityCollectionUrl(cfg: BridgeODataConfig): string {
   return `${cfg.baseUrl}/${cfg.datasetId}/${cfg.entityPath}`;
 }
 
-export async function bridgeODataGet<T>(cfg: BridgeODataConfig, query: Record<string, string>): Promise<T> {
-  const url = new URL(entityCollectionUrl(cfg));
-  for (const [k, v] of Object.entries(query)) {
-    if (v !== "") url.searchParams.set(k, v);
-  }
-
-  return bridgeODataGetAbsolute<T>(cfg, url.toString());
-}
-
 function bridgeRateLimitDelayMs(attempt: number): number {
   return Math.min(4_000, 800 * (attempt + 1));
 }
@@ -68,18 +59,23 @@ function isBridgeRateLimitError(status: number, body: string): boolean {
 }
 
 /** Any OData URL under the same auth (Property, Media, @odata.nextLink, …). */
-export async function bridgeODataGetAbsolute<T>(cfg: BridgeODataConfig, requestUrl: string): Promise<T> {
+export async function bridgeODataGetAbsolute<T>(
+  cfg: BridgeODataConfig,
+  requestUrl: string,
+  options?: { revalidate?: number },
+): Promise<T> {
   const url = new URL(requestUrl);
   if (!url.searchParams.has("access_token")) {
     url.searchParams.set("access_token", cfg.serverToken);
   }
 
+  const revalidate = options?.revalidate ?? 0;
   const requestInit = {
     headers: {
       Authorization: `Bearer ${cfg.serverToken}`,
       Accept: "application/json",
     },
-    next: { revalidate: 0 },
+    next: { revalidate },
   } as const;
 
   let lastError: Error | null = null;
@@ -102,6 +98,19 @@ export async function bridgeODataGetAbsolute<T>(cfg: BridgeODataConfig, requestU
   }
 
   throw lastError ?? new Error("Bridge OData request failed");
+}
+
+export async function bridgeODataGet<T>(
+  cfg: BridgeODataConfig,
+  query: Record<string, string>,
+  options?: { revalidate?: number },
+): Promise<T> {
+  const url = new URL(entityCollectionUrl(cfg));
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== "") url.searchParams.set(k, v);
+  }
+
+  return bridgeODataGetAbsolute<T>(cfg, url.toString(), options);
 }
 
 export function odataResourceCollectionUrl(cfg: BridgeODataConfig, resourcePath: string): string {
@@ -449,7 +458,9 @@ export function bridgePropertyToCoreFields(
   status: string;
   image_urls: string[];
   listing_agent: string;
+  listing_agent_phone: string;
   listing_office: string;
+  listing_office_phone: string;
 } {
   const listingKey = str(row.ListingKey) || str(row.Id);
   const listingId = str(row.ListingId) || listingKey;
@@ -491,10 +502,20 @@ export function bridgePropertyToCoreFields(
     str(row.CoListAgent) ||
     coFirstLast;
 
-  const officePhone = str(row.ListOfficePhone) || str(row.ListOfficeFax);
-  const officeName =
+  const listing_agent_phone =
+    str(row.ListAgentPreferredPhone) ||
+    str(row.ListAgentDirectPhone) ||
+    str(row.ListAgentCellPhone) ||
+    str(row.ListAgentMobilePhone) ||
+    str(row.ListAgentOfficePhone) ||
+    str(row.ListAgentPhone) ||
+    str(row.CoListAgentPreferredPhone) ||
+    str(row.CoListAgentDirectPhone) ||
+    str(row.CoListAgentCellPhone);
+
+  const listing_office =
     str(row.ListOfficeName) || str(row.ListOffice) || str(row.ListCompany) || str(row.ListBrokerageName);
-  const listing_office = officePhone && officeName ? `${officeName} · ${officePhone}` : officeName || officePhone;
+  const listing_office_phone = str(row.ListOfficePhone) || str(row.ListOfficeFax);
 
   return {
     listingKey,
@@ -523,6 +544,8 @@ export function bridgePropertyToCoreFields(
     status: str(row.StandardStatus) || str(row.MlsStatus) || "active",
     image_urls,
     listing_agent,
+    listing_agent_phone,
     listing_office,
+    listing_office_phone,
   };
 }

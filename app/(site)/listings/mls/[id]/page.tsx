@@ -13,7 +13,7 @@ import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 type Props = Readonly<{ params: Promise<{ id: string }> }>;
 
@@ -120,18 +120,6 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
               <p className="mt-1 text-foreground">{listing.property_type}</p>
             </div>
           )}
-          {listing.listing_agent && (
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Listing agent</p>
-              <p className="mt-1 text-foreground">{listing.listing_agent}</p>
-            </div>
-          )}
-          {listing.listing_office && (
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Listing office</p>
-              <p className="mt-1 text-foreground">{listing.listing_office}</p>
-            </div>
-          )}
         </div>
 
         <div className="mt-10 rounded-2xl border border-border bg-muted/20 p-6 sm:rounded-3xl sm:p-8">
@@ -156,6 +144,22 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
             </a>
           </div>
         </div>
+
+        {(listing.listing_agent ||
+          listing.listing_agent_phone ||
+          listing.listing_office ||
+          listing.listing_office_phone) && (
+          <p className="mt-6 text-xs leading-relaxed text-muted-foreground/80">
+            {[
+              (listing.listing_agent || listing.listing_agent_phone) &&
+                `Listing agent: ${[listing.listing_agent, listing.listing_agent_phone].filter(Boolean).join(" · ")}`,
+              (listing.listing_office || listing.listing_office_phone) &&
+                `Broker: ${[listing.listing_office, listing.listing_office_phone].filter(Boolean).join(" · ")}`,
+            ]
+              .filter(Boolean)
+              .join("  ·  ")}
+          </p>
+        )}
       </div>
     </main>
   );

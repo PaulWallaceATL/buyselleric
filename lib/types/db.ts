@@ -88,10 +88,22 @@ export interface MlsListingRow {
   status: string;
   image_urls: string[];
   listing_agent: string;
+  listing_agent_phone: string;
   listing_office: string;
+  listing_office_phone: string;
   raw_data: Record<string, unknown>;
   synced_at: string;
   created_at: string;
+  updated_at: string;
+}
+
+export type FeaturedSlotSource = "mls" | "manual";
+
+export interface FeaturedSlotRow {
+  slot_index: number;
+  source: FeaturedSlotSource;
+  mls_id: string | null;
+  listing_id: string | null;
   updated_at: string;
 }
 

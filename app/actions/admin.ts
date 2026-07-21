@@ -345,3 +345,130 @@ export async function adminUploadListingImage(
   const { data } = client.storage.from("listing-images").getPublicUrl(path);
   return { ok: true, url: data.publicUrl };
 }
+
+export type AdminFeaturedSlotState =
+  | { ok: true }
+  | { ok: false; message: string }
+  | null;
+
+export async function adminSaveFeaturedSlot(
+  _prev: AdminFeaturedSlotState,
+  formData: FormData,
+): Promise<AdminFeaturedSlotState> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const client = createSupabaseAdminClient();
+  if (!client) {
+    return { ok: false, message: "Supabase admin is not configured." };
+  }
+
+  const slotIndex = Number.parseInt(String(formData.get("slot_index") ?? ""), 10);
+  const source = String(formData.get("source") ?? "").trim() as "mls" | "manual";
+  const mlsId = String(formData.get("mls_id") ?? "").trim();
+  const listingId = String(formData.get("listing_id") ?? "").trim();
+
+  if (![1, 2, 3].includes(slotIndex)) {
+    return { ok: false, message: "Invalid slot." };
+  }
+  if (source !== "mls" && source !== "manual") {
+    return { ok: false, message: "Choose MLS or manual." };
+  }
+  if (source === "mls" && !mlsId) {
+    return { ok: false, message: "Select an MLS listing." };
+  }
+  if (source === "manual" && !listingId) {
+    return { ok: false, message: "Select a manual listing." };
+  }
+
+  try {
+    const { adminUpsertFeaturedSlot } = await import("@/lib/supabase/admin");
+    await adminUpsertFeaturedSlot(client, {
+      slot_index: slotIndex,
+      source,
+      mls_id: source === "mls" ? mlsId : null,
+      listing_id: source === "manual" ? listingId : null,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to save slot.";
+    return { ok: false, message };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/admin/featured");
+  return { ok: true };
+}
+
+export async function adminClearFeaturedSlot(slotIndex: number): Promise<AdminFeaturedSlotState> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const client = createSupabaseAdminClient();
+  if (!client) {
+    return { ok: false, message: "Supabase admin is not configured." };
+  }
+  if (![1, 2, 3].includes(slotIndex)) {
+    return { ok: false, message: "Invalid slot." };
+  }
+
+  try {
+    const { adminDeleteFeaturedSlot } = await import("@/lib/supabase/admin");
+    await adminDeleteFeaturedSlot(client, slotIndex);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to clear slot.";
+    return { ok: false, message };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/admin/featured");
+  return { ok: true };
+}
+
+export type AdminMlsSearchHit = {
+  mls_id: string;
+  title: string;
+  address_line: string;
+  city: string;
+  price_cents: number;
+  bedrooms: number;
+  bathrooms: number;
+  image_url: string | null;
+};
+
+export async function adminSearchMlsForFeatured(query: string): Promise<AdminMlsSearchHit[]> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return [];
+  }
+
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const { searchWithFilters } = await import("@/lib/listings-queries");
+  const { listings } = await searchWithFilters({
+    q,
+    page: 1,
+    perPage: 12,
+    sort: "newest",
+  });
+
+  return listings
+    .filter((l) => l.source === "mls" && l.mls_id)
+    .map((l) => ({
+      mls_id: l.mls_id!,
+      title: l.title,
+      address_line: l.address_line,
+      city: l.city,
+      price_cents: l.price_cents,
+      bedrooms: l.bedrooms,
+      bathrooms: l.bathrooms,
+      image_url: l.image_urls[0] ?? null,
+    }));
+}

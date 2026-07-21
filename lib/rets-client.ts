@@ -428,7 +428,9 @@ export interface MlsListingData {
   status: string;
   image_urls: string[];
   listing_agent: string;
+  listing_agent_phone: string;
   listing_office: string;
+  listing_office_phone: string;
   raw_data: Record<string, unknown>;
 }
 
@@ -503,8 +505,15 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
     property_type: get(["PropertySubType", "PropertyType"]),
     status: get(["MlsStatus"]),
     image_urls: [],
-    listing_agent: get(["ListAgent"]),
-    listing_office: get(["ListOffice"]),
+    listing_agent: get(["ListAgent", "ListAgentFullName"]),
+    listing_agent_phone: get([
+      "ListAgentPreferredPhone",
+      "ListAgentDirectPhone",
+      "ListAgentCellPhone",
+      "ListAgentPhone",
+    ]),
+    listing_office: get(["ListOffice", "ListOfficeName"]),
+    listing_office_phone: get(["ListOfficePhone"]),
     raw_data: record as Record<string, unknown>,
   };
 }
