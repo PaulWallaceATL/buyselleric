@@ -181,7 +181,9 @@ export async function POST(request: Request) {
     }
 
     const { inserted, updated } =
-      records.length > 0 ? await upsertBatch(client, records, syncTimestamp) : { inserted: 0, updated: 0 };
+      records.length > 0
+        ? await upsertBatch(client, await resolveFirmNamesOnSync(records), syncTimestamp)
+        : { inserted: 0, updated: 0 };
 
     const nextOffset = offset + batchFromRets.length;
     const done = !result.hasMore;
@@ -272,4 +274,77 @@ async function upsertBatch(
   }
 
   return { inserted, updated };
+}
+
+/**
+ * Resolve unique ListOffice / ListAgent codes to OfficeName / agent names before upsert.
+ * Cap unique lookups so large sync batches stay within the route time budget.
+ */
+async function resolveFirmNamesOnSync(records: MlsListingData[]): Promise<MlsListingData[]> {
+  const { looksLikeMlsCode, resolveRetsAgentOfficeCodes } = await import("@/lib/rets-client");
+
+  const officeCodes = new Set<string>();
+  const agentCodes = new Set<string>();
+  for (const r of records) {
+    const office = (r.listing_office || "").trim();
+    const agent = (r.listing_agent || "").trim();
+    if (office && looksLikeMlsCode(office)) officeCodes.add(office);
+    if (agent && looksLikeMlsCode(agent)) agentCodes.add(agent);
+  }
+
+  const officeLimit = Math.min(officeCodes.size, 48);
+  const agentLimit = Math.min(agentCodes.size, 24);
+  const officeResolved = new Map<
+    string,
+    Awaited<ReturnType<typeof resolveRetsAgentOfficeCodes>>
+  >();
+  const agentResolved = new Map<
+    string,
+    Awaited<ReturnType<typeof resolveRetsAgentOfficeCodes>>
+  >();
+
+  const officeList = [...officeCodes].slice(0, officeLimit);
+  await Promise.all(
+    officeList.map(async (code) => {
+      try {
+        const res = await resolveRetsAgentOfficeCodes("", code);
+        officeResolved.set(code.toUpperCase(), res);
+      } catch {
+        /* ignore single office resolve failure */
+      }
+    }),
+  );
+
+  const agentList = [...agentCodes].slice(0, agentLimit);
+  await Promise.all(
+    agentList.map(async (code) => {
+      try {
+        const res = await resolveRetsAgentOfficeCodes(code, "");
+        agentResolved.set(code.toUpperCase(), res);
+      } catch {
+        /* ignore */
+      }
+    }),
+  );
+
+  for (const r of records) {
+    const officeKey = (r.listing_office || "").trim().toUpperCase();
+    const agentKey = (r.listing_agent || "").trim().toUpperCase();
+    const o = officeResolved.get(officeKey);
+    if (o?.listing_office) {
+      r.listing_office = o.listing_office;
+      if (o.listing_office_phone && !r.listing_office_phone) {
+        r.listing_office_phone = o.listing_office_phone;
+      }
+    }
+    const a = agentResolved.get(agentKey);
+    if (a?.listing_agent) {
+      r.listing_agent = a.listing_agent;
+      if (a.listing_agent_phone && !r.listing_agent_phone) {
+        r.listing_agent_phone = a.listing_agent_phone;
+      }
+    }
+  }
+
+  return records;
 }

@@ -505,14 +505,15 @@ export function mapRetsRecord(record: Record<string, string>): MlsListingData {
     property_type: get(["PropertySubType", "PropertyType"]),
     status: get(["MlsStatus"]),
     image_urls: [],
-    listing_agent: get(["ListAgent", "ListAgentFullName"]),
+    // Prefer display names; fall back to MLS codes (still better than blank for sync).
+    listing_agent: get(["ListAgentFullName", "ListAgentName", "ListAgent"]),
     listing_agent_phone: get([
       "ListAgentPreferredPhone",
       "ListAgentDirectPhone",
       "ListAgentCellPhone",
       "ListAgentPhone",
     ]),
-    listing_office: get(["ListOffice", "ListOfficeName"]),
+    listing_office: get(["ListOfficeName", "ListOffice"]),
     listing_office_phone: get(["ListOfficePhone"]),
     raw_data: record as Record<string, unknown>,
   };
@@ -668,9 +669,57 @@ async function retsSearchFirst(
   }
 }
 
+async function retsSearchFirstWithMeta(
+  resource: string,
+  classId: string,
+  query: string,
+  select: string,
+): Promise<{ row: Record<string, string> | null; replyCode?: string; replyText?: string; keys?: string[] }> {
+  try {
+    const body = await rawSearchAny(resource, classId, query, 1, select);
+    const rows = parseCompactData(body);
+    const replyCode = body.match(/ReplyCode="([^"]+)"/)?.[1];
+    const replyText = body.match(/ReplyText="([^"]+)"/)?.[1];
+    const keys = rows[0] ? Object.keys(rows[0]) : undefined;
+    return {
+      row: rows[0] ?? null,
+      ...(replyCode ? { replyCode } : {}),
+      ...(replyText ? { replyText } : {}),
+      ...(keys ? { keys } : {}),
+    };
+  } catch (e) {
+    return { row: null, replyText: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export function looksLikeMlsCode(s: string): boolean {
+  const t = s.trim();
+  return Boolean(t) && /^[A-Z0-9]{3,24}$/i.test(t) && !/\s/.test(t);
+}
+
+/** Request-lifetime cache so detail + sync don't re-hit Agent/Office for the same code. */
+const agentOfficeCache = new Map<
+  string,
+  {
+    listing_agent: string;
+    listing_agent_phone: string;
+    listing_agent_email: string;
+    listing_office: string;
+    listing_office_phone: string;
+    listing_office_email: string;
+    raw: Record<string, unknown>;
+  }
+>();
+
+function cacheKey(agentCode: string, officeCode: string): string {
+  return `${agentCode.trim().toUpperCase()}|${officeCode.trim().toUpperCase()}`;
+}
+
 /**
  * Resolve GAMLS ConnectMLS Agent / Office codes to display names + phones.
  * Property rows often only store ListAgent=USERCODE / ListOffice=OFFICEID.
+ * Tries likely ConnectMLS queries in priority order and stops on first hit
+ * so detail-page 12s budget is not burned on every class/query combo.
  */
 export async function resolveRetsAgentOfficeCodes(
   agentCode: string,
@@ -684,6 +733,10 @@ export async function resolveRetsAgentOfficeCodes(
   listing_office_email: string;
   raw: Record<string, unknown>;
 }> {
+  const key = cacheKey(agentCode, officeCode);
+  const cached = agentOfficeCache.get(key);
+  if (cached) return cached;
+
   const raw: Record<string, unknown> = {};
   let listing_agent = "";
   let listing_agent_phone = "";
@@ -695,66 +748,96 @@ export async function resolveRetsAgentOfficeCodes(
   const agentId = agentCode.trim();
   const officeId = officeCode.trim();
 
-  const agentSelect =
-    "AgentID,UserCode,MemberMlsId,FirstName,LastName,FullName,AgentFullName,PreferredPhone,DirectPhone,CellPhone,OfficePhone,Email,URL";
-  const officeSelect = "OfficeID,OfficeMlsId,OfficeName,Name,Phone,OfficePhone,Email,URL,Website";
+  const agentLookups: Array<{ classId: string; query: string }> = agentId
+    ? [
+        { classId: "ActiveAgent", query: `(UserCode=${agentId})` },
+        { classId: "Agent", query: `(UserCode=${agentId})` },
+        { classId: "ActiveAgent", query: `(AgentID=${agentId})` },
+        { classId: "Agent", query: `(AgentID=${agentId})` },
+        { classId: "Member", query: `(MemberMlsId=${agentId})` },
+        { classId: "ActiveAgent", query: `(MemberMlsId=${agentId})` },
+        { classId: "Agent", query: `(AgentMlsId=${agentId})` },
+      ]
+    : [];
 
-  const agentTries: Array<Promise<Record<string, string> | null>> = [];
-  if (agentId) {
-    for (const q of [
-      `(AgentID=${agentId})`,
-      `(UserCode=${agentId})`,
-      `(MemberMlsId=${agentId})`,
-    ]) {
-      for (const classId of ["Agent", "ActiveAgent"]) {
-        agentTries.push(retsSearchFirst("Agent", classId, q, agentSelect));
+  const officeLookups: Array<{ classId: string; query: string }> = officeId
+    ? [
+        { classId: "Office", query: `(OfficeID=${officeId})` },
+        { classId: "ActiveOffice", query: `(OfficeID=${officeId})` },
+        { classId: "Office", query: `(ShortId=${officeId})` },
+        { classId: "Office", query: `(OfficeMlsId=${officeId})` },
+        { classId: "ActiveOffice", query: `(OfficeMlsId=${officeId})` },
+        { classId: "Office", query: `(OfficeCode=${officeId})` },
+      ]
+    : [];
+
+  const [agentRow, officeRow] = await Promise.all([
+    (async () => {
+      for (const { classId, query } of agentLookups) {
+        const row = await retsSearchFirst("Agent", classId, query, "");
+        if (row) return row;
       }
-    }
-  }
-
-  const officeTries: Array<Promise<Record<string, string> | null>> = [];
-  if (officeId) {
-    for (const q of [`(OfficeID=${officeId})`, `(OfficeMlsId=${officeId})`]) {
-      for (const classId of ["Office", "ActiveOffice"]) {
-        officeTries.push(retsSearchFirst("Office", classId, q, officeSelect));
+      return null;
+    })(),
+    (async () => {
+      for (const { classId, query } of officeLookups) {
+        const row = await retsSearchFirst("Office", classId, query, "");
+        if (row) return row;
       }
-    }
-  }
-
-  const [agentRows, officeRows] = await Promise.all([
-    Promise.all(agentTries),
-    Promise.all(officeTries),
+      return null;
+    })(),
   ]);
 
-  for (const row of agentRows) {
-    if (!row) continue;
-    raw.RetsAgent = row;
+  if (agentRow) {
+    raw.RetsAgent = agentRow;
     listing_agent =
-      pickRetsField(row, ["FullName", "AgentFullName", "MemberFullName"]) ||
-      [pickRetsField(row, ["FirstName"]), pickRetsField(row, ["LastName"])].filter(Boolean).join(" ");
-    listing_agent_phone = pickRetsField(row, [
+      pickRetsField(agentRow, [
+        "FullName",
+        "AgentFullName",
+        "MemberFullName",
+        "AgentName",
+        "Name",
+      ]) ||
+      [
+        pickRetsField(agentRow, ["FirstName", "MemberFirstName"]),
+        pickRetsField(agentRow, ["LastName", "MemberLastName"]),
+      ]
+        .filter(Boolean)
+        .join(" ");
+    listing_agent_phone = pickRetsField(agentRow, [
       "PreferredPhone",
       "DirectPhone",
       "CellPhone",
+      "MobilePhone",
       "OfficePhone",
       "Phone",
+      "HomePhone",
     ]);
-    listing_agent_email = pickRetsField(row, ["Email", "AgentEmail", "MemberEmail"]);
-    if (listing_agent) break;
+    listing_agent_email = pickRetsField(agentRow, ["Email", "AgentEmail", "MemberEmail", "EMail"]);
   }
   if (agentId && !listing_agent) listing_agent = agentId;
 
-  for (const row of officeRows) {
-    if (!row) continue;
-    raw.RetsOffice = row;
-    listing_office = pickRetsField(row, ["OfficeName", "Name", "BrokerageName"]);
-    listing_office_phone = pickRetsField(row, ["Phone", "OfficePhone", "MainOfficePhone"]);
-    listing_office_email = pickRetsField(row, ["Email", "OfficeEmail"]);
-    if (listing_office) break;
+  if (officeRow) {
+    raw.RetsOffice = officeRow;
+    listing_office = pickRetsField(officeRow, [
+      "OfficeName",
+      "Name",
+      "BrokerageName",
+      "FirmName",
+      "CompanyName",
+      "OfficeLongName",
+    ]);
+    listing_office_phone = pickRetsField(officeRow, [
+      "Phone",
+      "OfficePhone",
+      "MainOfficePhone",
+      "OfficePhoneNumber",
+    ]);
+    listing_office_email = pickRetsField(officeRow, ["Email", "OfficeEmail", "EMail"]);
   }
   if (officeId && !listing_office) listing_office = officeId;
 
-  return {
+  const result = {
     listing_agent,
     listing_agent_phone,
     listing_agent_email,
@@ -763,6 +846,8 @@ export async function resolveRetsAgentOfficeCodes(
     listing_office_email,
     raw,
   };
+  agentOfficeCache.set(key, result);
+  return result;
 }
 
 /**
@@ -803,10 +888,11 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
     [pickRetsField(prop, ["ListAgentFirstName"]), pickRetsField(prop, ["ListAgentLastName"])]
       .filter(Boolean)
       .join(" ");
-  const fromPropOffice = pickRetsField(prop, ["ListOfficeName", "ListOffice"]);
-  // If ListOffice is a short code (e.g. KWGC01), don't treat it as a display name.
-  const officeLooksLikeCode = /^[A-Z0-9]{3,24}$/.test(fromPropOffice) && !/\s/.test(fromPropOffice);
-  const propOfficeName = officeLooksLikeCode ? "" : fromPropOffice;
+  const fromPropOffice = pickRetsField(prop, ["ListOfficeName"]);
+  // Prefer dedicated name field; ListOffice alone is usually a short office code.
+  const listOfficeCodeField = pickRetsField(prop, ["ListOffice", "ListOfficeMlsId", "ListOfficeKey"]);
+  const officeLooksLikeCode = looksLikeMlsCode(fromPropOffice);
+  const propOfficeName = fromPropOffice && !officeLooksLikeCode ? fromPropOffice : "";
 
   const fromPropAgentPhone = pickRetsField(prop, [
     "ListAgentPreferredPhone",
@@ -818,7 +904,7 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
 
   const resolved = await resolveRetsAgentOfficeCodes(
     fromPropName ? "" : agentCode,
-    propOfficeName ? "" : officeCode || (officeLooksLikeCode ? fromPropOffice : ""),
+    propOfficeName ? "" : officeCode || listOfficeCodeField,
   );
 
   const listing_agent = fromPropName || resolved.listing_agent || agentCode;
@@ -860,5 +946,154 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
     listing_office,
     listing_office_phone,
     raw_data,
+  };
+}
+
+/**
+ * Admin/debug: exhaust RETS Property → Agent → Office for one MLS id and report what worked.
+ */
+export async function probeRetsAttributionForMlsId(mlsId: string): Promise<{
+  ok: boolean;
+  mls_id: string;
+  property: {
+    found: boolean;
+    replyCode?: string;
+    replyText?: string;
+    keys: string[];
+    agentish: Record<string, string>;
+    rowSample: Record<string, string>;
+  };
+  agentAttempts: Array<{
+    resource: string;
+    classId: string;
+    query: string;
+    found: boolean;
+    replyCode?: string;
+    replyText?: string;
+    keys?: string[];
+    name?: string;
+  }>;
+  officeAttempts: Array<{
+    resource: string;
+    classId: string;
+    query: string;
+    found: boolean;
+    replyCode?: string;
+    replyText?: string;
+    keys?: string[];
+    name?: string;
+  }>;
+  resolved: Awaited<ReturnType<typeof fetchRetsAttributionForMlsId>>;
+}> {
+  const id = mlsId.trim();
+  let propMeta = await retsSearchFirstWithMeta("Property", "RESI", `(ListingId=${id})`, "");
+  if (!propMeta.row) {
+    propMeta = await retsSearchFirstWithMeta("Property", "RESI", `(ListingID=${id})`, "");
+  }
+
+  const prop = propMeta.row;
+  const agentish: Record<string, string> = {};
+  if (prop) {
+    for (const [k, v] of Object.entries(prop)) {
+      if (/agent|office|broker|member/i.test(k) && v) agentish[k] = v;
+    }
+  }
+
+  const agentCode = prop
+    ? pickRetsField(prop, ["ListAgent", "ListAgentMlsId", "ListAgentKey", "ListAgentId"])
+    : "";
+  const officeCode = prop
+    ? pickRetsField(prop, ["ListOffice", "ListOfficeMlsId", "ListOfficeKey", "ListOfficeId"])
+    : "";
+
+  const agentAttempts: Array<{
+    resource: string;
+    classId: string;
+    query: string;
+    found: boolean;
+    replyCode?: string;
+    replyText?: string;
+    keys?: string[];
+    name?: string;
+  }> = [];
+  const officeAttempts: typeof agentAttempts = [];
+
+  if (agentCode) {
+    const lookups = [
+      { classId: "ActiveAgent", query: `(UserCode=${agentCode})` },
+      { classId: "Agent", query: `(UserCode=${agentCode})` },
+      { classId: "ActiveAgent", query: `(AgentID=${agentCode})` },
+      { classId: "Agent", query: `(AgentID=${agentCode})` },
+      { classId: "Member", query: `(MemberMlsId=${agentCode})` },
+    ];
+    for (const { classId, query: q } of lookups) {
+      const meta = await retsSearchFirstWithMeta("Agent", classId, q, "");
+      const name = meta.row
+        ? pickRetsField(meta.row, ["FullName", "AgentFullName", "FirstName"]) ||
+          [pickRetsField(meta.row, ["FirstName"]), pickRetsField(meta.row, ["LastName"])]
+            .filter(Boolean)
+            .join(" ")
+        : "";
+      agentAttempts.push({
+        resource: "Agent",
+        classId,
+        query: q,
+        found: Boolean(meta.row),
+        ...(meta.replyCode ? { replyCode: meta.replyCode } : {}),
+        ...(meta.replyText ? { replyText: meta.replyText } : {}),
+        ...(meta.keys ? { keys: meta.keys.slice(0, 40) } : {}),
+        ...(name ? { name } : {}),
+      });
+    }
+  }
+
+  if (officeCode) {
+    const lookups = [
+      { classId: "Office", query: `(OfficeID=${officeCode})` },
+      { classId: "ActiveOffice", query: `(OfficeID=${officeCode})` },
+      { classId: "Office", query: `(ShortId=${officeCode})` },
+      { classId: "Office", query: `(OfficeMlsId=${officeCode})` },
+      { classId: "ActiveOffice", query: `(OfficeMlsId=${officeCode})` },
+    ];
+    for (const { classId, query: q } of lookups) {
+      const meta = await retsSearchFirstWithMeta("Office", classId, q, "");
+      const name = meta.row
+        ? pickRetsField(meta.row, ["OfficeName", "Name", "BrokerageName", "FirmName"])
+        : "";
+      officeAttempts.push({
+        resource: "Office",
+        classId,
+        query: q,
+        found: Boolean(meta.row),
+        ...(meta.replyCode ? { replyCode: meta.replyCode } : {}),
+        ...(meta.replyText ? { replyText: meta.replyText } : {}),
+        ...(meta.keys ? { keys: meta.keys.slice(0, 40) } : {}),
+        ...(name ? { name } : {}),
+      });
+    }
+  }
+
+  const resolved = await fetchRetsAttributionForMlsId(id);
+
+  return {
+    ok: Boolean(prop),
+    mls_id: id,
+    property: {
+      found: Boolean(prop),
+      ...(propMeta.replyCode ? { replyCode: propMeta.replyCode } : {}),
+      ...(propMeta.replyText ? { replyText: propMeta.replyText } : {}),
+      keys: prop ? Object.keys(prop).sort() : [],
+      agentish,
+      rowSample: prop
+        ? Object.fromEntries(
+            Object.entries(prop)
+              .filter(([k]) => /agent|office|broker|list|address|city|price/i.test(k))
+              .slice(0, 40),
+          )
+        : {},
+    },
+    agentAttempts,
+    officeAttempts,
+    resolved,
   };
 }

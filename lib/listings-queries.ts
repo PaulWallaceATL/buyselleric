@@ -22,6 +22,7 @@ import { pointInPolygon } from "@/lib/geo";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import {
+  hasListingFirmName,
   hasMlsAttribution,
   mergeMlsListingRows,
   scoreMlsListingCompleteness,
@@ -662,6 +663,16 @@ function isDetailReady(row: MlsListingRow): boolean {
   return isWarmMlsCache(row) && Boolean(row.address_line || row.city);
 }
 
+/** Prefer a human display name over a bare MLS code; never invent blanks over existing data. */
+function preferAttributionText(incoming?: string | null, existing?: string | null): string {
+  const a = (incoming || "").trim();
+  const b = (existing || "").trim();
+  const code = (s: string) => /^[A-Z0-9]{3,24}$/i.test(s) && !/\s/.test(s);
+  if (a && !code(a)) return a;
+  if (b && !code(b)) return b;
+  return a || b;
+}
+
 async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
   try {
     const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
@@ -669,11 +680,18 @@ async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
     if (!client || !row.mls_id) return;
 
     // Never blank attribution that RETS (or a prior enrich) already stored when Bridge IDX omits it.
+    // Prefer real firm/agent names over short MLS codes when merging.
     const existing = await getMlsListingFromSupabase(row.mls_id);
-    const listing_agent = (row.listing_agent || existing?.listing_agent || "").trim();
-    const listing_agent_phone = (row.listing_agent_phone || existing?.listing_agent_phone || "").trim();
-    const listing_office = (row.listing_office || existing?.listing_office || "").trim();
-    const listing_office_phone = (row.listing_office_phone || existing?.listing_office_phone || "").trim();
+    const listing_agent = preferAttributionText(row.listing_agent, existing?.listing_agent);
+    const listing_agent_phone = preferAttributionText(
+      row.listing_agent_phone,
+      existing?.listing_agent_phone,
+    );
+    const listing_office = preferAttributionText(row.listing_office, existing?.listing_office);
+    const listing_office_phone = preferAttributionText(
+      row.listing_office_phone,
+      existing?.listing_office_phone,
+    );
     const raw_data = {
       ...(existing?.raw_data ?? {}),
       ...(row.raw_data ?? {}),
@@ -824,8 +842,8 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
     void persistMlsListingCache(merged);
   }
 
-  // Bridge IDX often blanks agent/broker; ConnectMLS RETS usually has codes (and Agent/Office names).
-  if (merged && attributionNeedsRetsResolve(merged) && isRetsConfigured()) {
+  // Bridge IDX often blanks agent/broker; ConnectMLS RETS is the compliance source for firm name.
+  if (merged && (!hasListingFirmName(merged) || attributionNeedsRetsResolve(merged)) && isRetsConfigured()) {
     const withRets = await applyRetsAttribution(id, merged);
     if (withRets) {
       merged = withRets;
@@ -841,13 +859,13 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
 
 /** True when we lack usable agent/broker display names (empty or MLS user/office codes). */
 function attributionNeedsRetsResolve(row: MlsListingRow): boolean {
+  if (!hasListingFirmName(row)) return true;
   if (!hasMlsAttribution(row)) return true;
   const agent = (row.listing_agent || "").trim();
   const office = (row.listing_office || "").trim();
-  const looksLikeCode = (s: string) => /^[A-Z0-9]{3,24}$/.test(s) && !/\s/.test(s);
-  // Prefer RETS name resolution when we only have codes like TANNERREGAN / KWGC01.
-  if (agent && looksLikeCode(agent) && !office.includes(" ")) return true;
-  if (office && looksLikeCode(office) && (!agent || looksLikeCode(agent))) return true;
+  const looksLikeCode = (s: string) => /^[A-Z0-9]{3,24}$/i.test(s) && !/\s/.test(s);
+  if (agent && looksLikeCode(agent)) return true;
+  if (office && looksLikeCode(office)) return true;
   return false;
 }
 
@@ -863,10 +881,10 @@ async function applyRetsAttribution(
     if (!attr) return null;
     return {
       ...seed,
-      listing_agent: attr.listing_agent || seed.listing_agent,
-      listing_agent_phone: attr.listing_agent_phone || seed.listing_agent_phone,
-      listing_office: attr.listing_office || seed.listing_office,
-      listing_office_phone: attr.listing_office_phone || seed.listing_office_phone,
+      listing_agent: preferAttributionText(attr.listing_agent, seed.listing_agent),
+      listing_agent_phone: preferAttributionText(attr.listing_agent_phone, seed.listing_agent_phone),
+      listing_office: preferAttributionText(attr.listing_office, seed.listing_office),
+      listing_office_phone: preferAttributionText(attr.listing_office_phone, seed.listing_office_phone),
       raw_data: { ...seed.raw_data, ...attr.raw_data },
     };
   } catch (e) {
@@ -917,14 +935,14 @@ function scheduleBackgroundMlsEnrich(id: string, seed: MlsListingRow): void {
 
 /**
  * Warm Supabase cache for an MLS id (e.g. when search suggestions show an address).
- * Cheap: Property + inline Media only; no Media-entity wait.
+ * Photos only from Bridge/Spark — never overwrite RETS attribution with empty IDX fields.
  */
 export async function warmMlsListingCache(mlsId: string): Promise<boolean> {
   const id = mlsId.trim();
   if (!id) return false;
 
   const existing = await getMlsListingFromSupabase(id);
-  if (existing && isDetailReady(existing)) return true;
+  if (existing && isDetailReady(existing) && hasListingFirmName(existing)) return true;
 
   let row: MlsListingRow | null = null;
   if (isBridgeListingsEnabled()) {
@@ -934,11 +952,29 @@ export async function warmMlsListingCache(mlsId: string): Promise<boolean> {
     const spark = await sparkGetMlsListingById(id, { fullEnrich: false }).catch(() => null);
     row = mergeMlsListingRows([row, spark].filter(Boolean) as MlsListingRow[]);
   }
-  if (row && isWarmMlsCache(row)) {
-    await persistMlsListingCache(row);
-    return true;
+  if (!row || !isWarmMlsCache(row)) return false;
+
+  // Strip empty attribution so persistMlsListingCache keeps any existing RETS firm/agent.
+  const safe: MlsListingRow = {
+    ...row,
+    listing_agent: row.listing_agent?.trim() || "",
+    listing_agent_phone: row.listing_agent_phone?.trim() || "",
+    listing_office: row.listing_office?.trim() || "",
+    listing_office_phone: row.listing_office_phone?.trim() || "",
+  };
+  if (
+    isRetsConfigured() &&
+    !hasListingFirmName(existing ?? safe) &&
+    attributionNeedsRetsResolve(safe)
+  ) {
+    const withRets = await applyRetsAttribution(id, safe);
+    if (withRets) {
+      await persistMlsListingCache(withRets);
+      return true;
+    }
   }
-  return false;
+  await persistMlsListingCache(safe);
+  return true;
 }
 
 async function listFeaturedSlots(): Promise<

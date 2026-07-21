@@ -8,7 +8,11 @@ import { buildMlsListingJsonLd } from "@/lib/jsonld-mls-listing";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getMlsListingById } from "@/lib/listings-queries";
 import { createMetadata } from "@/lib/metadata";
-import { resolveMlsAttribution, mlsAttributionLinks } from "@/lib/mls-attribution";
+import {
+  hasListingFirmName,
+  resolveMlsAttribution,
+  mlsAttributionLinks,
+} from "@/lib/mls-attribution";
 import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
 import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
@@ -56,20 +60,17 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   const jsonLd = buildMlsListingJsonLd(listing, pageUrl, siteConfig.url);
   const attribution = resolveMlsAttribution(listing);
   const links = mlsAttributionLinks(listing);
-  const hasAttribution = Boolean(
+  const hasFirm = hasListingFirmName(listing);
+  const hasAgentBits = Boolean(
     attribution.listing_agent ||
       attribution.listing_agent_phone ||
       attribution.listing_agent_email ||
-      attribution.listing_office ||
-      attribution.listing_office_phone ||
-      attribution.listing_office_email ||
-      attribution.listing_agent_url ||
-      attribution.listing_office_url,
+      attribution.listing_agent_url,
   );
 
-  if (!hasAttribution) {
+  if (!hasFirm) {
     console.warn(
-      `MLS attribution empty for ${listing.mls_id} — feed likely omits agent/office on this IDX contract`,
+      `MLS listing firm missing for ${listing.mls_id} after Bridge/Spark/RETS — feed may omit OfficeName`,
     );
   }
 
@@ -165,12 +166,50 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
         </div>
 
         <div className="mt-6 space-y-1.5 text-xs leading-relaxed text-muted-foreground/80">
-          {hasAttribution ? (
+          {hasFirm ? (
             <>
-              {(attribution.listing_agent ||
-                attribution.listing_agent_phone ||
-                attribution.listing_agent_email ||
-                attribution.listing_agent_url) && (
+              <p>
+                <span className="text-muted-foreground/70">Listed by: </span>
+                <span>{attribution.listing_office}</span>
+                {attribution.listing_office_phone ? (
+                  <>
+                    {" · "}
+                    {links.officeTel ? (
+                      <a href={links.officeTel} className="underline-offset-2 hover:underline">
+                        {attribution.listing_office_phone}
+                      </a>
+                    ) : (
+                      attribution.listing_office_phone
+                    )}
+                  </>
+                ) : null}
+                {attribution.listing_office_email ? (
+                  <>
+                    {" · "}
+                    {links.officeMailto ? (
+                      <a href={links.officeMailto} className="underline-offset-2 hover:underline">
+                        {attribution.listing_office_email}
+                      </a>
+                    ) : (
+                      attribution.listing_office_email
+                    )}
+                  </>
+                ) : null}
+                {links.officeWeb ? (
+                  <>
+                    {" · "}
+                    <a
+                      href={links.officeWeb}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline-offset-2 hover:underline"
+                    >
+                      Website
+                    </a>
+                  </>
+                ) : null}
+              </p>
+              {hasAgentBits ? (
                 <p>
                   <span className="text-muted-foreground/70">Listing agent: </span>
                   {attribution.listing_agent ? <span>{attribution.listing_agent}</span> : null}
@@ -212,55 +251,14 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
                     </>
                   ) : null}
                 </p>
-              )}
-              {(attribution.listing_office ||
-                attribution.listing_office_phone ||
-                attribution.listing_office_email ||
-                attribution.listing_office_url) && (
-                <p>
-                  <span className="text-muted-foreground/70">Broker: </span>
-                  {attribution.listing_office ? <span>{attribution.listing_office}</span> : null}
-                  {attribution.listing_office_phone ? (
-                    <>
-                      {attribution.listing_office ? " · " : null}
-                      {links.officeTel ? (
-                        <a href={links.officeTel} className="underline-offset-2 hover:underline">
-                          {attribution.listing_office_phone}
-                        </a>
-                      ) : (
-                        attribution.listing_office_phone
-                      )}
-                    </>
-                  ) : null}
-                  {attribution.listing_office_email ? (
-                    <>
-                      {" · "}
-                      {links.officeMailto ? (
-                        <a href={links.officeMailto} className="underline-offset-2 hover:underline">
-                          {attribution.listing_office_email}
-                        </a>
-                      ) : (
-                        attribution.listing_office_email
-                      )}
-                    </>
-                  ) : null}
-                  {links.officeWeb ? (
-                    <>
-                      {" · "}
-                      <a
-                        href={links.officeWeb}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline-offset-2 hover:underline"
-                      >
-                        Website
-                      </a>
-                    </>
-                  ) : null}
-                </p>
-              )}
+              ) : null}
             </>
-          ) : null}
+          ) : (
+            <p>
+              Listing brokerage details were not included in the authorized MLS data for this
+              property.
+            </p>
+          )}
           <p>MLS #{listing.mls_id}</p>
         </div>
       </div>

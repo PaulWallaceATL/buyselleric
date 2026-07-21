@@ -175,22 +175,40 @@ export function hasMlsAttribution(listing: MlsListingRow): boolean {
   );
 }
 
+/** True when we have a displayable listing-firm / brokerage name (GREC 520-1-.09(3)). */
+export function hasListingFirmName(listing: MlsListingRow): boolean {
+  const a = resolveMlsAttribution(listing);
+  const office = (a.listing_office || "").trim();
+  if (!office) return false;
+  // Bare MLS office codes (e.g. KWGC01) are not a firm name for advertising.
+  if (/^[A-Z0-9]{3,24}$/i.test(office) && !/\s/.test(office)) return false;
+  return true;
+}
+
+/** Prefer human office names over codes when scoring / merging. */
+export function listingFirmDisplayName(listing: MlsListingRow): string {
+  const a = resolveMlsAttribution(listing);
+  return hasListingFirmName(listing) ? a.listing_office.trim() : "";
+}
+
 /** Compact muted attribution bits for the detail footer (names, phones, mailto/web links). */
 export function formatMlsAttributionParts(listing: MlsListingRow): string[] {
   const a = resolveMlsAttribution(listing);
   const parts: string[] = [];
+
+  const firm = listingFirmDisplayName(listing);
+  if (firm) {
+    const officeBits: string[] = [firm];
+    if (a.listing_office_phone) officeBits.push(a.listing_office_phone);
+    if (a.listing_office_email) officeBits.push(a.listing_office_email);
+    parts.push(`Listed by: ${officeBits.join(" · ")}`);
+  }
 
   const agentBits: string[] = [];
   if (a.listing_agent) agentBits.push(a.listing_agent);
   if (a.listing_agent_phone) agentBits.push(a.listing_agent_phone);
   if (a.listing_agent_email) agentBits.push(a.listing_agent_email);
   if (agentBits.length) parts.push(`Listing agent: ${agentBits.join(" · ")}`);
-
-  const officeBits: string[] = [];
-  if (a.listing_office) officeBits.push(a.listing_office);
-  if (a.listing_office_phone) officeBits.push(a.listing_office_phone);
-  if (a.listing_office_email) officeBits.push(a.listing_office_email);
-  if (officeBits.length) parts.push(`Broker: ${officeBits.join(" · ")}`);
 
   return parts;
 }
@@ -221,13 +239,25 @@ export function scoreMlsListingCompleteness(row: MlsListingRow): number {
   let s = 0;
   const photos = Array.isArray(row.image_urls) ? row.image_urls.filter(Boolean).length : 0;
   s += Math.min(photos, 30) * 2;
-  if (row.description && row.description.length > 40) s += 8;
-  if (a.listing_agent) s += 20;
-  if (a.listing_office) s += 20;
+  if (hasListingFirmName(row)) s += 40;
+  else if (a.listing_office) s += 8;
+  if (a.listing_agent && !/^[A-Z0-9]{3,24}$/i.test(a.listing_agent.trim())) s += 20;
+  else if (a.listing_agent) s += 5;
   if (a.listing_agent_phone) s += 8;
   if (a.listing_office_phone) s += 8;
-  if (a.listing_agent_email) s += 4;
+  if (row.description && row.description.length > 40) s += 10;
+  if (row.latitude != null && row.longitude != null) s += 5;
   return s;
+}
+
+/** Prefer a human display value over a bare MLS code when merging feeds. */
+function preferDisplayAttribution(a: string, b: string): string {
+  const left = (a || "").trim();
+  const right = (b || "").trim();
+  const code = (s: string) => Boolean(s) && /^[A-Z0-9]{3,24}$/i.test(s) && !/\s/.test(s);
+  if (left && !code(left)) return left;
+  if (right && !code(right)) return right;
+  return left || right;
 }
 
 /** Merge multiple feed/cache hits into the richest single listing. */
@@ -244,14 +274,16 @@ export function mergeMlsListingRows(rows: MlsListingRow[]): MlsListingRow | null
   for (const row of ranked.slice(1)) {
     const ba = resolveMlsAttribution(best);
     const ra = resolveMlsAttribution(row);
-    if (!ba.listing_agent && ra.listing_agent) best.listing_agent = ra.listing_agent;
-    if (!ba.listing_agent_phone && ra.listing_agent_phone) {
-      best.listing_agent_phone = ra.listing_agent_phone;
-    }
-    if (!ba.listing_office && ra.listing_office) best.listing_office = ra.listing_office;
-    if (!ba.listing_office_phone && ra.listing_office_phone) {
-      best.listing_office_phone = ra.listing_office_phone;
-    }
+    best.listing_agent = preferDisplayAttribution(ba.listing_agent, ra.listing_agent);
+    best.listing_agent_phone = preferDisplayAttribution(
+      ba.listing_agent_phone,
+      ra.listing_agent_phone,
+    );
+    best.listing_office = preferDisplayAttribution(ba.listing_office, ra.listing_office);
+    best.listing_office_phone = preferDisplayAttribution(
+      ba.listing_office_phone,
+      ra.listing_office_phone,
+    );
     if ((!best.description || best.description.length < 40) && row.description) {
       best.description = row.description;
     }
