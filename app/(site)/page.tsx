@@ -3,6 +3,7 @@ import { HeroLoader } from "@/components/hero-loader";
 import { LazySection } from "@/components/lazy-section";
 import { siteConfig } from "@/lib/config";
 import { createMetadata } from "@/lib/metadata";
+import { siteImages } from "@/lib/site-images";
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
@@ -22,6 +23,8 @@ export const metadata: Metadata = createMetadata({
 export default function HomePage(): ReactNode {
   return (
     <main id="main-content" className="relative z-10 w-full flex-1 bg-background">
+      {/* RSC preload — single format to avoid double-download with <picture> */}
+      <link rel="preload" as="image" href={siteImages.heroPoster} fetchPriority="high" />
       <HeroLoader />
       <FeaturedListings />
       {/* Eager mount: hash links (#services) must exist on first paint for scroll + Lenis. */}

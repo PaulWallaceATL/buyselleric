@@ -41,6 +41,8 @@ const faqs = [
 function FaqItem({ question, answer, index }: { question: string; answer: string; index: number }) {
   const [isOpen, setIsOpen] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
+  const panelId = `faq-panel-${index}`;
+  const buttonId = `faq-button-${index}`;
 
   useEffect(() => {
     if (!itemRef.current) return;
@@ -74,8 +76,10 @@ function FaqItem({ question, answer, index }: { question: string; answer: string
     >
       <button
         type="button"
+        id={buttonId}
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
+        aria-controls={panelId}
         className="flex min-h-[3.5rem] w-full cursor-pointer items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-muted/20 sm:min-h-16 sm:p-6"
       >
         <span className="text-pretty text-base font-semibold text-foreground sm:text-lg">{question}</span>
@@ -89,10 +93,13 @@ function FaqItem({ question, answer, index }: { question: string; answer: string
         </span>
       </button>
       <div
+        id={panelId}
+        role="region"
+        aria-labelledby={buttonId}
         className="grid transition-all duration-300 ease-out"
         style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
       >
-        <div className="overflow-hidden">
+        <div className="overflow-hidden" inert={!isOpen ? true : undefined}>
           <p className="px-5 pb-6 text-base leading-relaxed text-foreground/80 sm:px-6 sm:text-lg">
             {answer}
           </p>

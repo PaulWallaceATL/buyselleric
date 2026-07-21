@@ -28,7 +28,7 @@ const footerServiceLinks = [
 export function Footer() {
   const mail = `mailto:${siteConfig.email}?subject=${encodeURIComponent("Real estate inquiry")}`;
 
-  const colHeading = "text-base font-semibold text-background/70";
+  const colHeading = "text-base font-semibold text-background/80";
   const listRow = "text-base text-background leading-snug";
 
   return (
@@ -61,15 +61,15 @@ export function Footer() {
       <div className={`${siteContainer} py-12 lg:py-16`}>
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-start lg:gap-x-10 lg:gap-y-10">
           <div className="lg:col-span-4">
-            <h4 className={`${colHeading} mb-6`}>{siteConfig.name}</h4>
+            <p className={`${colHeading} mb-6`}>{siteConfig.name}</p>
             <p className="text-4xl font-medium tracking-tight text-background">{siteConfig.brandSlug}</p>
-            <p className="mt-4 text-2xl font-medium tracking-tight text-background/60 sm:text-3xl lg:text-4xl">
+            <p className="mt-4 text-2xl font-medium tracking-tight text-background/70 sm:text-3xl lg:text-4xl">
               {siteConfig.tagline}
             </p>
-            <ul className="mt-4 list-none space-y-1.5 text-base text-background/55">
+            <ul className="mt-4 list-none space-y-1.5 text-base text-background/70">
               {siteConfig.footerCredentialLines.map((line) => (
                 <li key={line} className="flex gap-2 leading-snug">
-                  <span className="shrink-0 text-background/35" aria-hidden>
+                  <span className="shrink-0 text-background/50" aria-hidden>
                     ·
                   </span>
                   <span>{line}</span>
@@ -80,19 +80,19 @@ export function Footer() {
 
           <div className="grid grid-cols-1 gap-12 sm:grid-cols-3 lg:col-span-8 lg:gap-10">
             <div>
-              <h4 className={`${colHeading} mb-6`}>Areas served</h4>
+              <p className={`${colHeading} mb-6`}>Areas served</p>
               <p className={`${listRow} font-medium`}>{siteConfig.primaryMarket}</p>
-              <p className={`${listRow} mt-2 text-background/60`}>Neighborhood tours by appointment</p>
+              <p className={`${listRow} mt-2 text-background/70`}>Neighborhood tours by appointment</p>
             </div>
 
             <div>
-              <h4 className={`${colHeading} mb-6`}>Services</h4>
+              <p className={`${colHeading} mb-6`}>Services</p>
               <ul className="space-y-3">
                 {footerServiceLinks.map((link) => (
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      className={`${listRow} inline-flex py-0.5 underline-offset-4 hover:underline hover:text-background/90`}
+                      className={`${listRow} inline-flex min-h-11 items-center py-1 underline-offset-4 hover:underline hover:text-background/90`}
                     >
                       {link.label}
                     </Link>
@@ -102,13 +102,13 @@ export function Footer() {
             </div>
 
             <div>
-              <h4 className={`${colHeading} mb-6`}>Navigation</h4>
+              <p className={`${colHeading} mb-6`}>Navigation</p>
               <ul className="space-y-3">
                 {navLinks.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className={`${listRow} inline-flex py-0.5 hover:text-background/80`}
+                      className={`${listRow} inline-flex min-h-11 items-center py-1 hover:text-background/80`}
                     >
                       {link.label}
                     </Link>
@@ -134,7 +134,7 @@ export function Footer() {
             ))}
           </div>
 
-          <p className="text-base text-background/45">
+          <p className="text-base text-background/70">
             © {new Date().getFullYear()} {siteConfig.name} · {siteConfig.agentName}
           </p>
         </div>

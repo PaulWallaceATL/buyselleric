@@ -218,7 +218,7 @@ export function Header() {
             onClick={() => setIsMenuOpen((open) => !open)}
             className="flex h-11 w-11 items-center justify-center rounded-xl bg-foreground/88 text-background shadow-lg shadow-foreground/10 backdrop-blur-lg transition-transform duration-150 active:scale-95"
           >
-            {isMenuOpen ? <X className="h-5 w-5" strokeWidth={2.25} /> : <Menu className="h-5 w-5" strokeWidth={2.25} />}
+            {isMenuOpen ? <X className="h-5 w-5" strokeWidth={2.25} aria-hidden /> : <Menu className="h-5 w-5" strokeWidth={2.25} aria-hidden />}
           </button>
 
           {isMenuOpen ? (
@@ -271,12 +271,17 @@ export function Header() {
               type="button"
               aria-expanded={isMenuOpen}
               aria-controls="desktop-nav-menu"
+              aria-haspopup="true"
+              aria-label={isMenuOpen ? "Close menu" : `Open menu, current section ${activeSection}`}
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="flex min-h-[4.25rem] w-full items-center justify-between gap-4 px-5 py-2 text-background"
             >
-              <span className="text-xl font-semibold">{activeSection}</span>
+              <span className="text-xl font-semibold" aria-hidden>
+                {activeSection}
+              </span>
               <div
                 className="relative h-7 w-7"
+                aria-hidden
                 style={{
                   transform: `rotate(${isMenuOpen ? 45 : 0}deg)`,
                   transition: "transform 0.3s cubic-bezier(0.22,1,0.36,1)",

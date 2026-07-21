@@ -1,12 +1,13 @@
 "use client";
 
 import { HeroSearch } from "@/components/hero-search";
-import Link from "next/link";
 import { siteConfig } from "@/lib/config";
-import { useEffect, useRef, useState } from "react";
+import { siteImages } from "@/lib/site-images";
+import Link from "next/link";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const HERO_VIDEO_SRC = "/video/hero-aerial.mp4";
-const HERO_POSTER_SRC = "/video/hero-aerial-poster.jpg";
+const HERO_POSTER_SRC = siteImages.heroPoster;
 
 const ctaPrimaryOnVideo =
   "inline-flex min-h-[52px] w-full sm:w-auto shrink-0 items-center justify-center gap-2 rounded-full bg-white px-7 py-4 text-base font-semibold text-neutral-950 shadow-md transition-[opacity,transform] hover:opacity-90 active:scale-[0.98] sm:px-8 sm:text-lg touch-manipulation select-none focus-ring outline-none";
@@ -20,7 +21,6 @@ const ctaMortgageOnVideo =
 function shouldLoadHeroVideo(): boolean {
   if (typeof window === "undefined") return false;
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
-  // Mobile / narrow: poster only — keeps the MP4 off the LCP path.
   if (window.matchMedia("(max-width: 768px)").matches) return false;
   const conn = (
     navigator as Navigator & {
@@ -32,7 +32,8 @@ function shouldLoadHeroVideo(): boolean {
   return true;
 }
 
-function HeroVideoBackground() {
+/** Desktop-only video overlay — poster is server-rendered for LCP. */
+function HeroVideoOverlay() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [loadVideo, setLoadVideo] = useState(false);
 
@@ -47,7 +48,6 @@ function HeroVideoBackground() {
       if (!cancelled) setLoadVideo(true);
     };
 
-    // Defer past first paint so the poster can be LCP without competing for bandwidth.
     if ("requestIdleCallback" in window) {
       idleId = window.requestIdleCallback(enable, { timeout: 1800 });
     } else {
@@ -69,9 +69,7 @@ function HeroVideoBackground() {
     if (!video) return;
 
     const tryPlay = () => {
-      void video.play().catch(() => {
-        // Autoplay can fail without user gesture; poster still shows.
-      });
+      void video.play().catch(() => {});
     };
 
     tryPlay();
@@ -82,42 +80,29 @@ function HeroVideoBackground() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [loadVideo]);
 
+  if (!loadVideo) return null;
+
   return (
-    <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
-      {/* Poster is the LCP candidate; video only mounts on desktop after idle. */}
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-neutral-900"
-        style={{ backgroundImage: `url(${HERO_POSTER_SRC})` }}
-      />
-      {loadVideo ? (
-        <video
-          ref={videoRef}
-          className="absolute inset-0 h-full w-full object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          poster={HERO_POSTER_SRC}
-        >
-          <source src={HERO_VIDEO_SRC} type="video/mp4" />
-        </video>
-      ) : null}
-      {/* Readability scrim — keeps headline/CTAs crisp over bright aerial frames */}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/25" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/30" />
-    </div>
+    <video
+      ref={videoRef}
+      className="absolute inset-0 z-[1] h-full w-full object-cover"
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="none"
+      poster={HERO_POSTER_SRC}
+      aria-hidden
+    >
+      <source src={HERO_VIDEO_SRC} type="video/mp4" />
+    </video>
   );
 }
 
-export function Hero() {
+export function HeroContent(): ReactNode {
   return (
-    <section
-      id="hero"
-      className="hero relative min-h-dvh min-h-screen w-full overflow-hidden bg-neutral-950 supports-[height:100dvh]:min-h-[100dvh]"
-    >
-      <HeroVideoBackground />
-
+    <>
+      <HeroVideoOverlay />
       <div
         className="relative z-10 mx-auto flex h-full min-h-[inherit] max-w-360 flex-col justify-center px-6 pb-[max(2.5rem,env(safe-area-inset-bottom)+1rem)] pt-[max(5.5rem,env(safe-area-inset-top)+3.5rem)] text-left sm:px-12 sm:pt-24 md:pb-16 lg:px-24 lg:pt-28 2xl:max-w-450 3xl:max-w-550"
         style={{ perspective: "1200px" }}
@@ -149,7 +134,7 @@ export function Hero() {
           </span>
         </h1>
 
-        <p className="mt-3 max-w-md text-pretty text-[clamp(0.95rem,2.3vw,1.35rem)] leading-relaxed text-white/90 drop-shadow-sm sm:mt-5 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]">
+        <p className="mt-3 max-w-md text-pretty text-[clamp(0.95rem,2.3vw,1.35rem)] leading-relaxed text-white drop-shadow-sm sm:mt-5 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]">
           Eric Adams is your partner for buying and selling real estate local insight, honest
           pricing conversations, and hands-on support from tour to keys.
         </p>
@@ -181,6 +166,6 @@ export function Hero() {
           </a>
         </div>
       </div>
-    </section>
+    </>
   );
 }

@@ -16,19 +16,19 @@ export function feedLabel(feed: ListingFeed | undefined): FeedLabel | null {
       return {
         short: "GAMLS",
         long: "Georgia MLS · Bridge Interactive",
-        pillClass: "bg-sky-600/90 text-white",
+        pillClass: "bg-sky-800 text-white",
       };
     case "spark":
       return {
         short: "Mid-GA MLS",
         long: "Middle Georgia MLS · Spark Platform",
-        pillClass: "bg-emerald-600/90 text-white",
+        pillClass: "bg-emerald-800 text-white",
       };
     case "manual":
       return {
         short: "Eric",
         long: "Eric Adams · curated listing",
-        pillClass: "bg-amber-500/90 text-white",
+        pillClass: "bg-amber-800 text-white",
       };
     default:
       return null;

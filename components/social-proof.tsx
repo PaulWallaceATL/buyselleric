@@ -21,6 +21,7 @@ function ArrowIcon({ className }: { className?: string }) {
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
+      aria-hidden
     >
       <path
         strokeLinecap="round"
@@ -34,7 +35,7 @@ function ArrowIcon({ className }: { className?: string }) {
 
 function QuoteIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z" />
     </svg>
   );
@@ -142,13 +143,14 @@ export function SocialProof() {
               </blockquote>
               <div className="mt-6">
                 <p className="font-semibold text-foreground">Jordan &amp; Sam Rivera</p>
-                <p className="text-sm text-foreground/60">First-time buyers</p>
+                <p className="text-sm text-muted-foreground">First-time buyers</p>
               </div>
             </div>
             <div className="flex items-center justify-between mt-auto pt-8">
               <span className="text-xl font-semibold text-foreground">{siteConfig.primaryMarket}</span>
               <Link
                 href="/listings"
+                aria-label="Browse homes for sale"
                 className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-5 h-5" />
@@ -159,12 +161,13 @@ export function SocialProof() {
           <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl">
             <div className="flex-1">
               <p className="text-2xl font-semibold tabular-nums text-foreground sm:text-3xl">18 days</p>
-              <p className="text-sm text-foreground/60 mt-1">Average time to accepted offer (sample)</p>
+              <p className="text-sm text-muted-foreground mt-1">Average time to accepted offer (sample)</p>
             </div>
             <div className="flex items-center justify-between mt-auto pt-4">
               <span className="text-sm font-medium text-foreground">Seller story</span>
               <Link
                 href="/sell"
+                aria-label="Sell your home"
                 className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-5 h-5" />
@@ -175,12 +178,13 @@ export function SocialProof() {
           <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl">
             <div className="flex-1">
               <p className="text-2xl font-semibold text-foreground sm:text-3xl">100%</p>
-              <p className="text-sm text-foreground/60 mt-1">Paperwork explained before you sign</p>
+              <p className="text-sm text-muted-foreground mt-1">Paperwork explained before you sign</p>
             </div>
             <div className="flex items-center justify-between mt-auto pt-4">
               <span className="text-sm font-medium text-foreground">Clarity</span>
               <Link
                 href="/#contact"
+                aria-label="Contact Eric"
                 className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-5 h-5" />
@@ -191,7 +195,7 @@ export function SocialProof() {
           <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/40 p-6 sm:rounded-3xl sm:p-8">
             <div className="flex-1">
               <p className="text-2xl font-semibold text-foreground sm:text-3xl lg:text-4xl">5-star care</p>
-              <p className="text-foreground/60 mt-2">
+              <p className="text-muted-foreground mt-2">
                 Communication that
                 <br />
                 matches your pace
@@ -211,6 +215,7 @@ export function SocialProof() {
               <span className="text-xl font-semibold text-foreground">The Okonkwo family</span>
               <Link
                 href="/sell"
+                aria-label="Read seller success stories"
                 className="min-h-12 min-w-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
               >
                 <ArrowIcon className="w-5 h-5" />

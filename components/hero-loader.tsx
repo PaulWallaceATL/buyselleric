@@ -1,9 +1,17 @@
-"use client";
-
-import { Hero } from "@/components/hero";
+import { HeroContent } from "@/components/hero";
+import { HeroPoster, HeroScrim } from "@/components/hero-poster";
 import type { ReactNode } from "react";
 
-/** Homepage hero entry — video background loads on all viewports. */
+/** Server shell: LCP poster in HTML; interactive content is a client island. */
 export function HeroLoader(): ReactNode {
-  return <Hero />;
+  return (
+    <section
+      id="hero"
+      className="hero relative min-h-dvh min-h-screen w-full overflow-hidden bg-neutral-950 supports-[height:100dvh]:min-h-[100dvh]"
+    >
+      <HeroPoster />
+      <HeroContent />
+      <HeroScrim />
+    </section>
+  );
 }

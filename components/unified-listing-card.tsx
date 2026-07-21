@@ -75,7 +75,7 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
         </p>
         {location && <p className="mt-1 text-base text-muted-foreground">{location}</p>}
         {listing.listing_agent && (
-          <p className="mt-1 text-sm text-muted-foreground/70">{listing.listing_agent}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{listing.listing_agent}</p>
         )}
         <p className="mt-4 text-base font-semibold text-ring underline-offset-4 group-hover:underline sm:mt-5 sm:text-lg">
           View full details →

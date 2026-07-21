@@ -6,6 +6,9 @@ export const siteImages = {
   /** Eric Adams — headshot served from `/public/eric-adams.jpg` (committed asset). */
   ericHeadshot: "/eric-adams.jpg",
 
+  /** Homepage hero LCP poster (compressed still; video loads later on desktop). */
+  heroPoster: "/video/hero-aerial-poster.jpg",
+
   /** About section — wide exterior / curb appeal (secondary visual if needed) */
   aboutHero:
     "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fm=webp&fit=crop&w=1200&q=75",

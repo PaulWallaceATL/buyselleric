@@ -123,7 +123,7 @@ export function ListingsSearchBar({
         <button
           type="button"
           onClick={() => setMode("location")}
-          className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
+          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
             mode === "location"
               ? "bg-foreground text-background shadow-sm"
               : "text-foreground hover:bg-muted/40"
@@ -135,7 +135,7 @@ export function ListingsSearchBar({
         <button
           type="button"
           onClick={() => setMode("dream")}
-          className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
+          className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
             mode === "dream"
               ? "bg-foreground text-background shadow-sm"
               : "text-foreground hover:bg-muted/40"
@@ -174,7 +174,7 @@ export function ListingsSearchBar({
               </div>
               <button
                 type="submit"
-                className="mr-2 flex min-h-[40px] items-center rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:mr-2.5 sm:min-h-[44px] sm:px-7 sm:text-base"
+                className="mr-2 flex min-h-11 items-center rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:mr-2.5 sm:px-7 sm:text-base"
               >
                 Search
               </button>

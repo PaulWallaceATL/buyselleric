@@ -74,11 +74,15 @@ export function DreamHomePrompt({
             : "rounded-2xl border border-border bg-muted/15 p-3 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 sm:rounded-3xl sm:p-4"
         }
       >
-        <label className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <label
+          htmlFor="dream-home-prompt"
+          className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+        >
           <Sparkles className="h-3.5 w-3.5 text-ring" aria-hidden />
           Describe your dream home
         </label>
         <textarea
+          id="dream-home-prompt"
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);
@@ -100,7 +104,7 @@ export function DreamHomePrompt({
           <button
             type="submit"
             disabled={loading || prompt.trim().length < 8}
-            className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97] sm:min-h-[44px] sm:px-6 ${
+            className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97] sm:px-6 ${
               isHero ? "sm:text-base" : ""
             }`}
           >
