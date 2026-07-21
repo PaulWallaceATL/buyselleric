@@ -107,7 +107,7 @@ export function HeroSearch() {
           onClick={() => setMode("location")}
           className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
             mode === "location"
-              ? "bg-white text-foreground shadow-sm"
+              ? "bg-white text-neutral-950 shadow-sm"
               : "text-white/85 hover:bg-white/10 hover:text-white"
           }`}
         >
@@ -119,7 +119,7 @@ export function HeroSearch() {
           onClick={() => setMode("dream")}
           className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
             mode === "dream"
-              ? "bg-white text-foreground shadow-sm"
+              ? "bg-white text-neutral-950 shadow-sm"
               : "text-white/85 hover:bg-white/10 hover:text-white"
           }`}
         >
