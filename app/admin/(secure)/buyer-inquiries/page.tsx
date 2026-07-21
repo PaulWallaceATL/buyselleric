@@ -10,7 +10,7 @@ export default async function AdminBuyerInquiriesPage(): Promise<ReactNode> {
     <div>
       <h1 className="text-2xl font-medium tracking-tight text-foreground">Buyer inquiries</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Showing requests and questions from listing detail pages.
+        Showing requests, dream preference briefs, and questions from listing pages.
       </p>
 
       {!client ? (
@@ -25,7 +25,7 @@ export default async function AdminBuyerInquiriesPage(): Promise<ReactNode> {
                 <th className="px-4 py-3 font-medium">Date</th>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Contact</th>
-                <th className="px-4 py-3 font-medium">Listing</th>
+                <th className="px-4 py-3 font-medium">Listing / brief</th>
                 <th className="px-4 py-3 font-medium">Status</th>
               </tr>
             </thead>
@@ -40,7 +40,7 @@ export default async function AdminBuyerInquiriesPage(): Promise<ReactNode> {
                     <div>{r.email}</div>
                     {r.phone ? <div>{r.phone}</div> : null}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground max-w-[260px]">
+                  <td className="px-4 py-3 text-muted-foreground max-w-[320px]">
                     <div className="font-medium text-foreground line-clamp-2">
                       {r.listing_title || "Listing"}
                     </div>
@@ -55,8 +55,20 @@ export default async function AdminBuyerInquiriesPage(): Promise<ReactNode> {
                     {r.preferred_times ? (
                       <p className="mt-2 text-xs opacity-80">Times: {r.preferred_times}</p>
                     ) : null}
-                    {r.message ? (
+                    {r.dream_brief ? (
+                      <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-muted/40 p-2 text-xs text-foreground/90">
+                        {r.dream_brief}
+                      </pre>
+                    ) : null}
+                    {r.shortlist_mls_ids && r.shortlist_mls_ids.length > 0 ? (
+                      <p className="mt-1 text-xs opacity-80">
+                        Shortlist MLS: {r.shortlist_mls_ids.join(", ")}
+                      </p>
+                    ) : null}
+                    {r.message && !r.dream_brief ? (
                       <p className="mt-1 line-clamp-2 text-xs opacity-80">{r.message}</p>
+                    ) : r.message && r.dream_brief && r.message !== r.dream_brief ? (
+                      <p className="mt-1 line-clamp-3 text-xs opacity-80">{r.message}</p>
                     ) : null}
                   </td>
                   <td className="px-4 py-3">

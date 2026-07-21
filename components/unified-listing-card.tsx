@@ -74,6 +74,11 @@ export function UnifiedListingCard({ listing }: { listing: UnifiedListing }) {
           {listing.square_feet ? ` · ${listing.square_feet.toLocaleString()} sq ft` : ""}
         </p>
         {location && <p className="mt-1 text-base text-muted-foreground">{location}</p>}
+        {listing.dreamMatchReasons && listing.dreamMatchReasons.length > 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Matches: {listing.dreamMatchReasons.join(", ")}
+          </p>
+        ) : null}
         {listing.listing_agent && (
           <p className="mt-1 text-sm text-muted-foreground">{listing.listing_agent}</p>
         )}

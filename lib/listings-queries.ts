@@ -19,6 +19,12 @@ import {
 import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
 import { scoreDreamMatch } from "@/lib/dream-home-match";
 import {
+  buildSoftPrefQueryText,
+  embedQueryText,
+  fetchCandidateEmbeddingSimilarities,
+  liveEmbedCandidateSimilarities,
+} from "@/lib/listing-embeddings";
+import {
   amenitiesFromListingFilters,
   amenitiesToSoftPrefs,
   listingFiltersHaveAmenities,
@@ -69,6 +75,8 @@ export interface UnifiedListing {
   listing_office_phone?: string;
   /** Ephemeral copy for dream-home ranking (remarks); not shown on cards. */
   matchText?: string;
+  /** Dream Phase 3 — short “why matched” labels for soft prefs (cards only). */
+  dreamMatchReasons?: string[];
 }
 
 export interface ListingFilters {
@@ -639,8 +647,8 @@ async function fetchDreamMatchTexts(listings: UnifiedListing[]): Promise<Map<str
 }
 
 /**
- * Dream search ranking: hard filters narrow the set; soft prefs reorder so
- * homes whose remarks mention pool/garage/etc. surface first.
+ * Dream search ranking: hard filters narrow the set; soft prefs reorder via
+ * hybrid keyword + embedding score (Phase 3).
  */
 async function searchWithDreamKeywordRank(
   filters: ListingFilters,
@@ -695,13 +703,77 @@ async function searchWithDreamKeywordRank(
   const texts = await fetchDreamMatchTexts(candidates);
   const sort = filters.sort ?? "price_desc";
 
+  // Keyword scores (always available).
+  const keywordById = new Map<string, { score: number; matchedLabels: string[] }>();
+  let maxKeyword = 0;
+  for (const listing of candidates) {
+    const result = scoreDreamMatch(texts.get(listing.id) ?? "", softPrefs);
+    keywordById.set(listing.id, result);
+    if (result.score > maxKeyword) maxKeyword = result.score;
+  }
+
+  // Embedding similarities (best-effort — falls back to keyword-only).
+  const embSimByKey = new Map<string, number>();
+  const queryText = buildSoftPrefQueryText(softPrefs);
+  const queryEmb = queryText ? await embedQueryText(queryText) : null;
+  if (queryEmb) {
+    const mlsIds = [
+      ...new Set(candidates.map((l) => l.mls_id).filter((id): id is string => Boolean(id))),
+    ];
+    const stored = await fetchCandidateEmbeddingSimilarities(queryEmb, mlsIds);
+    for (const listing of candidates) {
+      if (listing.mls_id && stored.has(listing.mls_id)) {
+        embSimByKey.set(listing.id, stored.get(listing.mls_id)!);
+      }
+    }
+
+    const missing = candidates.filter((l) => !embSimByKey.has(l.id));
+    if (missing.length > 0) {
+      const live = await liveEmbedCandidateSimilarities(
+        queryEmb,
+        missing.map((l) => ({ key: l.id, text: texts.get(l.id) ?? "" })),
+      );
+      for (const [key, sim] of live) embSimByKey.set(key, sim);
+    }
+  }
+
+  const EMB_WEIGHT = 0.55;
+  const KW_WEIGHT = 0.45;
+
   const scored = candidates.map((listing) => {
-    const { score } = scoreDreamMatch(texts.get(listing.id) ?? "", softPrefs);
-    return { listing, score };
+    const kw = keywordById.get(listing.id) ?? { score: 0, matchedLabels: [] };
+    const keywordNorm = maxKeyword > 0 ? kw.score / maxKeyword : 0;
+    const embSim = embSimByKey.get(listing.id);
+    const hasEmb = embSim != null && Number.isFinite(embSim);
+    const hybrid = hasEmb
+      ? EMB_WEIGHT * Math.max(0, Math.min(1, embSim)) + KW_WEIGHT * keywordNorm
+      : keywordNorm;
+
+    const reasons = [...kw.matchedLabels];
+    // When embeddings helped but keywords were sparse, surface soft prefs as reasons.
+    if (hasEmb && embSim! >= 0.35 && reasons.length < 2) {
+      for (const pref of softPrefs) {
+        if (reasons.length >= 3) break;
+        const label = pref.trim();
+        if (label && !reasons.some((r) => r.toLowerCase() === label.toLowerCase())) {
+          reasons.push(label);
+        }
+      }
+    }
+
+    return {
+      listing: {
+        ...listing,
+        ...(reasons.length > 0 ? { dreamMatchReasons: reasons.slice(0, 4) } : {}),
+      },
+      score: hybrid,
+      keywordScore: kw.score,
+    };
   });
 
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
+    if (b.keywordScore !== a.keywordScore) return b.keywordScore - a.keywordScore;
     switch (sort) {
       case "price_asc":
         return a.listing.price_cents - b.listing.price_cents;
@@ -1002,6 +1074,26 @@ async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
       },
       { onConflict: "mls_id" },
     );
+
+    // Opportunistic dream embedding refresh when description landed.
+    if (row.description?.trim() && process.env.OPENAI_API_KEY) {
+      void import("@/lib/listing-embeddings")
+        .then(({ upsertListingEmbeddings }) =>
+          upsertListingEmbeddings([
+            {
+              mls_id: row.mls_id,
+              title: row.title,
+              description: row.description,
+              property_type: row.property_type,
+              address_line: row.address_line,
+              city: row.city,
+              state: row.state,
+              postal_code: row.postal_code,
+            },
+          ]),
+        )
+        .catch(() => {});
+    }
   } catch (e) {
     console.warn("persistMlsListingCache", e);
   }

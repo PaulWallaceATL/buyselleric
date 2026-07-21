@@ -180,10 +180,35 @@ export async function POST(request: Request) {
       }
     }
 
+    const resolved =
+      records.length > 0 ? await resolveFirmNamesOnSync(records) : [];
     const { inserted, updated } =
-      records.length > 0
-        ? await upsertBatch(client, await resolveFirmNamesOnSync(records), syncTimestamp)
+      resolved.length > 0
+        ? await upsertBatch(client, resolved, syncTimestamp)
         : { inserted: 0, updated: 0 };
+
+    // Dream Phase 3: refresh embeddings for this sync batch (hash-skip unchanged).
+    let embeddingsUpdated = 0;
+    if (resolved.length > 0 && process.env.OPENAI_API_KEY) {
+      try {
+        const { upsertListingEmbeddings } = await import("@/lib/listing-embeddings");
+        const emb = await upsertListingEmbeddings(
+          resolved.map((r) => ({
+            mls_id: r.mls_id,
+            title: r.title,
+            description: r.description,
+            property_type: r.property_type,
+            address_line: r.address_line,
+            city: r.city,
+            state: r.state,
+            postal_code: r.postal_code,
+          })),
+        );
+        embeddingsUpdated = emb.updated;
+      } catch (err) {
+        console.warn("[mls-sync] embedding pass skipped", err);
+      }
+    }
 
     const nextOffset = offset + batchFromRets.length;
     const done = !result.hasMore;
@@ -225,6 +250,7 @@ export async function POST(request: Request) {
       batch_active_rows: records.length,
       inserted,
       updated,
+      embeddings_updated: embeddingsUpdated,
       deactivated,
       rets_total_matches: retsTotalMatches,
       photos_during_sync: skipPhotosThisRun ? "skipped_large_feed" : "fetched",

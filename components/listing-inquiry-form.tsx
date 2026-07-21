@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { submitListingInquiry } from "@/app/actions/listing-inquiry";
 import { ctaPrimary } from "@/lib/cta-styles";
 import { siteConfig } from "@/lib/config";
+import { formatDreamBriefMessage, readDreamBriefSnapshot } from "@/lib/dream-brief-storage";
 
 function fieldClass() {
   return "w-full min-h-[48px] rounded-xl border border-border/80 bg-background/80 px-4 py-3.5 text-base text-foreground shadow-sm placeholder:text-muted-foreground transition-[border-color,box-shadow] focus-ring outline-none focus:border-ring/50 focus:shadow-md sm:rounded-2xl";
@@ -27,6 +28,12 @@ export function ListingInquiryForm({
   listingPath,
 }: ListingInquiryFormProps) {
   const [state, formAction, pending] = useActionState(submitListingInquiry, null);
+  const [messagePrefill, setMessagePrefill] = useState("");
+
+  useEffect(() => {
+    const snap = readDreamBriefSnapshot();
+    if (snap) setMessagePrefill(formatDreamBriefMessage(snap));
+  }, []);
 
   if (state?.ok === true) {
     return (
@@ -131,9 +138,16 @@ export function ListingInquiryForm({
             id="inq_message"
             name="message"
             rows={3}
+            defaultValue={messagePrefill}
+            key={messagePrefill ? "prefilled" : "empty"}
             placeholder="Questions about the home, financing, neighborhood…"
             className={`${fieldClass()} min-h-[96px] resize-y`}
           />
+          {messagePrefill ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Prefilled from your dream-home preference brief — edit freely.
+            </p>
+          ) : null}
         </div>
       </div>
 

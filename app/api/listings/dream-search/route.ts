@@ -3,6 +3,7 @@ import {
   dreamIntentToSearchParams,
   parseDreamHomeIntent,
   parseDreamHomeIntentHeuristicOnly,
+  refineDreamHomeIntent,
 } from "@/lib/dream-home-intent";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,17 @@ function intentHasSignal(intent: {
   );
 }
 
+function asStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof v === "string" && v.trim()) out[k] = v.trim();
+    else if (typeof v === "number" && Number.isFinite(v)) out[k] = String(v);
+    else if (typeof v === "boolean") out[k] = v ? "1" : "0";
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -72,6 +84,12 @@ export async function POST(request: Request) {
       ? String((body as { prompt?: unknown }).prompt ?? "")
       : "";
   const trimmed = prompt.trim();
+  const current = asStringRecord(
+    typeof body === "object" && body && "current" in body
+      ? (body as { current?: unknown }).current
+      : undefined,
+  );
+  const isRefine = Boolean(current && Object.keys(current).length > 0);
 
   if (trimmed.length < MIN_LEN) {
     return NextResponse.json(
@@ -88,7 +106,9 @@ export async function POST(request: Request) {
 
   try {
     let intent;
-    if (process.env.OPENAI_API_KEY) {
+    if (isRefine && current) {
+      intent = await refineDreamHomeIntent(trimmed, current);
+    } else if (process.env.OPENAI_API_KEY) {
       try {
         intent = await parseDreamHomeIntent(trimmed);
       } catch (err) {
@@ -110,12 +130,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const params = dreamIntentToSearchParams(intent, { dreamText: trimmed });
+    const priorDream = current?.dream?.trim();
+    const dreamText = isRefine
+      ? [priorDream, trimmed].filter(Boolean).join(" · ").slice(0, 500)
+      : trimmed;
+
+    const view = current?.view;
+    const params = dreamIntentToSearchParams(intent, {
+      dreamText,
+      ...(view && view !== "list" ? { view } : {}),
+    });
+    // Preserve map polygon across refine turns.
+    if (current?.mapPoly) params.set("mapPoly", current.mapPoly);
     const qs = params.toString();
 
     return NextResponse.json({
       ok: true,
       intent,
+      refined: isRefine,
       href: qs ? `/listings?${qs}` : "/listings",
     });
   } catch (err) {

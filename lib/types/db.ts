@@ -95,6 +95,10 @@ export interface MlsListingRow {
   synced_at: string;
   created_at: string;
   updated_at: string;
+  /** Dream Phase 3 — pgvector embedding metadata (optional until backfill). */
+  embedding_model?: string | null;
+  embedding_updated_at?: string | null;
+  embed_text_hash?: string | null;
 }
 
 export type FeaturedSlotSource = "mls" | "manual";
@@ -148,4 +152,8 @@ export interface ListingInquiryRow {
   listing_path: string;
   admin_status: SellSubmissionAdminStatus;
   created_at: string;
+  /** Dream Phase 4 preference brief (optional until SQL applied). */
+  dream_brief?: string;
+  dream_filters?: Record<string, unknown>;
+  shortlist_mls_ids?: string[];
 }

@@ -2,12 +2,15 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { UnifiedListingCard } from "@/components/unified-listing-card";
 import { DreamFilterChips } from "@/components/dream-filter-chips";
+import { DreamPreferenceBrief } from "@/components/dream-preference-brief";
+import { DreamRefineStrip } from "@/components/dream-refine-strip";
 import { ListingsFilters } from "@/components/listings-filters";
 import { ListingsMapView } from "@/components/listings-map-view";
 import { ListingsPagination } from "@/components/listings-pagination";
 import { ListingsSearchBar } from "@/components/listings-search-bar";
 import { siteConfig } from "@/lib/config";
 import { ctaPrimary } from "@/lib/cta-styles";
+import { dreamChipsFromSearchParams } from "@/lib/dream-home-intent";
 import { mapFallbackCenterFromSearchQ } from "@/lib/listing-query-text";
 import {
   decodeMapPolygonQuery,
@@ -158,6 +161,35 @@ export default async function ListingsPage({
 
   const mapFallbackCenter = mapFallbackCenterFromSearchQ(filters.q);
 
+  const hasDreamSearch = Boolean(dreamText || softPrefsParam || listingFiltersHaveAmenities(filters));
+
+  const dreamChipLabels = dreamChipsFromSearchParams({
+    ...(filters.q ? { q: filters.q } : {}),
+    ...(filters.minPrice != null ? { minPrice: String(filters.minPrice) } : {}),
+    ...(filters.maxPrice != null ? { maxPrice: String(filters.maxPrice) } : {}),
+    ...(filters.minBeds != null ? { minBeds: String(filters.minBeds) } : {}),
+    ...(filters.minBaths != null ? { minBaths: String(filters.minBaths) } : {}),
+    ...(filters.minSqft != null ? { minSqft: String(filters.minSqft) } : {}),
+    ...(filters.maxSqft != null ? { maxSqft: String(filters.maxSqft) } : {}),
+    ...(filters.propertyType ? { propertyType: filters.propertyType } : {}),
+    ...(softPrefsParam ? { soft: softPrefsParam } : {}),
+    ...(baseParams.pool ? { pool: baseParams.pool } : {}),
+    ...(baseParams.garage ? { garage: baseParams.garage } : {}),
+    ...(baseParams.fireplace ? { fireplace: baseParams.fireplace } : {}),
+    ...(baseParams.waterfront ? { waterfront: baseParams.waterfront } : {}),
+    ...(baseParams.minYear ? { minYear: baseParams.minYear } : {}),
+    ...(baseParams.maxYear ? { maxYear: baseParams.maxYear } : {}),
+    ...(baseParams.maxStories ? { maxStories: baseParams.maxStories } : {}),
+    ...(baseParams.minAcres ? { minAcres: baseParams.minAcres } : {}),
+    ...(baseParams.noHoa ? { noHoa: baseParams.noHoa } : {}),
+  });
+  const mustHaveLabels = dreamChipLabels.filter((c) => c.kind === "hard").map((c) => c.label);
+  const softWantLabels = dreamChipLabels.filter((c) => c.kind === "soft").map((c) => c.label);
+  const shortlist = listings
+    .filter((l) => l.mls_id)
+    .slice(0, 3)
+    .map((l) => ({ mlsId: l.mls_id!, title: l.title }));
+
   return (
     <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
       <div className={siteContainer}>
@@ -192,6 +224,8 @@ export default async function ListingsPage({
             <DreamFilterChips />
           </Suspense>
 
+          {hasDreamSearch ? <DreamRefineStrip currentParams={baseParams} /> : null}
+
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             {(hasFilters || total > 0) ? (
               <p className="text-sm text-muted-foreground sm:text-base" aria-live="polite">
@@ -218,6 +252,21 @@ export default async function ListingsPage({
             <ListingsFilters />
           </Suspense>
         </div>
+
+        {hasDreamSearch && (mustHaveLabels.length > 0 || softWantLabels.length > 0 || dreamText) ? (
+          <div className="mt-8">
+            <DreamPreferenceBrief
+              mustHaves={mustHaveLabels}
+              softWants={softWantLabels}
+              shortlist={shortlist}
+              filtersJson={{
+                ...baseParams,
+                soft: softPrefList,
+              }}
+              dreamText={dreamText}
+            />
+          </div>
+        ) : null}
 
         {view === "map" ? (
           <div className="mt-8">

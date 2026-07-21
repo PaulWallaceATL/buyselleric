@@ -6,6 +6,7 @@ import {
   softPrefsToAmenities,
   writeAmenitiesToSearchParams,
   amenityChipsFromParams,
+  parseAmenitiesFromSearchParams,
   type ListingAmenities,
 } from "@/lib/listing-amenities";
 import type { ListingFilters } from "@/lib/listings-queries";
@@ -408,4 +409,300 @@ export function dreamChipsFromSearchParams(params: {
   });
 
   return chips;
+}
+
+/** Rebuild a DreamHomeIntent from current listings URL params (for multi-turn refine). */
+export function intentFromSearchParams(params: Record<string, string>): DreamHomeIntent {
+  const filters: DreamHomeHardFilters = {};
+  const q = optionalString(params.q);
+  if (q) filters.q = q;
+  const minPrice = positiveNum(Number(params.minPrice));
+  if (minPrice != null) filters.minPrice = Math.round(minPrice);
+  const maxPrice = positiveNum(Number(params.maxPrice));
+  if (maxPrice != null) filters.maxPrice = Math.round(maxPrice);
+  const minBeds = positiveNum(Number(params.minBeds));
+  if (minBeds != null) filters.minBeds = Math.floor(minBeds);
+  const minBaths = positiveNum(Number(params.minBaths));
+  if (minBaths != null) filters.minBaths = minBaths;
+  const minSqft = positiveNum(Number(params.minSqft));
+  if (minSqft != null) filters.minSqft = Math.floor(minSqft);
+  const maxSqft = positiveNum(Number(params.maxSqft));
+  if (maxSqft != null) filters.maxSqft = Math.floor(maxSqft);
+  const propertyType = optionalString(params.propertyType);
+  if (propertyType) filters.propertyType = propertyType;
+  const sortRaw = optionalString(params.sort);
+  if (sortRaw && SORTS.has(sortRaw)) {
+    filters.sort = sortRaw as NonNullable<DreamHomeHardFilters["sort"]>;
+  }
+
+  const softPrefs = (params.soft ?? "")
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const amenities = parseAmenitiesFromSearchParams({
+    pool: params.pool ?? null,
+    garage: params.garage ?? null,
+    fireplace: params.fireplace ?? null,
+    waterfront: params.waterfront ?? null,
+    minYear: params.minYear ?? null,
+    maxYear: params.maxYear ?? null,
+    maxStories: params.maxStories ?? null,
+    minAcres: params.minAcres ?? null,
+    noHoa: params.noHoa ?? null,
+  });
+
+  return {
+    filters,
+    softPrefs,
+    amenities,
+    summary: "Current search preferences.",
+  };
+}
+
+const REFINE_SYSTEM_PROMPT = `You refine an existing home-buyer search for ${siteConfig.name} based on a short follow-up message.
+
+You receive the CURRENT filters as JSON and a FOLLOW-UP instruction (e.g. "drop the pool", "widen to Houston County", "raise budget to 500k").
+
+Return ONLY valid JSON:
+{
+  "q": string | null,
+  "minPrice": number | null,
+  "maxPrice": number | null,
+  "minBeds": number | null,
+  "minBaths": number | null,
+  "minSqft": number | null,
+  "maxSqft": number | null,
+  "propertyType": string | null,
+  "sort": "price_asc" | "price_desc" | "newest" | "sqft_desc" | null,
+  "softPrefs": string[],
+  "clearAmenities": string[],
+  "summary": string
+}
+
+Rules:
+- Start from CURRENT values. Only change what the follow-up asks for.
+- clearAmenities: amenity keys to remove — one of: pool, garage, fireplace, waterfront, minYear, maxYear, maxStories, minAcres, noHoa.
+- softPrefs: the FULL updated soft preference list (max 8) after adds/removes.
+- To remove a soft want, omit it from softPrefs.
+- To clear a hard field (e.g. remove location), set that field to null.
+- summary: one sentence describing the updated search.
+- Georgia localities preferred for q.`;
+
+/** Apply heuristic drops from refine text onto an intent (pool/garage/etc.). */
+export function applyHeuristicRefineDeltas(
+  base: DreamHomeIntent,
+  refineText: string,
+): DreamHomeIntent {
+  const t = refineText.toLowerCase();
+  const amenities: ListingAmenities = { ...base.amenities };
+  let softPrefs = [...base.softPrefs];
+  const filters: DreamHomeHardFilters = { ...base.filters };
+
+  const drop = (label: string) => {
+    softPrefs = softPrefs.filter((s) => !s.toLowerCase().includes(label));
+  };
+
+  if (/\b(drop|remove|no|without|clear)\b.{0,20}\bpool\b/.test(t) || /\bpool\b.{0,12}\b(off|gone)\b/.test(t)) {
+    delete amenities.hasPool;
+    drop("pool");
+  }
+  if (/\b(drop|remove|no|without|clear)\b.{0,20}\bgarage\b/.test(t)) {
+    delete amenities.minGarageSpaces;
+    drop("garage");
+  }
+  if (/\b(drop|remove|no|without|clear)\b.{0,20}\bfireplace\b/.test(t)) {
+    delete amenities.hasFireplace;
+    drop("fireplace");
+  }
+  if (/\b(drop|remove|no|without|clear)\b.{0,24}\b(waterfront|lakefront)\b/.test(t)) {
+    delete amenities.hasWaterfront;
+    drop("waterfront");
+  }
+  if (/\b(drop|remove|no|without|clear)\b.{0,16}\bhoa\b/.test(t)) {
+    delete amenities.noHoa;
+  }
+  if (/\b(drop|remove|no|without|clear)\b.{0,20}\b(ranch|1-story|single.?story)\b/.test(t)) {
+    delete amenities.maxStories;
+    drop("ranch");
+  }
+
+  const gaLoc = detectGaLocationInText(refineText);
+  if (gaLoc && /\b(widen|move|switch|change|near|in|around|to)\b/i.test(refineText)) {
+    filters.q = gaLoc;
+  }
+
+  const extracted = heuristicDreamExtract(refineText);
+  if (extracted.maxPrice != null) filters.maxPrice = extracted.maxPrice;
+  if (extracted.minPrice != null) filters.minPrice = extracted.minPrice;
+  if (extracted.minBeds != null) filters.minBeds = extracted.minBeds;
+  if (extracted.minBaths != null) filters.minBaths = extracted.minBaths;
+  if (extracted.minSqft != null) filters.minSqft = extracted.minSqft;
+  if (extracted.maxSqft != null) filters.maxSqft = extracted.maxSqft;
+  if (extracted.propertyType) filters.propertyType = extracted.propertyType;
+
+  // Add new soft prefs from refine text
+  if (extracted.softPrefs.length) {
+    softPrefs = Array.from(new Set([...softPrefs, ...extracted.softPrefs])).slice(0, 8);
+  }
+
+  const { amenities: promoted, remainingSoft } = softPrefsToAmenities(softPrefs);
+  const mergedAmenities: ListingAmenities = { ...amenities, ...promoted };
+
+  return {
+    filters,
+    softPrefs: remainingSoft,
+    amenities: mergedAmenities,
+    summary: base.summary,
+  };
+}
+
+function clearAmenityKey(amenities: ListingAmenities, key: string): void {
+  switch (key) {
+    case "pool":
+      delete amenities.hasPool;
+      break;
+    case "garage":
+      delete amenities.minGarageSpaces;
+      break;
+    case "fireplace":
+      delete amenities.hasFireplace;
+      break;
+    case "waterfront":
+      delete amenities.hasWaterfront;
+      break;
+    case "minYear":
+      delete amenities.minYearBuilt;
+      break;
+    case "maxYear":
+      delete amenities.maxYearBuilt;
+      break;
+    case "maxStories":
+      delete amenities.maxStories;
+      break;
+    case "minAcres":
+      delete amenities.minAcres;
+      break;
+    case "noHoa":
+      delete amenities.noHoa;
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * Multi-turn refine: merge follow-up text onto current URL-derived intent.
+ */
+export async function refineDreamHomeIntent(
+  refinePrompt: string,
+  currentParams: Record<string, string>,
+): Promise<DreamHomeIntent> {
+  const base = intentFromSearchParams(currentParams);
+  const heuristic = applyHeuristicRefineDeltas(base, refinePrompt);
+
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      ...heuristic,
+      summary: `Updated search from: “${refinePrompt.trim().slice(0, 80)}”.`,
+    };
+  }
+
+  try {
+    const client = getOpenAIClient();
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: REFINE_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `CURRENT:\n${JSON.stringify({
+            ...base.filters,
+            softPrefs: base.softPrefs,
+            amenities: base.amenities,
+          })}\n\nFOLLOW-UP:\n${refinePrompt}`,
+        },
+      ],
+      temperature: 0.1,
+      max_tokens: 700,
+      response_format: { type: "json_object" },
+    });
+
+    const text = response.choices[0]?.message?.content?.trim();
+    if (!text) return heuristic;
+
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const normalized = normalizeIntent(parsed);
+
+    // Start from base amenities, apply LLM soft + clearAmenities, then heuristic drops.
+    const amenities: ListingAmenities = { ...base.amenities, ...normalized.amenities };
+    const clearRaw = Array.isArray(parsed.clearAmenities) ? parsed.clearAmenities : [];
+    for (const key of clearRaw) {
+      if (typeof key === "string") clearAmenityKey(amenities, key.trim());
+    }
+
+    // Field clears / updates from LLM payload.
+    const filters: DreamHomeHardFilters = { ...base.filters };
+    if ("q" in parsed) {
+      if (parsed.q === null) delete filters.q;
+      else if (normalized.filters.q) filters.q = normalized.filters.q;
+    }
+    if ("minPrice" in parsed) {
+      if (parsed.minPrice === null) delete filters.minPrice;
+      else if (normalized.filters.minPrice != null) filters.minPrice = normalized.filters.minPrice;
+    }
+    if ("maxPrice" in parsed) {
+      if (parsed.maxPrice === null) delete filters.maxPrice;
+      else if (normalized.filters.maxPrice != null) filters.maxPrice = normalized.filters.maxPrice;
+    }
+    if ("minBeds" in parsed) {
+      if (parsed.minBeds === null) delete filters.minBeds;
+      else if (normalized.filters.minBeds != null) filters.minBeds = normalized.filters.minBeds;
+    }
+    if ("minBaths" in parsed) {
+      if (parsed.minBaths === null) delete filters.minBaths;
+      else if (normalized.filters.minBaths != null) filters.minBaths = normalized.filters.minBaths;
+    }
+    if ("minSqft" in parsed) {
+      if (parsed.minSqft === null) delete filters.minSqft;
+      else if (normalized.filters.minSqft != null) filters.minSqft = normalized.filters.minSqft;
+    }
+    if ("maxSqft" in parsed) {
+      if (parsed.maxSqft === null) delete filters.maxSqft;
+      else if (normalized.filters.maxSqft != null) filters.maxSqft = normalized.filters.maxSqft;
+    }
+    if ("propertyType" in parsed) {
+      if (parsed.propertyType === null) delete filters.propertyType;
+      else if (normalized.filters.propertyType) filters.propertyType = normalized.filters.propertyType;
+    }
+    if ("sort" in parsed) {
+      if (parsed.sort === null) delete filters.sort;
+      else if (normalized.filters.sort) filters.sort = normalized.filters.sort;
+    }
+
+    let softPrefs = normalized.softPrefs.length
+      ? normalized.softPrefs
+      : heuristic.softPrefs;
+
+    // Re-promote soft → amenities after clears
+    const { amenities: promoted, remainingSoft } = softPrefsToAmenities(softPrefs);
+    softPrefs = remainingSoft;
+
+    const merged: DreamHomeIntent = {
+      filters,
+      softPrefs,
+      amenities: { ...amenities, ...promoted },
+      summary: normalized.summary || heuristic.summary,
+    };
+
+    // Heuristic drops win for explicit "drop the pool" language.
+    return applyHeuristicRefineDeltas(merged, refinePrompt);
+  } catch (err) {
+    console.warn("[dream-refine] OpenAI failed", err);
+    return {
+      ...heuristic,
+      summary: `Updated search from: “${refinePrompt.trim().slice(0, 80)}”.`,
+    };
+  }
 }
