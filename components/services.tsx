@@ -190,7 +190,7 @@ export function Services() {
           Guidance for buyers. Strategy for sellers. Calm at every step.
         </h2>
         <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          From first tour to closing day—clear advice, steady advocacy, and a plan that fits how you
+          From first tour to closing day clear advice, steady advocacy, and a plan that fits how you
           buy or sell.
         </p>
       </div>

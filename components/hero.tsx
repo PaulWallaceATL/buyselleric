@@ -90,7 +90,7 @@ export function Hero() {
               className="block animate-[heroReveal_1.6s_cubic-bezier(0.22,1,0.36,1)_0.5s_both]"
               style={{ transformOrigin: "center bottom", transformStyle: "preserve-3d" }}
             >
-              that fits your life—
+              that fits your life
             </span>
           </span>
           <span className="block overflow-hidden pb-[0.1em]">
@@ -104,7 +104,7 @@ export function Hero() {
         </h1>
 
         <p className="mt-3 max-w-md text-pretty text-[clamp(0.95rem,2.3vw,1.35rem)] leading-relaxed text-white/90 drop-shadow-sm sm:mt-5 lg:max-w-lg 2xl:max-w-xl animate-[heroFadeUp_1s_cubic-bezier(0.25,1,0.5,1)_1.2s_both]">
-          Eric Adams is your partner for buying and selling real estate—local insight, honest
+          Eric Adams is your partner for buying and selling real estate local insight, honest
           pricing conversations, and hands-on support from tour to keys.
         </p>
         <div className="relative z-[70] mt-4 animate-[heroFadeUp_0.8s_cubic-bezier(0.25,1,0.5,1)_1.3s_both] sm:mt-5">
