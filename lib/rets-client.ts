@@ -659,9 +659,23 @@ async function retsSearchFirst(
   classId: string,
   query: string,
   select: string,
+  session?: RetsSession,
 ): Promise<Record<string, string> | null> {
   try {
-    const body = await rawSearchAny(resource, classId, query, 1, select);
+    const body = session
+      ? await retsFetch(session, session.searchUrl, {
+          SearchType: resource,
+          Class: classId,
+          Query: query,
+          QueryType: "DMQL2",
+          Format: "COMPACT-DECODED",
+          Limit: "1",
+          Offset: "1",
+          StandardNames: "0",
+          Count: "1",
+          ...(select ? { Select: select } : {}),
+        })
+      : await rawSearchAny(resource, classId, query, 1, select);
     const rows = parseCompactData(body);
     return rows[0] ?? null;
   } catch {
@@ -674,9 +688,23 @@ async function retsSearchFirstWithMeta(
   classId: string,
   query: string,
   select: string,
+  session?: RetsSession,
 ): Promise<{ row: Record<string, string> | null; replyCode?: string; replyText?: string; keys?: string[] }> {
   try {
-    const body = await rawSearchAny(resource, classId, query, 1, select);
+    const body = session
+      ? await retsFetch(session, session.searchUrl, {
+          SearchType: resource,
+          Class: classId,
+          Query: query,
+          QueryType: "DMQL2",
+          Format: "COMPACT-DECODED",
+          Limit: "1",
+          Offset: "1",
+          StandardNames: "0",
+          Count: "1",
+          ...(select ? { Select: select } : {}),
+        })
+      : await rawSearchAny(resource, classId, query, 1, select);
     const rows = parseCompactData(body);
     const replyCode = body.match(/ReplyCode="([^"]+)"/)?.[1];
     const replyText = body.match(/ReplyText="([^"]+)"/)?.[1];
@@ -724,6 +752,7 @@ function cacheKey(agentCode: string, officeCode: string): string {
 export async function resolveRetsAgentOfficeCodes(
   agentCode: string,
   officeCode: string,
+  session?: RetsSession,
 ): Promise<{
   listing_agent: string;
   listing_agent_phone: string;
@@ -748,6 +777,8 @@ export async function resolveRetsAgentOfficeCodes(
   const agentId = agentCode.trim();
   const officeId = officeCode.trim();
 
+  const ownedSession = session ?? (await createRetsSession());
+
   const agentLookups: Array<{ classId: string; query: string }> = agentId
     ? [
         { classId: "ActiveAgent", query: `(UserCode=${agentId})` },
@@ -771,22 +802,17 @@ export async function resolveRetsAgentOfficeCodes(
       ]
     : [];
 
-  const [agentRow, officeRow] = await Promise.all([
-    (async () => {
-      for (const { classId, query } of agentLookups) {
-        const row = await retsSearchFirst("Agent", classId, query, "");
-        if (row) return row;
-      }
-      return null;
-    })(),
-    (async () => {
-      for (const { classId, query } of officeLookups) {
-        const row = await retsSearchFirst("Office", classId, query, "");
-        if (row) return row;
-      }
-      return null;
-    })(),
-  ]);
+  let agentRow: Record<string, string> | null = null;
+  for (const { classId, query } of agentLookups) {
+    agentRow = await retsSearchFirst("Agent", classId, query, "", ownedSession);
+    if (agentRow) break;
+  }
+
+  let officeRow: Record<string, string> | null = null;
+  for (const { classId, query } of officeLookups) {
+    officeRow = await retsSearchFirst("Office", classId, query, "", ownedSession);
+    if (officeRow) break;
+  }
 
   if (agentRow) {
     raw.RetsAgent = agentRow;
@@ -865,13 +891,60 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
   const id = mlsId.trim();
   if (!id || !/^\d+$/.test(id)) return null;
 
+  const session = await createRetsSession();
+
   // Prefer no $Select first — ConnectMLS often 20201/errors if any selected system name is wrong.
-  const prop =
-    (await retsSearchFirst("Property", "RESI", `(ListingId=${id})`, "")) ||
-    (await retsSearchFirst("Property", "RESI", `(ListingID=${id})`, "")) ||
-    (await retsSearchFirst("Property", "RESI", `(ListingId=${id})`, RETS_ATTR_SELECT));
+  // Try unquoted + quoted ListingId (ConnectMLS varies). One session for digest auth.
+  const propAttempts: Array<{ classId: string; query: string }> = [
+    { classId: "RESI", query: `(ListingId=${id})` },
+    { classId: "RESI", query: `(ListingId="${id}")` },
+    { classId: "RESI", query: `(ListingID=${id})` },
+    { classId: "RESI", query: `(ListingID="${id}")` },
+  ];
+
+  let prop: Record<string, string> | null = null;
+  const attemptLog: Array<{
+    classId: string;
+    query: string;
+    found: boolean;
+    replyCode?: string;
+    replyText?: string;
+  }> = [];
+
+  for (const attempt of propAttempts) {
+    const meta = await retsSearchFirstWithMeta(
+      "Property",
+      attempt.classId,
+      attempt.query,
+      "",
+      session,
+    );
+    attemptLog.push({
+      classId: attempt.classId,
+      query: attempt.query,
+      found: Boolean(meta.row),
+      ...(meta.replyCode ? { replyCode: meta.replyCode } : {}),
+      ...(meta.replyText ? { replyText: meta.replyText } : {}),
+    });
+    if (meta.row) {
+      prop = meta.row;
+      break;
+    }
+  }
+
   if (!prop) {
-    console.warn(`fetchRetsAttributionForMlsId: no Property row for ${id}`);
+    const withSelect = await retsSearchFirst(
+      "Property",
+      "RESI",
+      `(ListingId=${id})`,
+      RETS_ATTR_SELECT,
+      session,
+    );
+    if (withSelect) prop = withSelect;
+  }
+
+  if (!prop) {
+    console.warn(`fetchRetsAttributionForMlsId: no Property row for ${id}`, attemptLog);
     return {
       listing_agent: "",
       listing_agent_phone: "",
@@ -882,6 +955,7 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
           ok: false,
           reason: "property_not_found",
           mls_id: id,
+          attempts: attemptLog,
           at: new Date().toISOString(),
         },
       },
@@ -918,6 +992,7 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
   const resolved = await resolveRetsAgentOfficeCodes(
     fromPropName ? "" : agentCode,
     propOfficeName ? "" : officeCode || listOfficeCodeField,
+    session,
   );
 
   const listing_agent = fromPropName || resolved.listing_agent || agentCode;
@@ -1013,9 +1088,19 @@ export async function probeRetsAttributionForMlsId(mlsId: string): Promise<{
   resolved: Awaited<ReturnType<typeof fetchRetsAttributionForMlsId>>;
 }> {
   const id = mlsId.trim();
-  let propMeta = await retsSearchFirstWithMeta("Property", "RESI", `(ListingId=${id})`, "");
+  const session = await createRetsSession();
+  let propMeta = await retsSearchFirstWithMeta("Property", "RESI", `(ListingId=${id})`, "", session);
   if (!propMeta.row) {
-    propMeta = await retsSearchFirstWithMeta("Property", "RESI", `(ListingID=${id})`, "");
+    propMeta = await retsSearchFirstWithMeta(
+      "Property",
+      "RESI",
+      `(ListingId="${id}")`,
+      "",
+      session,
+    );
+  }
+  if (!propMeta.row) {
+    propMeta = await retsSearchFirstWithMeta("Property", "RESI", `(ListingID=${id})`, "", session);
   }
 
   const prop = propMeta.row;
@@ -1054,7 +1139,7 @@ export async function probeRetsAttributionForMlsId(mlsId: string): Promise<{
       { classId: "Member", query: `(MemberMlsId=${agentCode})` },
     ];
     for (const { classId, query: q } of lookups) {
-      const meta = await retsSearchFirstWithMeta("Agent", classId, q, "");
+      const meta = await retsSearchFirstWithMeta("Agent", classId, q, "", session);
       const name = meta.row
         ? pickRetsField(meta.row, ["FullName", "AgentFullName", "FirstName"]) ||
           [pickRetsField(meta.row, ["FirstName"]), pickRetsField(meta.row, ["LastName"])]
@@ -1083,7 +1168,7 @@ export async function probeRetsAttributionForMlsId(mlsId: string): Promise<{
       { classId: "ActiveOffice", query: `(OfficeMlsId=${officeCode})` },
     ];
     for (const { classId, query: q } of lookups) {
-      const meta = await retsSearchFirstWithMeta("Office", classId, q, "");
+      const meta = await retsSearchFirstWithMeta("Office", classId, q, "", session);
       const name = meta.row
         ? pickRetsField(meta.row, ["OfficeName", "Name", "BrokerageName", "FirmName"])
         : "";

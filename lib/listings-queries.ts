@@ -911,6 +911,16 @@ async function applyRetsAttribution(
         },
       };
     }
+    const priorDiag =
+      attr.raw_data &&
+      typeof attr.raw_data === "object" &&
+      attr.raw_data._retsAttribution &&
+      typeof attr.raw_data._retsAttribution === "object"
+        ? (attr.raw_data._retsAttribution as Record<string, unknown>)
+        : null;
+    const hasFirmOrAgent = Boolean(
+      (attr.listing_office || "").trim() || (attr.listing_agent || "").trim(),
+    );
     return {
       ...seed,
       listing_agent: preferAttributionText(attr.listing_agent, seed.listing_agent),
@@ -921,7 +931,8 @@ async function applyRetsAttribution(
         ...seed.raw_data,
         ...attr.raw_data,
         _retsAttribution: {
-          ok: true,
+          ...(priorDiag ?? {}),
+          ok: hasFirmOrAgent || priorDiag?.ok === true,
           listing_agent: attr.listing_agent,
           listing_office: attr.listing_office,
           at: new Date().toISOString(),
