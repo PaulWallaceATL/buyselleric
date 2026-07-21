@@ -4,9 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 const selectClass =
-  "rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20";
+  "min-h-[48px] rounded-xl border border-border bg-muted/20 px-4 py-2.5 text-base text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 sm:min-h-[52px] sm:rounded-2xl";
 const inputClass =
-  "w-full rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20";
+  "w-full min-h-[48px] rounded-xl border border-border bg-muted/20 px-4 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 sm:min-h-[52px] sm:rounded-2xl";
 
 const priceOptions = [
   { label: "No min", value: "" },
@@ -95,29 +95,33 @@ export function ListingsFilters() {
 
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className={`inline-flex min-h-[40px] items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+          aria-expanded={open}
+          className={`inline-flex min-h-[48px] items-center gap-2.5 rounded-full px-5 text-base font-semibold transition-colors sm:min-h-[52px] sm:px-6 ${
             activeFilterCount > 0
               ? "bg-ring text-white"
               : "border border-border text-foreground hover:bg-muted/30"
           }`}
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" d="M3 4h18M6 8h12M9 12h6M11 16h2" />
           </svg>
           Filters
           {activeFilterCount > 0 && (
-            <span className="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-xs">{activeFilterCount}</span>
+            <span className="ml-0.5 rounded-full bg-white/20 px-2 py-0.5 text-sm tabular-nums">
+              {activeFilterCount}
+            </span>
           )}
         </button>
 
         <select
           value={current.sort}
           onChange={(e) => applyFilters({ sort: e.target.value })}
-          className={`${selectClass} min-h-[40px]`}
+          aria-label="Sort listings"
+          className={`${selectClass} min-w-[12.5rem] sm:min-w-[14rem]`}
         >
           {sortOptions.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -128,7 +132,7 @@ export function ListingsFilters() {
           <button
             type="button"
             onClick={clearFilters}
-            className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            className="min-h-[48px] px-2 text-base font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline sm:min-h-[52px]"
           >
             Clear filters
           </button>
@@ -136,7 +140,7 @@ export function ListingsFilters() {
       </div>
 
       {open && (
-        <div className="mt-4 grid gap-4 rounded-2xl border border-border bg-muted/10 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="mt-5 grid gap-4 rounded-2xl border border-border bg-muted/10 p-5 sm:grid-cols-2 sm:rounded-3xl sm:p-6 lg:grid-cols-3 xl:grid-cols-6">
           <div>
             <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Min price</label>
             <select

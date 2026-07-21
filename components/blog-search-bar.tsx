@@ -24,22 +24,22 @@ export function BlogSearchBar({ defaultValue = "" }: { defaultValue?: string }) 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-md">
+    <form onSubmit={handleSubmit} className="w-full">
       <div className={inputWrap}>
-        <div className="flex flex-1 items-center gap-2.5 pl-4">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        <div className="flex min-w-0 flex-1 items-center gap-3 pl-5 sm:pl-6">
+          <Search className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by title…"
-            className="min-h-[42px] w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none sm:text-base"
+            className="min-h-[52px] w-full bg-transparent text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none sm:min-h-[56px] sm:text-lg"
             aria-label="Search blog posts by title"
           />
         </div>
         <button
           type="submit"
-          className="mr-1.5 flex h-8 items-center rounded-full bg-foreground px-4 text-xs font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:text-sm"
+          className="mr-2 flex min-h-[40px] items-center rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:mr-2.5 sm:min-h-[44px] sm:px-7 sm:text-base"
         >
           Search
         </button>

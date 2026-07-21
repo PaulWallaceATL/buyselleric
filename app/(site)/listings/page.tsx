@@ -130,29 +130,31 @@ export default async function ListingsPage({
               : "Browse homes across Georgia. Use filters to narrow your search."}
         </p>
 
-        <div className="mt-8 flex flex-col gap-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <ListingsSearchBar defaultValue={filters.q ?? ""} baseParams={baseParams} />
-              {(hasFilters || total > 0) && (
-                <p className="text-sm text-muted-foreground" aria-live="polite">
-                  <span className="font-semibold tabular-nums text-foreground">
-                    {total.toLocaleString()}
-                  </span>{" "}
-                  {total === 1 ? "home" : "homes"} found
-                  {totalPages > 1 ? (
-                    <>
-                      {" "}
-                      · Page{" "}
-                      <span className="font-medium text-foreground">{page}</span> of{" "}
-                      <span className="font-medium text-foreground">{totalPages}</span>
-                    </>
-                  ) : null}
-                </p>
-              )}
-            </div>
+        <div className="mt-8 flex flex-col gap-5 sm:mt-10 sm:gap-6">
+          <ListingsSearchBar defaultValue={filters.q ?? ""} baseParams={baseParams} />
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            {(hasFilters || total > 0) ? (
+              <p className="text-sm text-muted-foreground sm:text-base" aria-live="polite">
+                <span className="font-semibold tabular-nums text-foreground">
+                  {total.toLocaleString()}
+                </span>{" "}
+                {total === 1 ? "home" : "homes"} found
+                {totalPages > 1 ? (
+                  <>
+                    {" "}
+                    · Page{" "}
+                    <span className="font-medium text-foreground">{page}</span> of{" "}
+                    <span className="font-medium text-foreground">{totalPages}</span>
+                  </>
+                ) : null}
+              </p>
+            ) : (
+              <span className="hidden sm:block" />
+            )}
             <ViewToggle baseParams={baseParams} activeView={view} />
           </div>
+
           <Suspense>
             <ListingsFilters />
           </Suspense>
@@ -235,17 +237,21 @@ function ViewToggle({ baseParams, activeView }: { baseParams: Record<string, str
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div
+      className="inline-flex shrink-0 items-center rounded-full border border-border bg-muted/20 p-1"
+      role="group"
+      aria-label="Results view"
+    >
       <Link
         href={buildHref("list")}
         scroll={false}
-        className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+        className={`inline-flex min-h-[44px] items-center gap-2 rounded-full px-5 text-sm font-semibold transition-colors sm:min-h-[48px] sm:px-6 sm:text-base ${
           activeView !== "map"
-            ? "bg-foreground text-background"
-            : "border border-border text-foreground hover:bg-muted/30"
+            ? "bg-foreground text-background shadow-sm"
+            : "text-foreground hover:bg-muted/40"
         }`}
       >
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
           <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
         List
@@ -253,13 +259,13 @@ function ViewToggle({ baseParams, activeView }: { baseParams: Record<string, str
       <Link
         href={buildHref("map")}
         scroll={false}
-        className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+        className={`inline-flex min-h-[44px] items-center gap-2 rounded-full px-5 text-sm font-semibold transition-colors sm:min-h-[48px] sm:px-6 sm:text-base ${
           activeView === "map"
-            ? "bg-foreground text-background"
-            : "border border-border text-foreground hover:bg-muted/30"
+            ? "bg-foreground text-background shadow-sm"
+            : "text-foreground hover:bg-muted/40"
         }`}
       >
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
         </svg>
         Map

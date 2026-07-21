@@ -31,8 +31,8 @@ export function BlogHero({ tiles, searchDefault = "" }: BlogHeroProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
-  const springX = useSpring(mx, { stiffness: 140, damping: 24, mass: 0.35 });
-  const springY = useSpring(my, { stiffness: 140, damping: 24, mass: 0.35 });
+  const springX = useSpring(mx, { stiffness: 90, damping: 28, mass: 0.45 });
+  const springY = useSpring(my, { stiffness: 90, damping: 28, mass: 0.45 });
 
   const spotlightX = useTransform(springX, [-1, 1], ["20%", "80%"]);
   const spotlightY = useTransform(springY, [-1, 1], ["25%", "75%"]);
@@ -77,22 +77,22 @@ export function BlogHero({ tiles, searchDefault = "" }: BlogHeroProps) {
         }}
       />
 
-      <div className={`${siteContainer} relative pb-16 pt-2 sm:pb-20 sm:pt-4 lg:pb-24`}>
-        <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-12 xl:gap-16">
+      <div className={`${siteContainer} relative pb-14 pt-2 sm:pb-16 sm:pt-4 lg:pb-20`}>
+        <div className="grid items-center gap-8 lg:grid-cols-12 lg:gap-10 xl:gap-14">
           <div className="lg:col-span-5">
             <motion.p
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c8b48a]"
             >
               {siteConfig.brandSlug}
             </motion.p>
             <motion.h1
-              initial={{ opacity: 0, y: 22 }}
+              initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.65, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-4 text-balance text-[clamp(2.75rem,7vw,4.75rem)] font-semibold leading-[0.95] tracking-tight text-[#f2efe8]"
+              transition={{ duration: 0.6, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-3 text-balance text-[clamp(2.5rem,6.5vw,4.5rem)] font-semibold leading-[0.95] tracking-tight text-[#f2efe8]"
             >
               Stories from
               <span className="mt-1 block font-serif text-[1.05em] font-normal italic text-[#e8dcc8]">
@@ -100,19 +100,19 @@ export function BlogHero({ tiles, searchDefault = "" }: BlogHeroProps) {
               </span>
             </motion.h1>
             <motion.p
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.16, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-5 max-w-md text-pretty text-base leading-relaxed text-[#f2efe8]/70 sm:text-lg"
+              transition={{ duration: 0.55, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-4 max-w-md text-pretty text-base leading-relaxed text-[#f2efe8]/70 sm:text-lg"
             >
               Market insight, home tips, and real estate updates from {siteConfig.agentName} for
               Georgia buyers and sellers.
             </motion.p>
             <motion.div
-              initial={{ opacity: 0, y: 14 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.24, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-8 max-w-md [&_form]:max-w-none [&_div]:border-[#f2efe8]/15 [&_div]:bg-[#f2efe8]/08 [&_input]:text-[#f2efe8] [&_input]:placeholder:text-[#f2efe8]/45 [&_svg]:text-[#f2efe8]/55 [&_button]:bg-[#f2efe8] [&_button]:text-[#0c1218]"
+              transition={{ duration: 0.5, delay: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-7 w-full max-w-xl [&_form]:max-w-none [&_div]:border-[#f2efe8]/15 [&_div]:bg-[#f2efe8]/08 [&_input]:text-[#f2efe8] [&_input]:placeholder:text-[#f2efe8]/45 [&_svg]:text-[#f2efe8]/55 [&_button]:bg-[#f2efe8] [&_button]:text-[#0c1218]"
             >
               <Suspense>
                 <BlogSearchBar defaultValue={searchDefault} />
@@ -126,7 +126,7 @@ export function BlogHero({ tiles, searchDefault = "" }: BlogHeroProps) {
             onMouseLeave={onLeave}
             className="relative lg:col-span-7"
           >
-            <div className="grid min-h-[22rem] grid-cols-12 grid-rows-6 gap-2.5 sm:min-h-[26rem] sm:gap-3 lg:min-h-[30rem]">
+            <div className="grid min-h-[20rem] grid-cols-12 grid-rows-6 gap-2.5 sm:min-h-[24rem] sm:gap-3 lg:min-h-[28rem]">
               {a ? (
                 <BentoTile
                   post={a}
@@ -240,7 +240,7 @@ function BentoTile({
             src={post.cover_image_url}
             alt=""
             {...(priority ? { priority: true } : {})}
-            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
         </motion.div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />

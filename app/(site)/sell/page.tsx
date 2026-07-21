@@ -42,8 +42,8 @@ export default function SellPage(): ReactNode {
     >
       <SellHero />
 
-      <section id="consultation" className={`${siteContainer} scroll-mt-28 pt-10 sm:pt-14 lg:pt-16`}>
-        <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-14 xl:gap-16">
+      <section id="consultation" className={`${siteContainer} scroll-mt-28 pt-8 sm:pt-10 lg:pt-12`}>
+        <div className="grid items-start gap-8 lg:grid-cols-12 lg:gap-12 xl:gap-14">
           <aside className="lg:col-span-5 lg:sticky lg:top-28">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               How it works

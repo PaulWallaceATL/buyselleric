@@ -139,7 +139,7 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
             try {
               const u = new URL(raw, window.location.origin);
               if (u.origin !== window.location.origin) return;
-              if (u.pathname !== "/" || !u.hash) return;
+              if (u.pathname !== window.location.pathname || !u.hash) return;
               hash = u.hash;
             } catch {
               return;
@@ -147,10 +147,6 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
           }
 
           if (!hash || hash === "#") return;
-
-          if (window.location.pathname !== "/") {
-            return;
-          }
 
           const element = document.querySelector(hash);
           if (!element) return;

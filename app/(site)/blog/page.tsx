@@ -88,9 +88,9 @@ export default async function BlogPage({
 
       <BlogHero tiles={heroTiles} searchDefault={q} />
 
-      <div className={`${siteContainer} pt-4 sm:pt-6`}>
+      <div className={`${siteContainer} pt-2 sm:pt-4`}>
         {q ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground sm:text-base">
             {total === 0
               ? `No articles matching “${q}”.`
               : `${total.toLocaleString()} ${total === 1 ? "article" : "articles"} matching “${q}”.`}
@@ -98,7 +98,7 @@ export default async function BlogPage({
         ) : null}
 
         {posts.length === 0 ? (
-          <div className="mt-10 rounded-3xl border border-dashed border-border bg-muted/20 p-10 text-center sm:mt-12 sm:p-12">
+          <div className="mt-8 rounded-3xl border border-dashed border-border bg-muted/20 p-10 text-center sm:mt-10 sm:p-12">
             <p className="font-medium text-foreground">
               {q ? "No articles match your search" : "No articles yet."}
             </p>
@@ -119,7 +119,7 @@ export default async function BlogPage({
           </div>
         ) : (
           <>
-            <div className="mt-10 grid gap-8 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid gap-6 sm:mt-8 sm:grid-cols-2 lg:grid-cols-3">
               {posts.map((post) => (
                 <Link
                   key={post.id}
