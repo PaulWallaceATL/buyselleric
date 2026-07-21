@@ -3,6 +3,7 @@ import {
   bridgeODataGet,
   bridgePropertyToCoreFields,
   bridgeRowHasRemarkFields,
+  enrichBridgeRowWithAttribution,
   escapeODataString,
   extractMediaUrls,
   fetchBridgeMediaUrlsForListing,
@@ -126,7 +127,7 @@ const SELECT_GRID =
 
 /** Attribution fields for detail pages — not blocked on gamls2 IDX. */
 const SELECT_ATTRIBUTION =
-  "ListAgentFirstName,ListAgentLastName,ListOfficePhone,ListAgentPreferredPhone,ListAgentDirectPhone,ListAgentCellPhone,ListOfficeFax,CoListAgentFirstName,CoListAgentLastName";
+  "ListAgentFirstName,ListAgentLastName,ListOfficePhone,ListAgentPreferredPhone,ListAgentDirectPhone,ListAgentCellPhone,ListOfficeFax,CoListAgentFirstName,CoListAgentLastName,ListAgentKey,ListOfficeKey,ListAgentMlsId,ListOfficeMlsId,ListAgentEmail,ListAgentURL,ListOfficeURL,ListOfficeEmail";
 
 /** gamls2 IDX rejects these on $select (see Bridge 400). Strip from env overrides too. */
 const GAMLS_BLOCKED_SELECT_FIELDS = new Set([
@@ -1044,13 +1045,40 @@ export async function bridgeGetMlsListingById(
     const listingId = String(enriched.ListingId ?? "").trim();
     const inlinePhotos = extractMediaUrls(enriched.Media);
 
-    // Hot path: Property already has photos — return immediately (gallery bumps ConnectMLS width).
-    // Media-entity + attribution are for background enrich via fullEnrich.
+    // Always try expand/Members/Offices for agent+broker (IDX $select often blanks names).
+    const needsAttribution =
+      !String(enriched.ListAgentFullName ?? "").trim() &&
+      !(
+        String(enriched.ListAgentFirstName ?? "").trim() &&
+        String(enriched.ListAgentLastName ?? "").trim()
+      ) &&
+      !String(enriched.ListOfficeName ?? "").trim();
+
+    if (fullEnrich || needsAttribution) {
+      try {
+        const attrEnrich = enrichBridgeRowWithAttribution(client, filter, enriched, {
+          revalidate: DETAIL_REVALIDATE,
+        });
+        // Don't let attribution block first paint forever when photos are ready.
+        enriched = fullEnrich
+          ? await attrEnrich
+          : await Promise.race([
+              attrEnrich,
+              new Promise<Record<string, unknown>>((resolve) => {
+                setTimeout(() => resolve(enriched), 2_000);
+              }),
+            ]);
+      } catch (e) {
+        console.warn("bridgeGetMlsListingById: attribution enrich failed", e);
+      }
+    }
+
+    // Hot path after attribution attempt: Property already has photos — return immediately.
     if (!fullEnrich && inlinePhotos.length > 0) {
       return rowToMlsListingRow(enriched);
     }
 
-    // Second pass for agent/broker fields (often omitted from sparse selects).
+    // Second pass for agent/broker scalar fields (often omitted from sparse selects).
     const attrPromise = (async (): Promise<Record<string, unknown> | null> => {
       try {
         const attrSelect = sanitizeBridgePropertySelect(

@@ -492,30 +492,31 @@ export function bridgePropertyToCoreFields(
   const extra = options?.supplementalImageUrls ?? [];
   const image_urls = mergeImageLists(extra, inlinePhotos).slice(0, BRIDGE_MEDIA_MAX_URLS);
 
-  const listAgentFirstLast = [str(row.ListAgentFirstName), str(row.ListAgentLastName)].filter(Boolean).join(" ").trim();
-  const coFirstLast = [str(row.CoListAgentFirstName), str(row.CoListAgentLastName)].filter(Boolean).join(" ").trim();
+  const flat = flattenBridgeExpandedAttribution(row);
+  const listAgentFirstLast = [str(flat.ListAgentFirstName), str(flat.ListAgentLastName)].filter(Boolean).join(" ").trim();
+  const coFirstLast = [str(flat.CoListAgentFirstName), str(flat.CoListAgentLastName)].filter(Boolean).join(" ").trim();
   const listing_agent =
-    str(row.ListAgentFullName) ||
-    str(row.ListAgent) ||
+    str(flat.ListAgentFullName) ||
+    str(flat.ListAgent) ||
     listAgentFirstLast ||
-    str(row.CoListAgentFullName) ||
-    str(row.CoListAgent) ||
+    str(flat.CoListAgentFullName) ||
+    str(flat.CoListAgent) ||
     coFirstLast;
 
   const listing_agent_phone =
-    str(row.ListAgentPreferredPhone) ||
-    str(row.ListAgentDirectPhone) ||
-    str(row.ListAgentCellPhone) ||
-    str(row.ListAgentMobilePhone) ||
-    str(row.ListAgentOfficePhone) ||
-    str(row.ListAgentPhone) ||
-    str(row.CoListAgentPreferredPhone) ||
-    str(row.CoListAgentDirectPhone) ||
-    str(row.CoListAgentCellPhone);
+    str(flat.ListAgentPreferredPhone) ||
+    str(flat.ListAgentDirectPhone) ||
+    str(flat.ListAgentCellPhone) ||
+    str(flat.ListAgentMobilePhone) ||
+    str(flat.ListAgentOfficePhone) ||
+    str(flat.ListAgentPhone) ||
+    str(flat.CoListAgentPreferredPhone) ||
+    str(flat.CoListAgentDirectPhone) ||
+    str(flat.CoListAgentCellPhone);
 
   const listing_office =
-    str(row.ListOfficeName) || str(row.ListOffice) || str(row.ListCompany) || str(row.ListBrokerageName);
-  const listing_office_phone = str(row.ListOfficePhone) || str(row.ListOfficeFax);
+    str(flat.ListOfficeName) || str(flat.ListOffice) || str(flat.ListCompany) || str(flat.ListBrokerageName);
+  const listing_office_phone = str(flat.ListOfficePhone) || str(flat.ListOfficeFax);
 
   return {
     listingKey,
@@ -548,4 +549,207 @@ export function bridgePropertyToCoreFields(
     listing_office,
     listing_office_phone,
   };
+}
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  return v as Record<string, unknown>;
+}
+
+/** Pull agent/office name+contact from nested Bridge `$expand=ListAgent,ListOffice` objects. */
+export function flattenBridgeExpandedAttribution(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...row };
+  const agent = asRecord(row.ListAgent) ?? asRecord(row.Member) ?? asRecord(row.ListMember);
+  const office = asRecord(row.ListOffice) ?? asRecord(row.Office);
+
+  if (agent) {
+    const full =
+      str(agent.MemberFullName) ||
+      str(agent.FullName) ||
+      str(agent.ListAgentFullName) ||
+      [str(agent.MemberFirstName) || str(agent.FirstName) || str(agent.firstName), str(agent.MemberLastName) || str(agent.LastName) || str(agent.lastName)]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+    if (full && !str(out.ListAgentFullName)) out.ListAgentFullName = full;
+    if (!str(out.ListAgentFirstName)) {
+      out.ListAgentFirstName =
+        str(agent.MemberFirstName) || str(agent.FirstName) || str(agent.firstName);
+    }
+    if (!str(out.ListAgentLastName)) {
+      out.ListAgentLastName = str(agent.MemberLastName) || str(agent.LastName) || str(agent.lastName);
+    }
+    if (!str(out.ListAgentPreferredPhone)) {
+      out.ListAgentPreferredPhone =
+        str(agent.MemberPreferredPhone) ||
+        str(agent.PreferredPhone) ||
+        str(agent.MemberDirectPhone) ||
+        str(agent.DirectPhone) ||
+        str(agent.MemberMobilePhone) ||
+        str(agent.MobilePhone) ||
+        str(agent.phone);
+    }
+    if (!str(out.ListAgentEmail)) {
+      out.ListAgentEmail = str(agent.MemberEmail) || str(agent.Email) || str(agent.email);
+    }
+    if (!str(out.ListAgentURL)) {
+      out.ListAgentURL = str(agent.MemberMlsIdUrl) || str(agent.MemberURL) || str(agent.Website) || str(agent.url);
+    }
+    if (!str(out.ListAgentKey)) {
+      out.ListAgentKey = str(agent.MemberKey) || str(agent.Key) || str(agent.id);
+    }
+  }
+
+  if (office) {
+    const name =
+      str(office.OfficeName) ||
+      str(office.Name) ||
+      str(office.name) ||
+      str(office.ListOfficeName) ||
+      str(office.BrokerageName);
+    if (name && !str(out.ListOfficeName)) out.ListOfficeName = name;
+    if (!str(out.ListOfficePhone)) {
+      out.ListOfficePhone =
+        str(office.OfficePhone) || str(office.Phone) || str(office.phone) || str(office.MainOfficePhone);
+    }
+    if (!str(out.ListOfficeEmail)) {
+      out.ListOfficeEmail = str(office.OfficeEmail) || str(office.Email) || str(office.email);
+    }
+    if (!str(out.ListOfficeURL)) {
+      out.ListOfficeURL = str(office.OfficeUrl) || str(office.Website) || str(office.url);
+    }
+    if (!str(out.ListOfficeKey)) {
+      out.ListOfficeKey = str(office.OfficeKey) || str(office.Key) || str(office.id);
+    }
+  }
+
+  return out;
+}
+
+function bridgeRowHasAgentOrOfficeName(row: Record<string, unknown>): boolean {
+  const flat = flattenBridgeExpandedAttribution(row);
+  const agent =
+    str(flat.ListAgentFullName) ||
+    [str(flat.ListAgentFirstName), str(flat.ListAgentLastName)].filter(Boolean).join(" ");
+  const office = str(flat.ListOfficeName) || str(flat.ListOffice);
+  return Boolean(agent || office);
+}
+
+async function bridgeGetEntityByKey(
+  cfg: BridgeODataConfig,
+  resource: "Members" | "Offices",
+  key: string,
+  options?: { revalidate?: number },
+): Promise<Record<string, unknown> | null> {
+  const k = key.trim();
+  if (!k) return null;
+  const esc = escapeODataString(k);
+  const base = odataResourceCollectionUrl(cfg, resource);
+
+  // Prefer keyed OData read, then filter fallback.
+  try {
+    const keyed = new URL(`${base}('${esc}')`);
+    return await bridgeODataGetAbsolute<Record<string, unknown>>(cfg, keyed.toString(), options);
+  } catch {
+    /* fall through */
+  }
+
+  try {
+    const keyField = resource === "Members" ? "MemberKey" : "OfficeKey";
+    const data = await bridgeODataGetAbsolute<BridgeODataValueResponse<Record<string, unknown>>>(
+      cfg,
+      `${base}?$filter=${encodeURIComponent(`${keyField} eq '${esc}'`)}&$top=1`,
+      options,
+    );
+    return data.value?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Enrich a Property row with agent/broker via $expand and/or Members/Offices lookups.
+ * gamls2 IDX often blanks ListAgentFullName / ListOfficeName on $select — expand/keys still work.
+ */
+export async function enrichBridgeRowWithAttribution(
+  cfg: BridgeODataConfig,
+  filter: string,
+  row: Record<string, unknown>,
+  options?: { revalidate?: number },
+): Promise<Record<string, unknown>> {
+  let enriched = flattenBridgeExpandedAttribution(row);
+  if (bridgeRowHasAgentOrOfficeName(enriched)) return enriched;
+
+  const revalidate = options?.revalidate ?? 60;
+  const keySelect = sanitizeSelectForAttributionKeys(
+    "ListingKey,ListingId,ListAgentKey,ListOfficeKey,ListAgentMlsId,ListOfficeMlsId,ListAgentFirstName,ListAgentLastName,ListAgentPreferredPhone,ListAgentDirectPhone,ListAgentCellPhone,ListOfficePhone,ListAgentEmail,ListAgentURL,ListOfficeURL,ListOfficeEmail,CoListAgentFirstName,CoListAgentLastName",
+  );
+
+  // 1) $expand ListAgent + ListOffice (nav props must appear in $select per Bridge docs).
+  for (const expand of ["ListAgent,ListOffice", "ListAgent", "ListOffice"] as const) {
+    try {
+      const navBits = expand.split(",");
+      const $select = `${keySelect},${navBits.join(",")}`;
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(
+        cfg,
+        { $filter: filter, $select, $expand: expand, $top: "1" },
+        { revalidate },
+      );
+      const hit = data.value?.[0];
+      if (!hit) continue;
+      enriched = flattenBridgeExpandedAttribution({ ...enriched, ...hit });
+      if (bridgeRowHasAgentOrOfficeName(enriched)) return enriched;
+    } catch {
+      /* expand not allowed on this contract — try next */
+    }
+  }
+
+  // 2) Direct Members / Offices by key (from row or a lightweight key select).
+  let agentKey = str(enriched.ListAgentKey);
+  let officeKey = str(enriched.ListOfficeKey);
+  if (!agentKey || !officeKey) {
+    try {
+      const data = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(
+        cfg,
+        { $filter: filter, $select: keySelect, $top: "1" },
+        { revalidate },
+      );
+      const hit = data.value?.[0];
+      if (hit) {
+        enriched = { ...enriched, ...hit };
+        agentKey = agentKey || str(hit.ListAgentKey);
+        officeKey = officeKey || str(hit.ListOfficeKey);
+      }
+    } catch {
+      /* keys may be blocked */
+    }
+  }
+
+  const [member, office] = await Promise.all([
+    agentKey ? bridgeGetEntityByKey(cfg, "Members", agentKey, { revalidate }) : Promise.resolve(null),
+    officeKey ? bridgeGetEntityByKey(cfg, "Offices", officeKey, { revalidate }) : Promise.resolve(null),
+  ]);
+
+  if (member) enriched = flattenBridgeExpandedAttribution({ ...enriched, ListAgent: member });
+  if (office) enriched = flattenBridgeExpandedAttribution({ ...enriched, ListOffice: office });
+  return enriched;
+}
+
+/** Keys/contact fields that are usually allowed even when FullName/OfficeName are blocked. */
+function sanitizeSelectForAttributionKeys(select: string): string {
+  const blocked = new Set(["ListAgentFullName", "ListOfficeName", "Unit", "BathroomsTotal"]);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const f of select
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((field) => !blocked.has(field))) {
+    if (seen.has(f)) continue;
+    seen.add(f);
+    out.push(f);
+  }
+  return out.join(",");
 }
