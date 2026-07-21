@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   dreamIntentToSearchParams,
   parseDreamHomeIntent,
+  parseDreamHomeIntentHeuristicOnly,
 } from "@/lib/dream-home-intent";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +11,55 @@ export const maxDuration = 30;
 const MIN_LEN = 8;
 const MAX_LEN = 500;
 
-export async function POST(request: Request) {
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json(
-      { ok: false, message: "Dream search is not configured yet." },
-      { status: 503 },
-    );
-  }
+function intentHasSignal(intent: {
+  filters: {
+    q?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    minBeds?: number;
+    minBaths?: number;
+    minSqft?: number;
+    maxSqft?: number;
+    propertyType?: string;
+  };
+  softPrefs: string[];
+  amenities?: {
+    hasPool?: boolean;
+    minGarageSpaces?: number;
+    hasFireplace?: boolean;
+    hasWaterfront?: boolean;
+    minYearBuilt?: number;
+    maxYearBuilt?: number;
+    maxStories?: number;
+    minAcres?: number;
+    noHoa?: boolean;
+  };
+}): boolean {
+  const f = intent.filters;
+  const a = intent.amenities ?? {};
+  return !!(
+    f.q ||
+    f.minPrice != null ||
+    f.maxPrice != null ||
+    f.minBeds != null ||
+    f.minBaths != null ||
+    f.minSqft != null ||
+    f.maxSqft != null ||
+    f.propertyType ||
+    intent.softPrefs.length > 0 ||
+    a.hasPool ||
+    (a.minGarageSpaces != null && a.minGarageSpaces > 0) ||
+    a.hasFireplace ||
+    a.hasWaterfront ||
+    a.minYearBuilt != null ||
+    a.maxYearBuilt != null ||
+    a.maxStories != null ||
+    a.minAcres != null ||
+    a.noHoa
+  );
+}
 
+export async function POST(request: Request) {
   let body: unknown;
   try {
     body = await request.json();
@@ -45,23 +87,24 @@ export async function POST(request: Request) {
   }
 
   try {
-    const intent = await parseDreamHomeIntent(trimmed);
-    const hasHard =
-      !!intent.filters.q ||
-      intent.filters.minPrice != null ||
-      intent.filters.maxPrice != null ||
-      intent.filters.minBeds != null ||
-      intent.filters.minBaths != null ||
-      intent.filters.minSqft != null ||
-      intent.filters.maxSqft != null ||
-      !!intent.filters.propertyType;
+    let intent;
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        intent = await parseDreamHomeIntent(trimmed);
+      } catch (err) {
+        console.warn("[dream-search] OpenAI failed, using heuristics", err);
+        intent = parseDreamHomeIntentHeuristicOnly(trimmed);
+      }
+    } else {
+      intent = parseDreamHomeIntentHeuristicOnly(trimmed);
+    }
 
-    if (!hasHard && intent.softPrefs.length === 0) {
+    if (!intentHasSignal(intent)) {
       return NextResponse.json(
         {
           ok: false,
           message:
-            "We couldn't pull searchable filters from that. Try adding a city, budget, or bedroom count.",
+            "We couldn't pull searchable filters from that. Try adding a city, budget, bedrooms, or amenities like pool/garage.",
         },
         { status: 422 },
       );

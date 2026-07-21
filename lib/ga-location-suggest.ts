@@ -96,3 +96,26 @@ export function localGaSearchSuggestions(raw: string): SearchSuggestion[] {
 
   return out.slice(0, 8);
 }
+
+/**
+ * Scan free text for a known Georgia city or ZIP (longest city name wins).
+ * Used by dream-home intent so “near Warner Robins” becomes a real location filter.
+ */
+export function detectGaLocationInText(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  const zip = text.match(/\b(3\d{4})\b/);
+  if (zip?.[1]) {
+    const zip5 = zip[1];
+    for (const loc of GA_LOCATIONS) {
+      if (loc.zips?.includes(zip5)) return zip5;
+    }
+    return zip5;
+  }
+
+  const sorted = [...GA_LOCATIONS].sort((a, b) => b.city.length - a.city.length);
+  for (const loc of sorted) {
+    const city = loc.city.toLowerCase();
+    if (lower.includes(city)) return `${loc.city}, ${loc.state}`;
+  }
+  return undefined;
+}

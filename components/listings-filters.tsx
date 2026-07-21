@@ -73,11 +73,22 @@ export function ListingsFilters() {
     mapPoly: searchParams.get("mapPoly") ?? "",
     dream: searchParams.get("dream") ?? "",
     soft: searchParams.get("soft") ?? "",
+    pool: searchParams.get("pool") ?? "",
+    garage: searchParams.get("garage") ?? "",
+    fireplace: searchParams.get("fireplace") ?? "",
+    waterfront: searchParams.get("waterfront") ?? "",
+    minYear: searchParams.get("minYear") ?? "",
+    maxYear: searchParams.get("maxYear") ?? "",
+    maxStories: searchParams.get("maxStories") ?? "",
+    minAcres: searchParams.get("minAcres") ?? "",
+    noHoa: searchParams.get("noHoa") ?? "",
   };
 
   const activeFilterCount = [
     current.minPrice, current.maxPrice, current.minBeds,
     current.minBaths, current.minSqft, current.maxSqft, current.propertyType,
+    current.pool, current.garage, current.fireplace, current.waterfront,
+    current.minYear, current.maxYear, current.maxStories, current.minAcres, current.noHoa,
   ].filter(Boolean).length;
 
   function applyFilters(overrides: Record<string, string>) {

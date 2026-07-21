@@ -95,7 +95,7 @@ export function DreamHomePrompt({
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            We turn this into filters you can edit. Amenity matching comes later.
+            We apply MLS amenity filters when available, then rank by remarks.
           </p>
           <button
             type="submit"

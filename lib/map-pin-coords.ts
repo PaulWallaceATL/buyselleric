@@ -9,6 +9,33 @@ type Row = {
   longitude: number | null;
 };
 
+function hasUsableCoords(lat: number | null, lng: number | null): lat is number {
+  if (lat == null || lng == null) return false;
+  // Some feeds zero-fill missing geo; treat as unknown so ZIP fallback can run.
+  if (lat === 0 && lng === 0) return false;
+  return true;
+}
+
+/**
+ * True when a listing belongs inside a drawn outline: exact coords when present,
+ * otherwise GA ZIP centroid vs the polygon.
+ */
+export function listingMatchesDrawnPolygon(
+  listing: Pick<Row, "latitude" | "longitude" | "postal_code">,
+  polygon: ReadonlyArray<MapPolygonVertex>,
+): boolean {
+  if (polygon.length < 3) return true;
+  const lat = listing.latitude;
+  const lng = listing.longitude;
+  if (hasUsableCoords(lat, lng) && lat != null && lng != null) {
+    return pointInPolygon(lat, lng, polygon);
+  }
+  const zip = normalizeUsZip5(listing.postal_code);
+  const c = zip ? gaZipCentroid(zip) : null;
+  if (c) return pointInPolygon(c.lat, c.lng, polygon);
+  return false;
+}
+
 /** Small stable offset so many listings in the same ZIP don’t stack on one pixel. */
 function centroidJitter(id: string): { dLat: number; dLng: number } {
   let h = 2166136261;
@@ -33,7 +60,7 @@ export function applyZipCentroidPinCoords<T extends Row>(
   if (process.env.DISABLE_MAP_ZIP_PIN_FALLBACK?.trim() === "true") return listings;
 
   return listings.map((l) => {
-    if (l.latitude != null && l.longitude != null) return l;
+    if (hasUsableCoords(l.latitude, l.longitude)) return l;
     const zip = normalizeUsZip5(l.postal_code);
     const c = zip ? gaZipCentroid(zip) : null;
     if (!c) return l;

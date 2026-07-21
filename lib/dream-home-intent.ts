@@ -1,5 +1,13 @@
 import OpenAI from "openai";
 import { siteConfig } from "@/lib/config";
+import { detectGaLocationInText } from "@/lib/ga-location-suggest";
+import { heuristicDreamExtract } from "@/lib/dream-home-match";
+import {
+  softPrefsToAmenities,
+  writeAmenitiesToSearchParams,
+  amenityChipsFromParams,
+  type ListingAmenities,
+} from "@/lib/listing-amenities";
 import type { ListingFilters } from "@/lib/listings-queries";
 
 let _client: OpenAI | null = null;
@@ -28,8 +36,14 @@ export type DreamHomeHardFilters = {
 
 export type DreamHomeIntent = {
   filters: DreamHomeHardFilters;
-  /** Lifestyle / amenity phrases we cannot filter yet — shown as “noted” chips only. */
+  /**
+   * Lifestyle / amenity phrases — used to rank homes (remarks / description match).
+   * Shown as editable chips. Amenities that promote to hard filters are also listed here
+   * so ranking still helps when MLS amenity fields are sparse.
+   */
   softPrefs: string[];
+  /** Structured amenity hard-filters promoted from soft prefs / heuristics. */
+  amenities: ListingAmenities;
   /** Short plain-language summary of what we understood. */
   summary: string;
 };
@@ -54,11 +68,11 @@ Return ONLY valid JSON (no markdown) with this exact shape:
 Rules:
 - q: city, neighborhood, ZIP, or "City, ST" when a location is clear. Prefer Georgia localities. Null if no location.
 - Prices in whole US dollars (e.g. 450000 for $450k). Parse "under 500k", "around 300k", budgets honestly.
-- minBeds / minBaths: minimums only (integers; baths may be 1, 2, 2.5 → use floor for beds, keep decimal for baths as number).
+- minBeds / minBaths: minimums only (integers; baths may be 1, 2, 2.5).
 - propertyType: only when clear — use one of: Residential, Condo, Townhouse, Land, Multi-Family. Otherwise null.
 - sort: only if the user asks (cheapest → price_asc, newest → newest, largest → sqft_desc). Otherwise null.
-- softPrefs: short phrases for wants we cannot filter yet (pool, garage, farmhouse, modern, quiet, fenced yard, etc.). Max 8. Do NOT put location or price here.
-- summary: one friendly sentence describing the hard filters (and noting soft wants briefly).
+- softPrefs: short amenity/lifestyle phrases that appear in MLS remarks (pool, garage, farmhouse, modern, quiet, fenced yard, waterfront, basement, hardwood, chef's kitchen, etc.). Max 8. Do NOT put location or price here. Prefer canonical short labels.
+- summary: one friendly sentence describing filters + soft wants.
 - Do not invent a location. If none given, q is null.
 - Ignore non-housing requests; still return the JSON schema with nulls and empty softPrefs.`;
 
@@ -109,7 +123,61 @@ function normalizeIntent(raw: Record<string, unknown>): DreamHomeIntent {
     optionalString(raw.summary) ??
     "We mapped your description into searchable filters. You can edit the chips below.";
 
-  return { filters, softPrefs, summary };
+  const { amenities, remainingSoft } = softPrefsToAmenities(softPrefs);
+  return { filters, softPrefs: remainingSoft, amenities, summary };
+}
+
+/** Merge LLM + heuristic extracts — fill gaps, union soft prefs, prefer specific location. */
+export function mergeDreamIntent(
+  llm: DreamHomeIntent,
+  prompt: string,
+): DreamHomeIntent {
+  const h = heuristicDreamExtract(prompt);
+  const gaLoc = detectGaLocationInText(prompt);
+
+  const filters: DreamHomeHardFilters = { ...llm.filters };
+
+  if (!filters.q) {
+    if (gaLoc) filters.q = gaLoc;
+    // heuristic doesn't set q — GA detector covers cities
+  } else if (gaLoc && filters.q.length < gaLoc.length && gaLoc.toLowerCase().includes(filters.q.toLowerCase())) {
+    filters.q = gaLoc;
+  }
+
+  if (filters.minPrice == null && h.minPrice != null) filters.minPrice = h.minPrice;
+  if (filters.maxPrice == null && h.maxPrice != null) filters.maxPrice = h.maxPrice;
+  if (filters.minBeds == null && h.minBeds != null) filters.minBeds = h.minBeds;
+  if (filters.minBaths == null && h.minBaths != null) filters.minBaths = h.minBaths;
+  if (filters.minSqft == null && h.minSqft != null) filters.minSqft = h.minSqft;
+  if (filters.maxSqft == null && h.maxSqft != null) filters.maxSqft = h.maxSqft;
+  if (!filters.propertyType && h.propertyType) filters.propertyType = h.propertyType;
+
+  const softPrefs = Array.from(
+    new Set(
+      [...llm.softPrefs, ...h.softPrefs].map((s) => s.trim()).filter(Boolean),
+    ),
+  ).slice(0, 8);
+
+  const { amenities, remainingSoft } = softPrefsToAmenities(softPrefs);
+
+  let summary = llm.summary;
+  const amenityBits: string[] = [];
+  if (amenities.hasPool) amenityBits.push("pool");
+  if (amenities.minGarageSpaces) amenityBits.push("garage");
+  if (amenities.hasFireplace) amenityBits.push("fireplace");
+  if (amenities.hasWaterfront) amenityBits.push("waterfront");
+  if (amenities.maxStories === 1) amenityBits.push("ranch / 1-story");
+  if (amenities.minAcres) amenityBits.push(`${amenities.minAcres}+ acres`);
+  if (amenities.noHoa) amenityBits.push("no HOA");
+  if (amenities.minYearBuilt) amenityBits.push(`built ${amenities.minYearBuilt}+`);
+
+  if (amenityBits.length && !/pool|garage|amenity|filter/i.test(summary)) {
+    summary = `${summary} Applying MLS filters for: ${amenityBits.join(", ")}.`;
+  } else if (remainingSoft.length && !/pool|garage|match|prefer|want/i.test(summary)) {
+    summary = `${summary} We'll boost homes whose listings mention: ${remainingSoft.join(", ")}.`;
+  }
+
+  return { filters, softPrefs: remainingSoft, amenities, summary };
 }
 
 export async function parseDreamHomeIntent(prompt: string): Promise<DreamHomeIntent> {
@@ -123,8 +191,8 @@ export async function parseDreamHomeIntent(prompt: string): Promise<DreamHomeInt
         content: `Buyer's description:\n\n${prompt}`,
       },
     ],
-    temperature: 0.2,
-    max_tokens: 600,
+    temperature: 0.1,
+    max_tokens: 700,
     response_format: { type: "json_object" },
   });
 
@@ -138,7 +206,43 @@ export async function parseDreamHomeIntent(prompt: string): Promise<DreamHomeInt
     throw new Error("Could not parse dream-home intent JSON");
   }
 
-  return normalizeIntent(parsed);
+  return mergeDreamIntent(normalizeIntent(parsed), prompt);
+}
+
+/**
+ * Offline / API-down fallback — heuristics only so dream search still works.
+ */
+export function parseDreamHomeIntentHeuristicOnly(prompt: string): DreamHomeIntent {
+  const h = heuristicDreamExtract(prompt);
+  const gaLoc = detectGaLocationInText(prompt);
+  const filters: DreamHomeHardFilters = {};
+  if (gaLoc) filters.q = gaLoc;
+  if (h.minPrice != null) filters.minPrice = h.minPrice;
+  if (h.maxPrice != null) filters.maxPrice = h.maxPrice;
+  if (h.minBeds != null) filters.minBeds = h.minBeds;
+  if (h.minBaths != null) filters.minBaths = h.minBaths;
+  if (h.minSqft != null) filters.minSqft = h.minSqft;
+  if (h.maxSqft != null) filters.maxSqft = h.maxSqft;
+  if (h.propertyType) filters.propertyType = h.propertyType;
+
+  const softPrefs = h.softPrefs;
+  const { amenities, remainingSoft } = softPrefsToAmenities(softPrefs);
+  const bits: string[] = [];
+  if (filters.q) bits.push(filters.q);
+  if (filters.maxPrice) bits.push(`up to $${Math.round(filters.maxPrice / 1000)}k`);
+  if (filters.minBeds) bits.push(`${filters.minBeds}+ beds`);
+  if (amenities.hasPool) bits.push("pool");
+  if (amenities.minGarageSpaces) bits.push("garage");
+  if (remainingSoft.length) bits.push(`preferring ${remainingSoft.join(", ")}`);
+
+  return {
+    filters,
+    softPrefs: remainingSoft,
+    amenities,
+    summary: bits.length
+      ? `Searching ${bits.join(" · ")}.`
+      : "We used keyword matching from your description.",
+  };
 }
 
 /** Encode hard filters (+ optional dream/soft) into listings URL search params. */
@@ -157,6 +261,7 @@ export function dreamIntentToSearchParams(
   if (f.maxSqft != null) p.set("maxSqft", String(f.maxSqft));
   if (f.propertyType) p.set("propertyType", f.propertyType);
   if (f.sort && f.sort !== "price_desc") p.set("sort", f.sort);
+  writeAmenitiesToSearchParams(p, intent.amenities ?? {});
   if (options?.dreamText?.trim()) p.set("dream", options.dreamText.trim().slice(0, 500));
   if (intent.softPrefs.length > 0) p.set("soft", intent.softPrefs.join("|"));
   if (options?.view && options.view !== "list") p.set("view", options.view);
@@ -195,6 +300,15 @@ export function dreamChipsFromSearchParams(params: {
   maxSqft?: string;
   propertyType?: string;
   soft?: string;
+  pool?: string;
+  garage?: string;
+  fireplace?: string;
+  waterfront?: string;
+  minYear?: string;
+  maxYear?: string;
+  maxStories?: string;
+  minAcres?: string;
+  noHoa?: string;
 }): DreamChip[] {
   const chips: DreamChip[] = [];
 
@@ -256,6 +370,25 @@ export function dreamChipsFromSearchParams(params: {
       id: "propertyType",
       param: "propertyType",
       label: params.propertyType,
+      kind: "hard",
+    });
+  }
+
+  for (const a of amenityChipsFromParams({
+    ...(params.pool ? { pool: params.pool } : {}),
+    ...(params.garage ? { garage: params.garage } : {}),
+    ...(params.fireplace ? { fireplace: params.fireplace } : {}),
+    ...(params.waterfront ? { waterfront: params.waterfront } : {}),
+    ...(params.minYear ? { minYear: params.minYear } : {}),
+    ...(params.maxYear ? { maxYear: params.maxYear } : {}),
+    ...(params.maxStories ? { maxStories: params.maxStories } : {}),
+    ...(params.minAcres ? { minAcres: params.minAcres } : {}),
+    ...(params.noHoa ? { noHoa: params.noHoa } : {}),
+  })) {
+    chips.push({
+      id: a.id,
+      param: a.param,
+      label: a.label,
       kind: "hard",
     });
   }

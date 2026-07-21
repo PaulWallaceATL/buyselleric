@@ -15,6 +15,12 @@ import {
   MAP_POLYGON_QUERY_KEY,
 } from "@/lib/map-polygon-query";
 import { fetchAllPinsForMap, searchWithFilters, type ListingFilters } from "@/lib/listings-queries";
+import {
+  applyAmenitiesToFilters,
+  listingFiltersHaveAmenities,
+  parseAmenitiesFromSearchParams,
+  writeAmenitiesToSearchParams,
+} from "@/lib/listing-amenities";
 import { eyebrow, innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
@@ -56,31 +62,56 @@ export default async function ListingsPage({
     decodedPoly && decodedPoly.length >= 3 ? decodedPoly : undefined;
   const mapPolyEncoded = mapPolygon ? encodeMapPolygonQuery(mapPolygon) : undefined;
 
-  const filters: ListingFilters = {
-    q: typeof params.q === "string" ? params.q.trim() : undefined,
-    minPrice: parseNum(params.minPrice),
-    maxPrice: parseNum(params.maxPrice),
-    minBeds: parseNum(params.minBeds),
-    minBaths: parseNum(params.minBaths),
-    minSqft: parseNum(params.minSqft),
-    maxSqft: parseNum(params.maxSqft),
-    propertyType: typeof params.propertyType === "string" ? params.propertyType : undefined,
-    sort: (typeof params.sort === "string" ? params.sort : "price_desc") as ListingFilters["sort"],
-    page: parseNum(params.page) ?? 1,
-    perPage: 10,
-    mapPolygon,
-  };
+  const softPrefList =
+    typeof params.soft === "string"
+      ? params.soft
+          .split("|")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 8)
+      : [];
+  const softPrefsParam = softPrefList.length > 0 ? softPrefList.join("|") : "";
+
+  const amenities = parseAmenitiesFromSearchParams({
+    pool: typeof params.pool === "string" ? params.pool : null,
+    garage: typeof params.garage === "string" ? params.garage : null,
+    fireplace: typeof params.fireplace === "string" ? params.fireplace : null,
+    waterfront: typeof params.waterfront === "string" ? params.waterfront : null,
+    minYear: typeof params.minYear === "string" ? params.minYear : null,
+    maxYear: typeof params.maxYear === "string" ? params.maxYear : null,
+    maxStories: typeof params.maxStories === "string" ? params.maxStories : null,
+    minAcres: typeof params.minAcres === "string" ? params.minAcres : null,
+    noHoa: typeof params.noHoa === "string" ? params.noHoa : null,
+  });
+
+  const filters: ListingFilters = applyAmenitiesToFilters(
+    {
+      q: typeof params.q === "string" ? params.q.trim() : undefined,
+      minPrice: parseNum(params.minPrice),
+      maxPrice: parseNum(params.maxPrice),
+      minBeds: parseNum(params.minBeds),
+      minBaths: parseNum(params.minBaths),
+      minSqft: parseNum(params.minSqft),
+      maxSqft: parseNum(params.maxSqft),
+      propertyType: typeof params.propertyType === "string" ? params.propertyType : undefined,
+      sort: (typeof params.sort === "string" ? params.sort : "price_desc") as ListingFilters["sort"],
+      page: parseNum(params.page) ?? 1,
+      perPage: 10,
+      mapPolygon,
+      ...(softPrefList.length > 0 ? { softPrefs: softPrefList } : {}),
+    },
+    amenities,
+  );
 
   const view = typeof params.view === "string" ? params.view : "list";
   const dreamText = typeof params.dream === "string" ? params.dream.trim() : "";
-  const softPrefs = typeof params.soft === "string" ? params.soft.trim() : "";
 
   const skipAddressGeocode = view !== "map" && !mapPolygon;
 
   // When in map view, fetch the paginated cards AND a wider pin set in parallel
   // so leaflet.markercluster can render a pin for every matching listing.
   const [
-    { listings, total, page, totalPages, mapPolygonWideFetch },
+    { listings, total, page, totalPages, mapPolygonWideFetch, amenityFilterLoosened },
     mapPinListings,
   ] = await Promise.all([
     searchWithFilters(filters, { skipAddressGeocode }),
@@ -100,7 +131,14 @@ export default async function ListingsPage({
   if (filters.propertyType) baseParams.propertyType = filters.propertyType;
   if (mapPolyEncoded) baseParams[MAP_POLYGON_QUERY_KEY] = mapPolyEncoded;
   if (dreamText) baseParams.dream = dreamText;
-  if (softPrefs) baseParams.soft = softPrefs;
+  if (softPrefsParam) baseParams.soft = softPrefsParam;
+  {
+    const amenityParams = new URLSearchParams();
+    writeAmenitiesToSearchParams(amenityParams, amenities);
+    amenityParams.forEach((v, k) => {
+      baseParams[k] = v;
+    });
+  }
 
   const hasFilters = !!(
     filters.q ||
@@ -111,6 +149,7 @@ export default async function ListingsPage({
     filters.minSqft ||
     filters.maxSqft ||
     filters.propertyType ||
+    listingFiltersHaveAmenities(filters) ||
     (mapPolygon && mapPolygon.length >= 3)
   );
 
@@ -131,11 +170,15 @@ export default async function ListingsPage({
             ? mapPolygonWideFetch
               ? "Your drawn outline is applied. This MLS often omits coordinates on search results—we matched homes using coordinates when present and Georgia ZIP centroids otherwise, then kept only what falls inside your shape."
               : "Showing homes inside your drawn map outline (plus any other filters you set)."
-            : dreamText
-              ? "Showing homes matched from your dream-home description. Edit the chips to refine."
-              : filters.q
-                ? `Showing homes matching "${filters.q}"`
-                : "Browse homes across Georgia. Use filters to narrow your search."}
+            : amenityFilterLoosened
+              ? "Few MLS rows matched those amenity fields exactly — showing the closest homes ranked by listing remarks instead."
+              : dreamText
+                ? softPrefList.length > 0 || listingFiltersHaveAmenities(filters)
+                  ? "Showing homes matched from your description — MLS amenity filters + must-have ranking."
+                  : "Showing homes matched from your dream-home description. Edit the chips to refine."
+                : filters.q
+                  ? `Showing homes matching "${filters.q}"`
+                  : "Browse homes across Georgia. Use filters to narrow your search."}
         </p>
 
         <div className="mt-8 flex flex-col gap-5 sm:mt-10 sm:gap-6">

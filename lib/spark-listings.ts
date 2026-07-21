@@ -16,11 +16,15 @@ import {
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
 import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
-import { gaZipCentroid, normalizeUsZip5 } from "@/lib/ga-zip-centroids";
-import { applyZipCentroidPinCoords } from "@/lib/map-pin-coords";
-import { pointInPolygon } from "@/lib/geo";
+import { gaZip5CodesInsidePolygon } from "@/lib/ga-zip-centroids";
+import { applyZipCentroidPinCoords, listingMatchesDrawnPolygon } from "@/lib/map-pin-coords";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
+import {
+  amenitiesFromListingFilters,
+  buildAmenityODataClauses,
+} from "@/lib/listing-amenities";
+import { enabledAmenityKeys } from "@/lib/amenity-feed-capabilities";
 import type { ListingFilters, PaginatedResult, UnifiedListing } from "@/lib/listings-queries";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 import {
@@ -119,6 +123,7 @@ function rowToUnified(row: Record<string, unknown>, mapOpts?: BridgePropertyMapO
   if (c.listing_agent_phone) base.listing_agent_phone = c.listing_agent_phone;
   if (c.listing_office) base.listing_office = c.listing_office;
   if (c.listing_office_phone) base.listing_office_phone = c.listing_office_phone;
+  if (c.description?.trim()) base.matchText = c.description.trim();
   return base;
 }
 
@@ -202,8 +207,11 @@ const SELECT_GRID = [
 const SPARK_EXPAND = "Media";
 
 /** Helper: returns the standard $select + $expand pair for any Spark Property query. */
-function sparkSelectExpand(): { $select: string; $expand: string } {
-  return { $select: SELECT_GRID, $expand: SPARK_EXPAND };
+function sparkSelectExpand(filters?: ListingFilters): { $select: string; $expand: string } {
+  const select = filters?.includeRemarksForMatch
+    ? `${SELECT_GRID},PublicRemarks,ArchitecturalStyle,InteriorFeatures,ExteriorFeatures,PoolPrivateYN,GarageSpaces`
+    : SELECT_GRID;
+  return { $select: select, $expand: SPARK_EXPAND };
 }
 
 const SELECT_DETAIL = `${SELECT_GRID},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks,InternetRemarks`;
@@ -263,6 +271,13 @@ function buildFilter(filters: ListingFilters, options?: BuildFilterOptions): str
     );
   }
 
+  const amenityParts = buildAmenityODataClauses(
+    amenitiesFromListingFilters(filters),
+    "spark",
+    enabledAmenityKeys("spark"),
+  );
+  parts.push(...amenityParts);
+
   const q = filters.q?.trim();
   if (q) {
     const cityState = parseCityStateSearchQuery(q);
@@ -288,14 +303,25 @@ function buildFilter(filters: ListingFilters, options?: BuildFilterOptions): str
 
   const poly = filters.mapPolygon;
   if (poly && poly.length >= 3) {
-    const lats = poly.map((p) => p.lat);
-    const lngs = poly.map((p) => p.lng);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    parts.push(`Latitude ge ${minLat} and Latitude le ${maxLat}`);
-    parts.push(`Longitude ge ${minLng} and Longitude le ${maxLng}`);
+    const zips = gaZip5CodesInsidePolygon(poly).slice(0, 80);
+    if (zips.length > 0) {
+      const zipOr = zips
+        .map((z) => {
+          const esc = escapeODataString(z);
+          return `(PostalCode eq '${esc}' or startswith(PostalCode, '${esc}'))`;
+        })
+        .join(" or ");
+      parts.push(`(${zipOr})`);
+    } else {
+      const lats = poly.map((p) => p.lat);
+      const lngs = poly.map((p) => p.lng);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLng = Math.min(...lngs);
+      const maxLng = Math.max(...lngs);
+      parts.push(`Latitude ge ${minLat} and Latitude le ${maxLat}`);
+      parts.push(`Longitude ge ${minLng} and Longitude le ${maxLng}`);
+    }
   }
 
   return parts.join(" and ");
@@ -341,15 +367,7 @@ function filterUnifiedListingsToDrawnPolygon(
   poly: ReadonlyArray<MapPolygonVertex> | undefined,
 ): UnifiedListing[] {
   if (!poly || poly.length < 3) return unified;
-  return unified.filter((u) => {
-    if (u.latitude != null && u.longitude != null) {
-      return pointInPolygon(u.latitude, u.longitude, poly);
-    }
-    const zip = normalizeUsZip5(u.postal_code);
-    const c = zip ? gaZipCentroid(zip) : null;
-    if (c) return pointInPolygon(c.lat, c.lng, poly);
-    return false;
-  });
+  return unified.filter((u) => listingMatchesDrawnPolygon(u, poly));
 }
 
 async function fetchPropertyRows(
@@ -397,13 +415,19 @@ async function sparkSearchWithMapPolygon(
   filters: ListingFilters,
 ): Promise<PaginatedResult> {
   const page = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(200, Math.max(1, filters.perPage ?? 24));
+  const perPage = Math.min(
+    MAP_POLYGON_MAX_ROWS_PRIMARY,
+    Math.max(1, filters.perPage ?? 24),
+  );
   const skip = (page - 1) * perPage;
 
   const select = SELECT_GRID;
   const orderBy = orderByClause(filters.sort);
   const primaryFilter = buildFilter(filters);
   const poly = filters.mapPolygon;
+  const postalPrimary =
+    !!poly && poly.length >= 3 && gaZip5CodesInsidePolygon(poly).length > 0;
+  let primaryFailed = false;
 
   let rows: Record<string, unknown>[] = [];
   let wideFetch = false;
@@ -413,6 +437,7 @@ async function sparkSearchWithMapPolygon(
   } catch (e1) {
     console.warn("sparkSearchWithMapPolygon: primary OData failed; trying widened search", e1);
     rows = [];
+    primaryFailed = true;
   }
 
   let unified = rows.map((row) => rowToUnified(row));
@@ -423,7 +448,13 @@ async function sparkSearchWithMapPolygon(
   const needWide = poly && poly.length >= 3 && unified.length === 0;
   if (needWide) {
     try {
-      const wideFilter = buildFilter(omitMapPolygon(filters), { mapPolygonWide: true });
+      const wideFilter =
+        postalPrimary && !primaryFailed
+          ? buildFilter(omitMapPolygon(filters), { mapPolygonWide: true })
+          : buildFilter(
+              postalPrimary ? filters : omitMapPolygon(filters),
+              { mapPolygonWide: true },
+            );
       try {
         rows = await fetchPropertyRows(cfg, wideFilter, select, "ModificationTimestamp desc", MAP_POLYGON_MAX_ROWS_WIDE);
       } catch (eTs) {
@@ -536,7 +567,7 @@ export async function sparkFetchUnifiedPage(
     const result = await sparkSearchWithMapPolygon(cfg, {
       ...filters,
       page: 1,
-      perPage: Math.min(200, Math.max(1, options.take)),
+      perPage: Math.min(MAP_POLYGON_MAX_ROWS_PRIMARY, Math.max(1, options.take)),
     });
     return { rows: result.listings, total: result.total };
   }
@@ -629,12 +660,17 @@ export async function sparkFetchTopUnifiedListings(
 
   const hasMapPolygon = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
   if (hasMapPolygon) {
-    const result = await sparkSearchWithMapPolygon(cfg, { ...filters, page: 1, perPage: Math.min(200, take) });
+    const result = await sparkSearchWithMapPolygon(cfg, {
+      ...filters,
+      page: 1,
+      perPage: Math.min(MAP_POLYGON_MAX_ROWS_PRIMARY, Math.max(1, take)),
+    });
     return { rows: result.listings, total: result.total };
   }
 
   const filter = buildFilter(filters);
   const orderBy = orderByClause(filters.sort);
+  let selectExpand = sparkSelectExpand(filters);
 
   let total = 0;
   let rows: Record<string, unknown>[] = [];
@@ -642,7 +678,7 @@ export async function sparkFetchTopUnifiedListings(
   try {
     const firstPage = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
       $filter: filter,
-      ...sparkSelectExpand(),
+      ...selectExpand,
       $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, Math.max(1, take))),
       $skip: "0",
       $orderby: orderBy,
@@ -651,10 +687,13 @@ export async function sparkFetchTopUnifiedListings(
     rows = firstPage.value ?? [];
     total = typeof firstPage["@odata.count"] === "number" ? firstPage["@odata.count"] : rows.length;
   } catch (e1) {
+    if (filters.includeRemarksForMatch) {
+      selectExpand = sparkSelectExpand({ ...filters, includeRemarksForMatch: false });
+    }
     try {
       const firstPage = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
         $filter: filter,
-        ...sparkSelectExpand(),
+        ...selectExpand,
         $top: String(Math.min(SPARK_PROPERTY_PAGE_SIZE, Math.max(1, take))),
         $skip: "0",
         $orderby: orderBy,
@@ -663,6 +702,7 @@ export async function sparkFetchTopUnifiedListings(
       total = rows.length;
     } catch (e2) {
       console.error("sparkFetchTopUnifiedListings", e2);
+      void e1;
       return { rows: [], total: 0 };
     }
     void e1;
@@ -675,7 +715,7 @@ export async function sparkFetchTopUnifiedListings(
     try {
       const data = await sparkODataGet<ODataValueResponse<Record<string, unknown>>>(cfg, {
         $filter: filter,
-        ...sparkSelectExpand(),
+        ...selectExpand,
         $top: String(nextTop),
         $skip: String(skip),
         $orderby: orderBy,

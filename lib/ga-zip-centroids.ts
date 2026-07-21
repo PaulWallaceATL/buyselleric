@@ -1,3 +1,5 @@
+import { pointInPolygon, type GeoPoint } from "@/lib/geo";
+
 /**
  * Rough ZIP centroids for Georgia / metro Atlanta — used when MLS search returns no rows for
  * OData Latitude/Longitude bbox (common when coords are null in the index) so we can still
@@ -121,4 +123,17 @@ export function gaZipCentroid(zip5: string): { lat: number; lng: number } | null
   if (z) return z;
   const pre = zip5.slice(0, 3);
   return PREFIX[pre] ?? null;
+}
+
+/**
+ * Exact ZIP5 codes from our GA table whose centroids fall inside a freehand outline.
+ * Used to drive PostalCode OData when the MLS omits Latitude/Longitude on search.
+ */
+export function gaZip5CodesInsidePolygon(ring: ReadonlyArray<GeoPoint>): string[] {
+  if (ring.length < 3) return [];
+  const out: string[] = [];
+  for (const [zip, c] of Object.entries(ZIP5)) {
+    if (pointInPolygon(c.lat, c.lng, ring)) out.push(zip);
+  }
+  return out;
 }

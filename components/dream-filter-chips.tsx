@@ -23,6 +23,15 @@ export function DreamFilterChips() {
     const minSqft = searchParams.get("minSqft");
     const maxSqft = searchParams.get("maxSqft");
     const propertyType = searchParams.get("propertyType");
+    const pool = searchParams.get("pool");
+    const garage = searchParams.get("garage");
+    const fireplace = searchParams.get("fireplace");
+    const waterfront = searchParams.get("waterfront");
+    const minYear = searchParams.get("minYear");
+    const maxYear = searchParams.get("maxYear");
+    const maxStories = searchParams.get("maxStories");
+    const minAcres = searchParams.get("minAcres");
+    const noHoa = searchParams.get("noHoa");
     return dreamChipsFromSearchParams({
       ...(q ? { q } : {}),
       ...(minPrice ? { minPrice } : {}),
@@ -33,6 +42,15 @@ export function DreamFilterChips() {
       ...(maxSqft ? { maxSqft } : {}),
       ...(propertyType ? { propertyType } : {}),
       ...(soft ? { soft } : {}),
+      ...(pool ? { pool } : {}),
+      ...(garage ? { garage } : {}),
+      ...(fireplace ? { fireplace } : {}),
+      ...(waterfront ? { waterfront } : {}),
+      ...(minYear ? { minYear } : {}),
+      ...(maxYear ? { maxYear } : {}),
+      ...(maxStories ? { maxStories } : {}),
+      ...(minAcres ? { minAcres } : {}),
+      ...(noHoa ? { noHoa } : {}),
     });
   }, [searchParams, soft]);
 
@@ -65,6 +83,19 @@ export function DreamFilterChips() {
     const next = new URLSearchParams(searchParams.toString());
     next.delete("dream");
     next.delete("soft");
+    for (const k of [
+      "pool",
+      "garage",
+      "fireplace",
+      "waterfront",
+      "minYear",
+      "maxYear",
+      "maxStories",
+      "minAcres",
+      "noHoa",
+    ]) {
+      next.delete(k);
+    }
     pushParams(next);
   }
 
@@ -117,7 +148,7 @@ export function DreamFilterChips() {
       {softChips.length > 0 ? (
         <div className="mt-3">
           <p className="text-xs text-muted-foreground">
-            Noted (not filtered yet — amenity search coming soon):
+            Also ranking by listing remarks for:
           </p>
           <ul className="mt-1.5 flex flex-wrap gap-2" aria-label="Preferences noted but not filtered">
             {softChips.map((chip) => (
@@ -125,7 +156,7 @@ export function DreamFilterChips() {
                 <button
                   type="button"
                   onClick={() => removeChip(chip)}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-dashed border-border bg-background/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-ring/40 bg-ring/10 px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-ring/20"
                   title={`Remove noted preference: ${chip.label}`}
                 >
                   <span className="truncate">{chip.label}</span>

@@ -13,11 +13,15 @@ import {
   type BridgePropertyMapOptions,
 } from "@/lib/bridge-odata";
 import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
-import { gaZipCentroid, normalizeUsZip5 } from "@/lib/ga-zip-centroids";
-import { applyZipCentroidPinCoords } from "@/lib/map-pin-coords";
-import { pointInPolygon } from "@/lib/geo";
+import { gaZip5CodesInsidePolygon } from "@/lib/ga-zip-centroids";
+import { applyZipCentroidPinCoords, listingMatchesDrawnPolygon } from "@/lib/map-pin-coords";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
+import {
+  amenitiesFromListingFilters,
+  buildAmenityODataClauses,
+} from "@/lib/listing-amenities";
+import { enabledAmenityKeys } from "@/lib/amenity-feed-capabilities";
 import type { ListingFilters, PaginatedResult, UnifiedListing } from "@/lib/listings-queries";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 import { US_STATE_ABBR_TO_NAME } from "@/lib/us-state-names";
@@ -83,6 +87,7 @@ function rowToUnified(row: Record<string, unknown>, mapOpts?: BridgePropertyMapO
   if (c.listing_agent_phone) base.listing_agent_phone = c.listing_agent_phone;
   if (c.listing_office) base.listing_office = c.listing_office;
   if (c.listing_office_phone) base.listing_office_phone = c.listing_office_phone;
+  if (c.description?.trim()) base.matchText = c.description.trim();
   return base;
 }
 
@@ -282,6 +287,13 @@ function buildFilter(filters: ListingFilters, options?: BuildFilterOptions): str
     parts.push(`contains(tolower(PropertyType), '${t}')`);
   }
 
+  const amenityParts = buildAmenityODataClauses(
+    amenitiesFromListingFilters(filters),
+    "bridge",
+    enabledAmenityKeys("bridge"),
+  );
+  parts.push(...amenityParts);
+
   const q = filters.q?.trim();
   if (q) {
     const cityState = parseCityStateSearchQuery(q);
@@ -310,14 +322,28 @@ function buildFilter(filters: ListingFilters, options?: BuildFilterOptions): str
 
   const poly = filters.mapPolygon;
   if (poly && poly.length >= 3) {
-    const lats = poly.map((p) => p.lat);
-    const lngs = poly.map((p) => p.lng);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    parts.push(`Latitude ge ${minLat} and Latitude le ${maxLat}`);
-    parts.push(`Longitude ge ${minLng} and Longitude le ${maxLng}`);
+    // Prefer PostalCode when our GA ZIP table intersects the outline. GAMLS often omits
+    // Latitude/Longitude on search (or rejects geo $filter), so Lat/Lng bbox alone returns 0.
+    const zips = gaZip5CodesInsidePolygon(poly).slice(0, 80);
+    if (zips.length > 0) {
+      const zipOr = zips
+        .map((z) => {
+          const esc = escapeODataString(z);
+          // contains matches ZIP and ZIP+4; startswith is unsupported on some IDX feeds.
+          return `contains(PostalCode, '${esc}')`;
+        })
+        .join(" or ");
+      parts.push(`(${zipOr})`);
+    } else {
+      const lats = poly.map((p) => p.lat);
+      const lngs = poly.map((p) => p.lng);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLng = Math.min(...lngs);
+      const maxLng = Math.max(...lngs);
+      parts.push(`Latitude ge ${minLat} and Latitude le ${maxLat}`);
+      parts.push(`Longitude ge ${minLng} and Longitude le ${maxLng}`);
+    }
   }
 
   return parts.join(" and ");
@@ -337,7 +363,12 @@ function orderByClause(sort: ListingFilters["sort"]): string {
   }
 }
 
-function gridSelectForFilters(_filters: ListingFilters): string {
+function gridSelectForFilters(filters: ListingFilters): string {
+  if (filters.includeRemarksForMatch) {
+    return sanitizeBridgePropertySelect(
+      `${SELECT_GRID},PublicRemarks,ArchitecturalStyle,InteriorFeatures,ExteriorFeatures,PoolPrivateYN,GarageSpaces`,
+    );
+  }
   return sanitizeBridgePropertySelect(SELECT_GRID);
 }
 
@@ -458,15 +489,7 @@ function filterUnifiedListingsToDrawnPolygon(
   poly: ReadonlyArray<MapPolygonVertex> | undefined,
 ): UnifiedListing[] {
   if (!poly || poly.length < 3) return unified;
-  return unified.filter((u) => {
-    if (u.latitude != null && u.longitude != null) {
-      return pointInPolygon(u.latitude, u.longitude, poly);
-    }
-    const zip = normalizeUsZip5(u.postal_code);
-    const c = zip ? gaZipCentroid(zip) : null;
-    if (c) return pointInPolygon(c.lat, c.lng, poly);
-    return false;
-  });
+  return unified.filter((u) => listingMatchesDrawnPolygon(u, poly));
 }
 
 /** Repeated OData pages with `$top` ≤ BRIDGE_PROPERTY_PAGE_SIZE until `maxRows` or no more data. */
@@ -528,13 +551,16 @@ async function fetchMapPolygonRowsWithSelectFallback(
   }
 }
 
-/** Map polygon: OData bbox on Lat/Lng first; in-memory PIP / ZIP centroid; widen query if bbox is empty or strict filter yields no rows. */
+/** Map polygon: PostalCode (preferred) or Lat/Lng bbox; in-memory PIP / ZIP; widen if empty. */
 async function bridgeSearchWithMapPolygon(
   cfg: BridgeODataConfig,
   filters: ListingFilters,
 ): Promise<PaginatedResult> {
   const page = Math.max(1, filters.page ?? 1);
-  const perPage = Math.min(200, Math.max(1, filters.perPage ?? 24));
+  const perPage = Math.min(
+    MAP_POLYGON_MAX_ROWS_PRIMARY,
+    Math.max(1, filters.perPage ?? 24),
+  );
   const skip = (page - 1) * perPage;
 
   const selectGeo = gridSelectForMapPolygonGeoAttempt();
@@ -543,9 +569,13 @@ async function bridgeSearchWithMapPolygon(
 
   const primaryFilter = buildFilter(filters);
   const poly = filters.mapPolygon;
+  const postalZips =
+    poly && poly.length >= 3 ? gaZip5CodesInsidePolygon(poly) : [];
+  const postalPrimary = postalZips.length > 0;
 
   let rows: Record<string, unknown>[] = [];
   let wideFetch = false;
+  let primaryFailed = false;
 
   try {
     const r = await fetchMapPolygonRowsWithSelectFallback(
@@ -558,10 +588,12 @@ async function bridgeSearchWithMapPolygon(
     );
     rows = r.rows;
   } catch (e1) {
-    // Some IDX feeds reject Latitude/Longitude in $filter (or return 400 for other reasons).
-    // Do not return yet — widened search without the map bbox still respects q + filters + in-memory polygon.
-    console.warn("bridgeSearchWithMapPolygon: primary OData failed; trying widened search without map bbox", e1);
+    console.warn(
+      "bridgeSearchWithMapPolygon: primary OData failed; trying widened search",
+      e1,
+    );
     rows = [];
+    primaryFailed = true;
   }
 
   let unified = rows.map((row) => rowToUnified(row));
@@ -569,14 +601,20 @@ async function bridgeSearchWithMapPolygon(
     unified = filterUnifiedListingsToDrawnPolygon(unified, poly);
   }
 
-  const needWide =
-    poly &&
-    poly.length >= 3 &&
-    unified.length === 0;
+  const needWide = !!(poly && poly.length >= 3 && unified.length === 0);
 
   if (needWide) {
     try {
-      const wideFilter = buildFilter(omitMapPolygon(filters), { mapPolygonWide: true });
+      // If postal primary failed (400) or was unavailable, broaden without geo.
+      // If postal primary succeeded but found no homes, statewide wide rarely helps —
+      // still try once so Lat/Lng-capable feeds can recover.
+      const wideFilter =
+        postalPrimary && !primaryFailed
+          ? buildFilter(omitMapPolygon(filters), { mapPolygonWide: true })
+          : buildFilter(
+              postalPrimary ? filters : omitMapPolygon(filters),
+              { mapPolygonWide: true },
+            );
       const orderByWide = "ModificationTimestamp desc";
       try {
         rows = await fetchPropertyRowsForPolygon(
@@ -607,6 +645,7 @@ async function bridgeSearchWithMapPolygon(
       return { listings: [], total: 0, page, perPage, totalPages: 0 };
     }
   }
+
   const total = unified.length;
   const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
   let listings = unified.slice(skip, skip + perPage);
@@ -637,11 +676,11 @@ export async function bridgeFetchUnifiedPage(
 
   const hasMapPolygon = filters.mapPolygon != null && filters.mapPolygon.length >= 3;
   if (hasMapPolygon) {
-    // Polygon search needs the bbox + in-memory PIP path — fall back to the wider helper.
+    // Polygon search needs the full in-memory match set — not a single 200-row page slice.
     const result = await bridgeSearchWithMapPolygon(cfg, {
       ...filters,
       page: 1,
-      perPage: Math.min(200, Math.max(1, options.take)),
+      perPage: Math.min(MAP_POLYGON_MAX_ROWS_PRIMARY, Math.max(1, options.take)),
     });
     return { rows: result.listings, total: result.total };
   }
@@ -739,13 +778,13 @@ export async function bridgeFetchTopUnifiedListings(
     const result = await bridgeSearchWithMapPolygon(cfg, {
       ...filters,
       page: 1,
-      perPage: Math.min(200, Math.max(1, take)),
+      perPage: Math.min(MAP_POLYGON_MAX_ROWS_PRIMARY, Math.max(1, take)),
     });
     return { rows: result.listings, total: result.total };
   }
 
   const filter = buildFilter(filters);
-  const select = gridSelectForFilters(filters);
+  let select = gridSelectForFilters(filters);
   const orderBy = orderByClause(filters.sort);
   const pageSize = BRIDGE_PROPERTY_PAGE_SIZE;
 
@@ -765,6 +804,10 @@ export async function bridgeFetchTopUnifiedListings(
     all.push(...batch);
     total = typeof first["@odata.count"] === "number" ? first["@odata.count"] : batch.length;
   } catch (e1) {
+    // Dream ranking may request remark fields IDX rejects — fall back to lean grid.
+    if (filters.includeRemarksForMatch) {
+      select = gridSelectForFilters({ ...filters, includeRemarksForMatch: false });
+    }
     try {
       const first = await bridgeODataGet<BridgeODataValueResponse<Record<string, unknown>>>(cfg, {
         $filter: filter,
@@ -778,6 +821,7 @@ export async function bridgeFetchTopUnifiedListings(
       total = batch.length;
     } catch (e2) {
       console.error("bridgeFetchTopUnifiedListings", e2);
+      void e1;
       return { rows: [], total: 0 };
     }
     void e1;

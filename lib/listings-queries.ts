@@ -17,8 +17,14 @@ import {
   sparkSearchWithFilters,
 } from "@/lib/spark-listings";
 import { enrichListingsWithPhotonGeocode } from "@/lib/geocode-listing-address";
-import { applyZipCentroidPinCoords } from "@/lib/map-pin-coords";
-import { pointInPolygon } from "@/lib/geo";
+import { scoreDreamMatch } from "@/lib/dream-home-match";
+import {
+  amenitiesFromListingFilters,
+  amenitiesToSoftPrefs,
+  listingFiltersHaveAmenities,
+  stripAmenitiesFromFilters,
+} from "@/lib/listing-amenities";
+import { applyZipCentroidPinCoords, listingMatchesDrawnPolygon } from "@/lib/map-pin-coords";
 import type { MapPolygonVertex } from "@/lib/map-polygon-query";
 import { parseCityStateSearchQuery } from "@/lib/listing-query-text";
 import {
@@ -61,6 +67,8 @@ export interface UnifiedListing {
   listing_agent_phone?: string;
   listing_office?: string;
   listing_office_phone?: string;
+  /** Ephemeral copy for dream-home ranking (remarks); not shown on cards. */
+  matchText?: string;
 }
 
 export interface ListingFilters {
@@ -77,6 +85,23 @@ export interface ListingFilters {
   perPage?: number | undefined;
   /** Map draw: closed or open ring (≥3 vertices); listings must fall inside polygon. */
   mapPolygon?: ReadonlyArray<MapPolygonVertex> | undefined;
+  /**
+   * Dream-home soft preferences (chip labels). When set, we fetch a wider
+   * candidate set and rank by MLS remarks / description keyword match.
+   */
+  softPrefs?: string[] | undefined;
+  /** Internal: include PublicRemarks (etc.) on grid $select for dream ranking. */
+  includeRemarksForMatch?: boolean | undefined;
+  /** Amenity hard-filters (RESO) — dream Phase 2. */
+  hasPool?: boolean | undefined;
+  minGarageSpaces?: number | undefined;
+  hasFireplace?: boolean | undefined;
+  hasWaterfront?: boolean | undefined;
+  minYearBuilt?: number | undefined;
+  maxYearBuilt?: number | undefined;
+  maxStories?: number | undefined;
+  minAcres?: number | undefined;
+  noHoa?: boolean | undefined;
 }
 
 export interface PaginatedResult {
@@ -87,10 +112,12 @@ export interface PaginatedResult {
   totalPages: number;
   /** Bridge: OData bbox returned nothing (often null coords in MLS); we widened to text filters + ZIP-centroid match inside the draw. */
   mapPolygonWideFetch?: boolean | undefined;
+  /** Amenity hard-filters returned 0 / errored — retried with keyword ranking only. */
+  amenityFilterLoosened?: boolean | undefined;
 }
 
 function manualToUnified(l: ListingRow): UnifiedListing {
-  return {
+  const base: UnifiedListing = {
     id: l.id, slug: l.slug, mls_id: null, title: l.title,
     address_line: l.address_line, city: l.city, state: l.state,
     postal_code: l.postal_code, price_cents: l.price_cents,
@@ -99,10 +126,12 @@ function manualToUnified(l: ListingRow): UnifiedListing {
     longitude: l.longitude, image_urls: l.image_urls, source: "manual",
     feed: "manual",
   };
+  if (l.description?.trim()) base.matchText = l.description.trim();
+  return base;
 }
 
 function mlsToUnified(m: MlsListingRow, feed: ListingFeed = "bridge"): UnifiedListing {
-  return {
+  const base: UnifiedListing = {
     id: m.id, slug: null, mls_id: m.mls_id,
     title: m.title || `${m.address_line}, ${m.city}`,
     address_line: m.address_line, city: m.city, state: m.state,
@@ -116,6 +145,8 @@ function mlsToUnified(m: MlsListingRow, feed: ListingFeed = "bridge"): UnifiedLi
     listing_office: m.listing_office,
     listing_office_phone: m.listing_office_phone,
   };
+  if (m.description?.trim()) base.matchText = m.description.trim();
+  return base;
 }
 
 /** GAMLS rows synced via RETS — used when Bridge live OData is rate-limited (429). */
@@ -401,10 +432,9 @@ async function searchWithMultipleFeedsPolygon(
     }
   }
 
-  let unified = dedupeUnifiedListings(allRows).filter((u) => {
-    if (u.latitude == null || u.longitude == null) return true;
-    return pointInPolygon(u.latitude, u.longitude, poly);
-  });
+  let unified = dedupeUnifiedListings(allRows).filter((u) =>
+    listingMatchesDrawnPolygon(u, poly),
+  );
   unified.sort(unifiedSorter(filters.sort));
 
   const total = unified.length;
@@ -461,19 +491,12 @@ export async function fetchAllPinsForMap(filters: ListingFilters): Promise<Unifi
 
   let rows = dedupeUnifiedListings(all);
   rows = applyZipCentroidPinCoords(rows, filters.mapPolygon);
-  rows = await enrichListingsWithPhotonGeocode(rows, filters.mapPolygon ? { polygon: filters.mapPolygon } : undefined);
+  rows = await enrichListingsWithPhotonGeocode(
+    rows,
+    filters.mapPolygon ? { polygon: filters.mapPolygon } : undefined,
+  );
 
-  // Polygon-aware drop: only keep rows that fall inside the drawn outline
-  // (when present); leave open-search results untouched.
-  const poly = filters.mapPolygon;
-  if (poly && poly.length >= 3) {
-    rows = rows.filter((r) => {
-      if (r.latitude == null || r.longitude == null) return false;
-      return pointInPolygon(r.latitude, r.longitude, poly);
-    });
-  }
-
-  // Keep only rows we can pin on the map.
+  // ZIP centroid pins are already constrained to the outline; keep anything we can plot.
   return rows.filter((r) => r.latitude != null && r.longitude != null);
 }
 
@@ -492,10 +515,252 @@ function filterManualByListingFilters(rows: UnifiedListing[], filters: ListingFi
   });
 }
 
+const DREAM_CANDIDATE_CAP = 100;
+
+function hardFiltersOnly(filters: ListingFilters): ListingFilters {
+  const out: ListingFilters = {
+    page: 1,
+    perPage: DREAM_CANDIDATE_CAP,
+  };
+  if (filters.q) out.q = filters.q;
+  if (filters.minPrice != null) out.minPrice = filters.minPrice;
+  if (filters.maxPrice != null) out.maxPrice = filters.maxPrice;
+  if (filters.minBeds != null) out.minBeds = filters.minBeds;
+  if (filters.minBaths != null) out.minBaths = filters.minBaths;
+  if (filters.minSqft != null) out.minSqft = filters.minSqft;
+  if (filters.maxSqft != null) out.maxSqft = filters.maxSqft;
+  if (filters.propertyType) out.propertyType = filters.propertyType;
+  if (filters.sort) out.sort = filters.sort;
+  if (filters.mapPolygon) out.mapPolygon = filters.mapPolygon;
+  if (filters.softPrefs && filters.softPrefs.length > 0) {
+    out.includeRemarksForMatch = true;
+  }
+  if (filters.hasPool) out.hasPool = true;
+  if (filters.minGarageSpaces != null) out.minGarageSpaces = filters.minGarageSpaces;
+  if (filters.hasFireplace) out.hasFireplace = true;
+  if (filters.hasWaterfront) out.hasWaterfront = true;
+  if (filters.minYearBuilt != null) out.minYearBuilt = filters.minYearBuilt;
+  if (filters.maxYearBuilt != null) out.maxYearBuilt = filters.maxYearBuilt;
+  if (filters.maxStories != null) out.maxStories = filters.maxStories;
+  if (filters.minAcres != null) out.minAcres = filters.minAcres;
+  if (filters.noHoa) out.noHoa = true;
+  return out;
+}
+
+/** Pull MLS / manual descriptions so dream keywords can score against real listing copy. */
+async function fetchDreamMatchTexts(listings: UnifiedListing[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  for (const l of listings) {
+    const base = [l.matchText, l.title, l.address_line, l.city, l.state, l.postal_code]
+      .filter(Boolean)
+      .join(" ");
+    map.set(l.id, base);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase || listings.length === 0) return map;
+
+  const mlsIds = [
+    ...new Set(listings.map((l) => l.mls_id).filter((id): id is string => Boolean(id))),
+  ].slice(0, DREAM_CANDIDATE_CAP);
+  const rowIds = listings.map((l) => l.id).slice(0, DREAM_CANDIDATE_CAP);
+
+  try {
+    if (mlsIds.length > 0) {
+      const { data } = await supabase
+        .from("mls_listings")
+        .select("id, mls_id, title, description, address_line, city, property_type")
+        .in("mls_id", mlsIds);
+      for (const row of data ?? []) {
+        const r = row as {
+          id: string;
+          mls_id: string;
+          title?: string;
+          description?: string;
+          address_line?: string;
+          city?: string;
+          property_type?: string;
+        };
+        const blob = [r.title, r.description, r.address_line, r.city, r.property_type]
+          .filter(Boolean)
+          .join(" ");
+        if (!blob) continue;
+        const match = listings.find((l) => l.mls_id === r.mls_id || l.id === r.id);
+        if (match) {
+          map.set(match.id, `${map.get(match.id) ?? ""} ${blob}`);
+        }
+      }
+    }
+
+    const manualIds = listings.filter((l) => l.source === "manual").map((l) => l.id);
+    if (manualIds.length > 0) {
+      const { data } = await supabase
+        .from("listings")
+        .select("id, title, description, address_line, city")
+        .in("id", manualIds);
+      for (const row of data ?? []) {
+        const r = row as {
+          id: string;
+          title?: string;
+          description?: string;
+          address_line?: string;
+          city?: string;
+        };
+        const blob = [r.title, r.description, r.address_line, r.city].filter(Boolean).join(" ");
+        if (blob) map.set(r.id, `${map.get(r.id) ?? ""} ${blob}`);
+      }
+    }
+
+    // Also try matching by listing id on mls_listings (Bridge keys)
+    if (rowIds.length > 0) {
+      const { data } = await supabase
+        .from("mls_listings")
+        .select("id, title, description, address_line, city, property_type")
+        .in("id", rowIds);
+      for (const row of data ?? []) {
+        const r = row as {
+          id: string;
+          title?: string;
+          description?: string;
+          address_line?: string;
+          city?: string;
+          property_type?: string;
+        };
+        const blob = [r.title, r.description, r.address_line, r.city, r.property_type]
+          .filter(Boolean)
+          .join(" ");
+        if (blob) map.set(r.id, `${map.get(r.id) ?? ""} ${blob}`);
+      }
+    }
+  } catch (err) {
+    console.warn("fetchDreamMatchTexts", err);
+  }
+
+  return map;
+}
+
+/**
+ * Dream search ranking: hard filters narrow the set; soft prefs reorder so
+ * homes whose remarks mention pool/garage/etc. surface first.
+ */
+async function searchWithDreamKeywordRank(
+  filters: ListingFilters,
+  options?: { skipAddressGeocode?: boolean },
+): Promise<PaginatedResult> {
+  const softPrefs = filters.softPrefs ?? [];
+  const page = Math.max(1, filters.page ?? 1);
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 10));
+  const hard = hardFiltersOnly(filters);
+
+  const bridgeOn = isBridgeListingsEnabled();
+  const sparkOn = isSparkListingsEnabled();
+
+  let candidates: UnifiedListing[] = [];
+
+  if (bridgeOn || sparkOn) {
+    const [bridgeRes, sparkRes] = await Promise.all([
+      bridgeOn
+        ? bridgeFetchTopUnifiedListings(hard, Math.min(60, DREAM_CANDIDATE_CAP))
+        : Promise.resolve({ rows: [] as UnifiedListing[], total: 0 }),
+      sparkOn
+        ? sparkFetchTopUnifiedListings(hard, Math.min(60, DREAM_CANDIDATE_CAP))
+        : Promise.resolve({ rows: [] as UnifiedListing[], total: 0 }),
+    ]);
+    candidates = dedupeUnifiedListings([...bridgeRes.rows, ...sparkRes.rows]);
+  } else {
+    // Supabase-only inventory — reuse the non-dream path with a wide page.
+    const wide = await searchWithFilters(
+      { ...hard, softPrefs: undefined, page: 1, perPage: DREAM_CANDIDATE_CAP },
+      options,
+    );
+    candidates = wide.listings;
+  }
+
+  candidates = applyZipCentroidPinCoords(candidates, undefined);
+
+  const texts = await fetchDreamMatchTexts(candidates);
+  const sort = filters.sort ?? "price_desc";
+
+  const scored = candidates.map((listing) => {
+    const { score } = scoreDreamMatch(texts.get(listing.id) ?? "", softPrefs);
+    return { listing, score };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    switch (sort) {
+      case "price_asc":
+        return a.listing.price_cents - b.listing.price_cents;
+      case "sqft_desc":
+        return (b.listing.square_feet ?? 0) - (a.listing.square_feet ?? 0);
+      case "newest":
+        return a.listing.source === "manual" ? -1 : 1;
+      case "price_desc":
+      default:
+        return b.listing.price_cents - a.listing.price_cents;
+    }
+  });
+
+  const total = scored.length;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+  const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
+  const from = (safePage - 1) * perPage;
+  let listings = scored.slice(from, from + perPage).map((s) => s.listing);
+
+  if (
+    !options?.skipAddressGeocode &&
+    filters.mapPolygon != null &&
+    filters.mapPolygon.length >= 3
+  ) {
+    listings = await enrichListingsWithPhotonGeocode(listings, {
+      polygon: filters.mapPolygon,
+    });
+  }
+
+  return { listings, total, page: safePage, perPage, totalPages };
+}
+
 export async function searchWithFilters(
   filters: ListingFilters,
   options?: { skipAddressGeocode?: boolean },
 ): Promise<PaginatedResult> {
+  const result = await searchWithFiltersCore(filters, options);
+
+  // Amenity hard-filters: if MLS rejects the field or nothing matches, loosen
+  // to keyword ranking so dream search never goes empty on sparse amenities.
+  if (
+    listingFiltersHaveAmenities(filters) &&
+    result.total === 0 &&
+    !(filters.mapPolygon && filters.mapPolygon.length >= 3)
+  ) {
+    const amenities = amenitiesFromListingFilters(filters);
+    const soft = Array.from(
+      new Set([...(filters.softPrefs ?? []), ...amenitiesToSoftPrefs(amenities)]),
+    ).slice(0, 8);
+    const loosened: ListingFilters = {
+      ...stripAmenitiesFromFilters(filters),
+      ...(soft.length > 0 ? { softPrefs: soft } : {}),
+    };
+    const retry = await searchWithFiltersCore(loosened, options);
+    return { ...retry, amenityFilterLoosened: true };
+  }
+
+  return result;
+}
+
+async function searchWithFiltersCore(
+  filters: ListingFilters,
+  options?: { skipAddressGeocode?: boolean },
+): Promise<PaginatedResult> {
+  // Dream soft prefs: widen candidates + rank by remarks/description match.
+  if (
+    filters.softPrefs &&
+    filters.softPrefs.length > 0 &&
+    !(filters.mapPolygon && filters.mapPolygon.length >= 3)
+  ) {
+    return searchWithDreamKeywordRank(filters, options);
+  }
+
   const bridgeOn = isBridgeListingsEnabled();
   const sparkOn = isSparkListingsEnabled();
 
@@ -572,10 +837,7 @@ export async function searchWithFilters(
 
   const poly = filters.mapPolygon;
   if (poly && poly.length >= 3) {
-    const filtered = allListings.filter((l) => {
-      if (l.latitude == null || l.longitude == null) return false;
-      return pointInPolygon(l.latitude, l.longitude, poly);
-    });
+    const filtered = allListings.filter((l) => listingMatchesDrawnPolygon(l, poly));
     allListings.length = 0;
     allListings.push(...filtered);
   }
