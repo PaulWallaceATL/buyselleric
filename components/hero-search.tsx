@@ -1,14 +1,18 @@
 "use client";
 
-import { Search, MapPin } from "lucide-react";
+import { MapPin, Search, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { DreamHomePrompt } from "@/components/dream-home-prompt";
 import { SearchSuggestionsList } from "@/components/search-suggestions-list";
 import { useListingSearchSuggestions } from "@/components/use-listing-search-suggestions";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 
+type SearchMode = "location" | "dream";
+
 export function HeroSearch() {
   const router = useRouter();
+  const [mode, setMode] = useState<SearchMode>("location");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -16,8 +20,9 @@ export function HeroSearch() {
   const { suggestions, loading, runSuggest } = useListingSearchSuggestions();
 
   useEffect(() => {
+    if (mode !== "location") return;
     runSuggest(query);
-  }, [query, runSuggest]);
+  }, [query, runSuggest, mode]);
 
   useEffect(() => {
     setActiveIndex(-1);
@@ -88,62 +93,99 @@ export function HeroSearch() {
     goSearch(s.value);
   };
 
-  const panelOpen = open && query.trim().length >= 2;
+  const panelOpen = mode === "location" && open && query.trim().length >= 2;
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-xl">
-      <div ref={wrapRef} className="relative">
-        <div className="flex items-center gap-2 rounded-full border-2 border-foreground/20 bg-background/80 shadow-lg backdrop-blur-md transition-colors focus-within:border-ring focus-within:shadow-xl">
-          <div className="flex flex-1 items-center gap-3 pl-5 sm:pl-6">
-            <Search className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setOpen(true);
-              }}
-              onFocus={() => setOpen(true)}
-              onKeyDown={onKeyDown}
-              placeholder="Search by city, address, or ZIP..."
-              className="min-h-[52px] w-full bg-transparent text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none sm:min-h-[56px] sm:text-lg"
-              aria-label="Search homes by city, address, or ZIP code"
-              aria-autocomplete="list"
-              aria-expanded={panelOpen}
-              aria-controls="hero-search-suggestions"
-              autoComplete="off"
-            />
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5 pr-2">
-            <button
-              type="button"
-              onClick={handleMapClick}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:h-11 sm:w-11"
-              aria-label="Search on map"
-              title="Map view"
-            >
-              <MapPin className="h-5 w-5" />
-            </button>
-            <button
-              type="submit"
-              className="flex h-10 items-center justify-center rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:h-11 sm:px-6 sm:text-base"
-            >
-              Search
-            </button>
-          </div>
-        </div>
-        {panelOpen ? (
-          <div id="hero-search-suggestions">
-            <SearchSuggestionsList
-              items={suggestions}
-              activeIndex={activeIndex}
-              onPick={pick}
-              loading={loading}
-              variant="hero"
-            />
-          </div>
-        ) : null}
+    <div className="w-full max-w-xl">
+      <div
+        className="mb-2 inline-flex rounded-full border border-white/25 bg-black/25 p-1 backdrop-blur-md"
+        role="group"
+        aria-label="Search mode"
+      >
+        <button
+          type="button"
+          onClick={() => setMode("location")}
+          className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
+            mode === "location"
+              ? "bg-white text-foreground shadow-sm"
+              : "text-white/85 hover:bg-white/10 hover:text-white"
+          }`}
+        >
+          <Search className="h-3.5 w-3.5" aria-hidden />
+          Location
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("dream")}
+          className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
+            mode === "dream"
+              ? "bg-white text-foreground shadow-sm"
+              : "text-white/85 hover:bg-white/10 hover:text-white"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          Dream home
+        </button>
       </div>
-    </form>
+
+      {mode === "dream" ? (
+        <DreamHomePrompt variant="hero" />
+      ) : (
+        <form onSubmit={handleSubmit} className="w-full">
+          <div ref={wrapRef} className="relative">
+            <div className="flex items-center gap-2 rounded-full border-2 border-foreground/20 bg-background/80 shadow-lg backdrop-blur-md transition-colors focus-within:border-ring focus-within:shadow-xl">
+              <div className="flex flex-1 items-center gap-3 pl-5 sm:pl-6">
+                <Search className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setOpen(true);
+                  }}
+                  onFocus={() => setOpen(true)}
+                  onKeyDown={onKeyDown}
+                  placeholder="Search by city, address, or ZIP..."
+                  className="min-h-[52px] w-full bg-transparent text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none sm:min-h-[56px] sm:text-lg"
+                  aria-label="Search homes by city, address, or ZIP code"
+                  aria-autocomplete="list"
+                  aria-expanded={panelOpen}
+                  aria-controls="hero-search-suggestions"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 pr-2">
+                <button
+                  type="button"
+                  onClick={handleMapClick}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:h-11 sm:w-11"
+                  aria-label="Search on map"
+                  title="Map view"
+                >
+                  <MapPin className="h-5 w-5" />
+                </button>
+                <button
+                  type="submit"
+                  className="flex h-10 items-center justify-center rounded-full bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.97] sm:h-11 sm:px-6 sm:text-base"
+                >
+                  Search
+                </button>
+              </div>
+            </div>
+            {panelOpen ? (
+              <div id="hero-search-suggestions">
+                <SearchSuggestionsList
+                  items={suggestions}
+                  activeIndex={activeIndex}
+                  onPick={pick}
+                  loading={loading}
+                  variant="hero"
+                />
+              </div>
+            ) : null}
+          </div>
+        </form>
+      )}
+    </div>
   );
 }

@@ -67,14 +67,17 @@ export function ListingsFilters() {
     minBaths: searchParams.get("minBaths") ?? "",
     minSqft: searchParams.get("minSqft") ?? "",
     maxSqft: searchParams.get("maxSqft") ?? "",
+    propertyType: searchParams.get("propertyType") ?? "",
     sort: searchParams.get("sort") ?? "price_desc",
     view: searchParams.get("view") ?? "list",
     mapPoly: searchParams.get("mapPoly") ?? "",
+    dream: searchParams.get("dream") ?? "",
+    soft: searchParams.get("soft") ?? "",
   };
 
   const activeFilterCount = [
     current.minPrice, current.maxPrice, current.minBeds,
-    current.minBaths, current.minSqft, current.maxSqft,
+    current.minBaths, current.minSqft, current.maxSqft, current.propertyType,
   ].filter(Boolean).length;
 
   function applyFilters(overrides: Record<string, string>) {
@@ -90,6 +93,7 @@ export function ListingsFilters() {
     const params = new URLSearchParams();
     if (current.q) params.set("q", current.q);
     if (current.view !== "list") params.set("view", current.view);
+    if (current.mapPoly) params.set("mapPoly", current.mapPoly);
     router.push(`/listings?${params.toString()}`, { scroll: false });
   }
 

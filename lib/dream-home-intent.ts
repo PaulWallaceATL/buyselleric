@@ -1,0 +1,278 @@
+import OpenAI from "openai";
+import { siteConfig } from "@/lib/config";
+import type { ListingFilters } from "@/lib/listings-queries";
+
+let _client: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!_client) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+    _client = new OpenAI({ apiKey });
+  }
+  return _client;
+}
+
+/** Hard filters we can apply today via ListingFilters / URL params. */
+export type DreamHomeHardFilters = {
+  q?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minBeds?: number;
+  minBaths?: number;
+  minSqft?: number;
+  maxSqft?: number;
+  propertyType?: string;
+  sort?: NonNullable<ListingFilters["sort"]>;
+};
+
+export type DreamHomeIntent = {
+  filters: DreamHomeHardFilters;
+  /** Lifestyle / amenity phrases we cannot filter yet — shown as “noted” chips only. */
+  softPrefs: string[];
+  /** Short plain-language summary of what we understood. */
+  summary: string;
+};
+
+const SYSTEM_PROMPT = `You parse natural-language home-buyer descriptions into structured MLS search filters for ${siteConfig.name} (${siteConfig.agentName}), serving ${siteConfig.primaryMarket}.
+
+Return ONLY valid JSON (no markdown) with this exact shape:
+{
+  "q": string | null,
+  "minPrice": number | null,
+  "maxPrice": number | null,
+  "minBeds": number | null,
+  "minBaths": number | null,
+  "minSqft": number | null,
+  "maxSqft": number | null,
+  "propertyType": string | null,
+  "sort": "price_asc" | "price_desc" | "newest" | "sqft_desc" | null,
+  "softPrefs": string[],
+  "summary": string
+}
+
+Rules:
+- q: city, neighborhood, ZIP, or "City, ST" when a location is clear. Prefer Georgia localities. Null if no location.
+- Prices in whole US dollars (e.g. 450000 for $450k). Parse "under 500k", "around 300k", budgets honestly.
+- minBeds / minBaths: minimums only (integers; baths may be 1, 2, 2.5 → use floor for beds, keep decimal for baths as number).
+- propertyType: only when clear — use one of: Residential, Condo, Townhouse, Land, Multi-Family. Otherwise null.
+- sort: only if the user asks (cheapest → price_asc, newest → newest, largest → sqft_desc). Otherwise null.
+- softPrefs: short phrases for wants we cannot filter yet (pool, garage, farmhouse, modern, quiet, fenced yard, etc.). Max 8. Do NOT put location or price here.
+- summary: one friendly sentence describing the hard filters (and noting soft wants briefly).
+- Do not invent a location. If none given, q is null.
+- Ignore non-housing requests; still return the JSON schema with nulls and empty softPrefs.`;
+
+function positiveNum(v: unknown): number | undefined {
+  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return undefined;
+  return v;
+}
+
+function optionalString(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  return t.length > 0 ? t : undefined;
+}
+
+const SORTS = new Set(["price_asc", "price_desc", "newest", "sqft_desc"]);
+
+function normalizeIntent(raw: Record<string, unknown>): DreamHomeIntent {
+  const sortRaw = optionalString(raw.sort);
+  const sort =
+    sortRaw && SORTS.has(sortRaw) ? (sortRaw as DreamHomeHardFilters["sort"]) : undefined;
+
+  const softRaw = Array.isArray(raw.softPrefs) ? raw.softPrefs : [];
+  const softPrefs = softRaw
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const filters: DreamHomeHardFilters = {};
+  const q = optionalString(raw.q);
+  if (q) filters.q = q;
+  const minPrice = positiveNum(raw.minPrice);
+  if (minPrice != null) filters.minPrice = Math.round(minPrice);
+  const maxPrice = positiveNum(raw.maxPrice);
+  if (maxPrice != null) filters.maxPrice = Math.round(maxPrice);
+  const minBeds = positiveNum(raw.minBeds);
+  if (minBeds != null) filters.minBeds = Math.floor(minBeds);
+  const minBaths = positiveNum(raw.minBaths);
+  if (minBaths != null) filters.minBaths = minBaths;
+  const minSqft = positiveNum(raw.minSqft);
+  if (minSqft != null) filters.minSqft = Math.floor(minSqft);
+  const maxSqft = positiveNum(raw.maxSqft);
+  if (maxSqft != null) filters.maxSqft = Math.floor(maxSqft);
+  const propertyType = optionalString(raw.propertyType);
+  if (propertyType) filters.propertyType = propertyType;
+  if (sort) filters.sort = sort;
+
+  const summary =
+    optionalString(raw.summary) ??
+    "We mapped your description into searchable filters. You can edit the chips below.";
+
+  return { filters, softPrefs, summary };
+}
+
+export async function parseDreamHomeIntent(prompt: string): Promise<DreamHomeIntent> {
+  const client = getOpenAIClient();
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: `Buyer's description:\n\n${prompt}`,
+      },
+    ],
+    temperature: 0.2,
+    max_tokens: 600,
+    response_format: { type: "json_object" },
+  });
+
+  const text = response.choices[0]?.message?.content?.trim();
+  if (!text) throw new Error("Empty response from OpenAI");
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error("Could not parse dream-home intent JSON");
+  }
+
+  return normalizeIntent(parsed);
+}
+
+/** Encode hard filters (+ optional dream/soft) into listings URL search params. */
+export function dreamIntentToSearchParams(
+  intent: DreamHomeIntent,
+  options?: { dreamText?: string; view?: string },
+): URLSearchParams {
+  const p = new URLSearchParams();
+  const f = intent.filters;
+  if (f.q) p.set("q", f.q);
+  if (f.minPrice != null) p.set("minPrice", String(f.minPrice));
+  if (f.maxPrice != null) p.set("maxPrice", String(f.maxPrice));
+  if (f.minBeds != null) p.set("minBeds", String(f.minBeds));
+  if (f.minBaths != null) p.set("minBaths", String(f.minBaths));
+  if (f.minSqft != null) p.set("minSqft", String(f.minSqft));
+  if (f.maxSqft != null) p.set("maxSqft", String(f.maxSqft));
+  if (f.propertyType) p.set("propertyType", f.propertyType);
+  if (f.sort && f.sort !== "price_desc") p.set("sort", f.sort);
+  if (options?.dreamText?.trim()) p.set("dream", options.dreamText.trim().slice(0, 500));
+  if (intent.softPrefs.length > 0) p.set("soft", intent.softPrefs.join("|"));
+  if (options?.view && options.view !== "list") p.set("view", options.view);
+  return p;
+}
+
+export type DreamChipKind = "hard" | "soft";
+
+export type DreamChip = {
+  id: string;
+  /** URL param key for hard chips; soft chips use "soft" + index via softPrefs list. */
+  param: string;
+  label: string;
+  kind: DreamChipKind;
+  /** Soft chip index into the soft prefs list (for removal). */
+  softIndex?: number;
+};
+
+function formatPrice(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return Number.isInteger(m) ? `$${m}M` : `$${m.toFixed(1)}M`;
+  }
+  if (n >= 1000) return `$${Math.round(n / 1000)}k`;
+  return `$${n}`;
+}
+
+/** Build editable chip models from current listings URL params. */
+export function dreamChipsFromSearchParams(params: {
+  q?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  minBeds?: string;
+  minBaths?: string;
+  minSqft?: string;
+  maxSqft?: string;
+  propertyType?: string;
+  soft?: string;
+}): DreamChip[] {
+  const chips: DreamChip[] = [];
+
+  if (params.q) {
+    chips.push({ id: "q", param: "q", label: params.q, kind: "hard" });
+  }
+  if (params.minPrice) {
+    const n = Number(params.minPrice);
+    chips.push({
+      id: "minPrice",
+      param: "minPrice",
+      label: Number.isFinite(n) ? `From ${formatPrice(n)}` : `Min $${params.minPrice}`,
+      kind: "hard",
+    });
+  }
+  if (params.maxPrice) {
+    const n = Number(params.maxPrice);
+    chips.push({
+      id: "maxPrice",
+      param: "maxPrice",
+      label: Number.isFinite(n) ? `Up to ${formatPrice(n)}` : `Max $${params.maxPrice}`,
+      kind: "hard",
+    });
+  }
+  if (params.minBeds) {
+    chips.push({
+      id: "minBeds",
+      param: "minBeds",
+      label: `${params.minBeds}+ beds`,
+      kind: "hard",
+    });
+  }
+  if (params.minBaths) {
+    chips.push({
+      id: "minBaths",
+      param: "minBaths",
+      label: `${params.minBaths}+ baths`,
+      kind: "hard",
+    });
+  }
+  if (params.minSqft) {
+    chips.push({
+      id: "minSqft",
+      param: "minSqft",
+      label: `${Number(params.minSqft).toLocaleString()}+ sqft`,
+      kind: "hard",
+    });
+  }
+  if (params.maxSqft) {
+    chips.push({
+      id: "maxSqft",
+      param: "maxSqft",
+      label: `≤ ${Number(params.maxSqft).toLocaleString()} sqft`,
+      kind: "hard",
+    });
+  }
+  if (params.propertyType) {
+    chips.push({
+      id: "propertyType",
+      param: "propertyType",
+      label: params.propertyType,
+      kind: "hard",
+    });
+  }
+
+  const softList = (params.soft ?? "")
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  softList.forEach((label, softIndex) => {
+    chips.push({
+      id: `soft-${softIndex}`,
+      param: "soft",
+      label,
+      kind: "soft",
+      softIndex,
+    });
+  });
+
+  return chips;
+}

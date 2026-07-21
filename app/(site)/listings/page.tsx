@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { UnifiedListingCard } from "@/components/unified-listing-card";
+import { DreamFilterChips } from "@/components/dream-filter-chips";
 import { ListingsFilters } from "@/components/listings-filters";
 import { ListingsMapView } from "@/components/listings-map-view";
 import { ListingsPagination } from "@/components/listings-pagination";
@@ -71,6 +72,8 @@ export default async function ListingsPage({
   };
 
   const view = typeof params.view === "string" ? params.view : "list";
+  const dreamText = typeof params.dream === "string" ? params.dream.trim() : "";
+  const softPrefs = typeof params.soft === "string" ? params.soft.trim() : "";
 
   const skipAddressGeocode = view !== "map" && !mapPolygon;
 
@@ -96,6 +99,8 @@ export default async function ListingsPage({
   if (view !== "list") baseParams.view = view;
   if (filters.propertyType) baseParams.propertyType = filters.propertyType;
   if (mapPolyEncoded) baseParams[MAP_POLYGON_QUERY_KEY] = mapPolyEncoded;
+  if (dreamText) baseParams.dream = dreamText;
+  if (softPrefs) baseParams.soft = softPrefs;
 
   const hasFilters = !!(
     filters.q ||
@@ -105,6 +110,7 @@ export default async function ListingsPage({
     filters.minBaths ||
     filters.minSqft ||
     filters.maxSqft ||
+    filters.propertyType ||
     (mapPolygon && mapPolygon.length >= 3)
   );
 
@@ -125,13 +131,23 @@ export default async function ListingsPage({
             ? mapPolygonWideFetch
               ? "Your drawn outline is applied. This MLS often omits coordinates on search results—we matched homes using coordinates when present and Georgia ZIP centroids otherwise, then kept only what falls inside your shape."
               : "Showing homes inside your drawn map outline (plus any other filters you set)."
-            : filters.q
-              ? `Showing homes matching "${filters.q}"`
-              : "Browse homes across Georgia. Use filters to narrow your search."}
+            : dreamText
+              ? "Showing homes matched from your dream-home description. Edit the chips to refine."
+              : filters.q
+                ? `Showing homes matching "${filters.q}"`
+                : "Browse homes across Georgia. Use filters to narrow your search."}
         </p>
 
         <div className="mt-8 flex flex-col gap-5 sm:mt-10 sm:gap-6">
-          <ListingsSearchBar defaultValue={filters.q ?? ""} baseParams={baseParams} />
+          <ListingsSearchBar
+            defaultValue={filters.q ?? ""}
+            dreamDefault={dreamText}
+            baseParams={baseParams}
+          />
+
+          <Suspense>
+            <DreamFilterChips />
+          </Suspense>
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             {(hasFilters || total > 0) ? (
