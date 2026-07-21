@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { BlogCoverImage } from "@/components/blog-cover-image";
+import { BlogHero } from "@/components/blog-hero";
 import { BlogPagination } from "@/components/blog-pagination";
-import { BlogSearchBar } from "@/components/blog-search-bar";
 import { siteConfig } from "@/lib/config";
 import { getPublishedPostsPaginated } from "@/lib/blog-queries";
 import { ctaPrimary } from "@/lib/cta-styles";
 import { createMetadata } from "@/lib/metadata";
-import { eyebrow, innerPageMainTopPadding, lead, pageMain, sectionTitle, siteContainer } from "@/lib/ui";
+import { listingHeroTopPadding, siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -35,11 +34,27 @@ export default async function BlogPage({
   const page = parseNum(params.page) ?? 1;
   const perPage = 10;
 
-  const { posts, total, totalPages, page: safePage } = await getPublishedPostsPaginated({
-    q: q || undefined,
-    page,
-    perPage,
-  });
+  const [{ posts, total, totalPages, page: safePage }, { posts: recentForHero }] =
+    await Promise.all([
+      getPublishedPostsPaginated({
+        q: q || undefined,
+        page,
+        perPage,
+      }),
+      getPublishedPostsPaginated({ page: 1, perPage: 12 }),
+    ]);
+
+  const heroTiles = recentForHero
+    .filter((p): p is typeof p & { cover_image_url: string } =>
+      Boolean(p.cover_image_url?.trim()),
+    )
+    .slice(0, 5)
+    .map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      title: p.title,
+      cover_image_url: p.cover_image_url.trim(),
+    }));
 
   const baseParams: Record<string, string> = {};
   if (q) baseParams.q = q;
@@ -59,28 +74,23 @@ export default async function BlogPage({
       : null;
 
   return (
-    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
+    <main
+      id="main-content"
+      className="relative z-10 w-full flex-1 bg-background pb-24 sm:pb-28"
+      style={listingHeroTopPadding}
+    >
       {itemListJsonLd ? (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
         />
       ) : null}
-      <div className={siteContainer}>
-        <p className={eyebrow}>{siteConfig.brandSlug}</p>
-        <h1 className={`${sectionTitle} mt-3`}>Blog</h1>
-        <p className={`${lead} mt-4`}>
-          Market insights, home tips, and real estate updates from {siteConfig.agentName}.
-        </p>
 
-        <div className="mt-8">
-          <Suspense>
-            <BlogSearchBar defaultValue={q} />
-          </Suspense>
-        </div>
+      <BlogHero tiles={heroTiles} searchDefault={q} />
 
+      <div className={`${siteContainer} pt-4 sm:pt-6`}>
         {q ? (
-          <p className="mt-4 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {total === 0
               ? `No articles matching “${q}”.`
               : `${total.toLocaleString()} ${total === 1 ? "article" : "articles"} matching “${q}”.`}
@@ -88,7 +98,7 @@ export default async function BlogPage({
         ) : null}
 
         {posts.length === 0 ? (
-          <div className="mt-14 rounded-3xl border border-dashed border-border bg-muted/20 p-10 text-center sm:mt-16 sm:p-12">
+          <div className="mt-10 rounded-3xl border border-dashed border-border bg-muted/20 p-10 text-center sm:mt-12 sm:p-12">
             <p className="font-medium text-foreground">
               {q ? "No articles match your search" : "No articles yet."}
             </p>
@@ -109,7 +119,7 @@ export default async function BlogPage({
           </div>
         ) : (
           <>
-            <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid gap-8 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3">
               {posts.map((post) => (
                 <Link
                   key={post.id}
