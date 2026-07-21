@@ -818,17 +818,20 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
 
 async function enrichMlsListingInBackground(id: string, seed: MlsListingRow): Promise<void> {
   try {
-    // Only hit Media-entity when we still need better photos; avoid rate-limit storms.
     const needsMedia = !isWarmMlsCache(seed);
-    if (!needsMedia && hasMlsAttribution(seed)) return;
+    const needsAttr = !hasMlsAttribution(seed);
+    if (!needsMedia && !needsAttr) return;
 
     const parts: MlsListingRow[] = [seed];
     if (isBridgeListingsEnabled()) {
-      const row = await bridgeGetMlsListingById(id, { fullEnrich: needsMedia }).catch(() => null);
+      // fullEnrich pulls Media-entity and/or attribution second pass when either is missing.
+      const row = await bridgeGetMlsListingById(id, {
+        fullEnrich: needsMedia || needsAttr,
+      }).catch(() => null);
       if (row) parts.push(row);
     }
-    if (isSparkListingsEnabled() && needsMedia) {
-      const row = await sparkGetMlsListingById(id, { fullEnrich: true }).catch(() => null);
+    if (isSparkListingsEnabled() && (needsMedia || needsAttr)) {
+      const row = await sparkGetMlsListingById(id, { fullEnrich: needsMedia }).catch(() => null);
       if (row) parts.push(row);
     }
     const merged = mergeMlsListingRows(parts);

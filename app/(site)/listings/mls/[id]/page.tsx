@@ -161,10 +161,8 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
 
         <p className="mt-6 text-xs leading-relaxed text-muted-foreground/80">
           {attributionParts.length > 0
-            ? attributionParts.join("  ·  ")
-            : "Listing agent and broker details are shown when provided by the MLS feed for this property."}
-          {attributionParts.length > 0 ? "  ·  " : " "}
-          MLS #{listing.mls_id}
+            ? `${attributionParts.join("  ·  ")}  ·  MLS #${listing.mls_id}`
+            : `MLS #${listing.mls_id}`}
         </p>
       </div>
     </main>
