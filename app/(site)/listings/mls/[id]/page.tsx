@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ListingGallery } from "@/components/listing-gallery";
+import { ListingInquiryForm } from "@/components/listing-inquiry-form";
+import { ListingStickyCta } from "@/components/listing-sticky-cta";
 import { siteConfig } from "@/lib/config";
-import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
+import { ctaMortgage, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
 import { buildMlsListingJsonLd } from "@/lib/jsonld-mls-listing";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
@@ -77,7 +79,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   return (
     <main
       id="main-content"
-      className="relative z-10 w-full flex-1 bg-background pb-24 sm:pb-28"
+      className="relative z-10 w-full flex-1 bg-background pb-28 sm:pb-28 lg:pb-24"
       style={listingHeroTopPadding}
     >
       <script
@@ -149,16 +151,14 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
           </aside>
         </div>
 
-        <div className="mt-12 rounded-2xl border border-border bg-muted/20 p-6 sm:rounded-3xl sm:p-8">
-          <h2 className="text-xl font-semibold text-foreground">Interested in this home?</h2>
-          <p className="mt-2 text-base text-muted-foreground">
-            Contact {siteConfig.agentName} for a private showing or more information about this
-            property.
-          </p>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <a href={`mailto:${siteConfig.email}?subject=Inquiry about ${title}`} className={ctaPrimary}>
-              Email {siteConfig.agentName}
-            </a>
+        <div className="mt-12 space-y-6">
+          <ListingInquiryForm
+            listingSource="mls"
+            listingId={listing.mls_id}
+            listingTitle={title}
+            listingPath={`/listings/mls/${id}`}
+          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <a href={`tel:${siteConfig.phoneTel}`} className={ctaSecondary}>
               Call {siteConfig.phoneDisplay}
             </a>
@@ -270,6 +270,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
           <p>MLS #{listing.mls_id}</p>
         </div>
       </div>
+      <ListingStickyCta />
     </main>
   );
 }

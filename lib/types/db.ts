@@ -134,3 +134,18 @@ export interface SellSubmissionRow {
   admin_status: SellSubmissionAdminStatus;
   created_at: string;
 }
+
+export interface ListingInquiryRow {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  message: string;
+  preferred_times: string;
+  listing_source: "" | "manual" | "mls";
+  listing_id: string;
+  listing_title: string;
+  listing_path: string;
+  admin_status: SellSubmissionAdminStatus;
+  created_at: string;
+}

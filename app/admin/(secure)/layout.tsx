@@ -31,7 +31,10 @@ export default async function AdminSecureLayout({
               Featured
             </Link>
             <Link href="/admin/submissions" className="hover:opacity-80">
-              Submissions
+              Seller leads
+            </Link>
+            <Link href="/admin/buyer-inquiries" className="hover:opacity-80">
+              Buyer leads
             </Link>
             <Link href="/admin/blog" className="hover:opacity-80">
               Blog

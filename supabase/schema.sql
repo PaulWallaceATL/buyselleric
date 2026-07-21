@@ -103,3 +103,5 @@ create policy "Public insert sell submissions"
 
 comment on table public.listings is 'Real estate listings managed via admin panel.';
 comment on table public.sell_submissions is 'Inbound leads from the sell-your-home form.';
+
+-- Buyer / listing inquiries live in supabase/listing-inquiries.sql (applied separately).

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ListingGallery } from "@/components/listing-gallery";
+import { ListingInquiryForm } from "@/components/listing-inquiry-form";
+import { ListingStickyCta } from "@/components/listing-sticky-cta";
 import { siteConfig } from "@/lib/config";
 import { ctaMortgage, ctaPrimary, ctaSecondary } from "@/lib/cta-styles";
 import { formatPriceUsd } from "@/lib/format";
@@ -61,7 +63,7 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
   return (
     <main
       id="main-content"
-      className="relative z-10 w-full flex-1 bg-background pb-24 sm:pb-28"
+      className="relative z-10 w-full flex-1 bg-background pb-28 sm:pb-28 lg:pb-24"
       style={listingHeroTopPadding}
     >
       <div className="w-full">
@@ -118,12 +120,9 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
           <aside className="lg:col-span-5">
             <div className="lg:sticky lg:top-28 lg:space-y-8">
               <div className="flex flex-col gap-4 lg:flex-col">
-                <Link
-                  href={`mailto:${siteConfig.email}?subject=${encodeURIComponent(`Inquiry: ${listing.title}`)}`}
-                  className={`${ctaPrimary} lg:w-full`}
-                >
-                  Email {siteConfig.agentName}
-                </Link>
+                <a href="#inquiry" className={`${ctaPrimary} lg:w-full`}>
+                  Request a showing
+                </a>
                 <Link href={`tel:${siteConfig.phoneTel}`} className={`${ctaSecondary} lg:w-full`}>
                   Call {siteConfig.phoneDisplay}
                 </Link>
@@ -152,6 +151,15 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
               {listing.description || "More details available on request."}
             </p>
 
+            <div className="mt-10">
+              <ListingInquiryForm
+                listingSource="manual"
+                listingId={listing.id}
+                listingTitle={listing.title}
+                listingPath={`/listings/${listing.slug}`}
+              />
+            </div>
+
             <div className="mt-12 border-t border-border pt-10">
               <Link
                 href="/listings"
@@ -163,6 +171,7 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
           </article>
         </div>
       </div>
+      <ListingStickyCta />
     </main>
   );
 }

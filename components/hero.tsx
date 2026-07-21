@@ -3,7 +3,7 @@
 import { HeroSearch } from "@/components/hero-search";
 import Link from "next/link";
 import { siteConfig } from "@/lib/config";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const HERO_VIDEO_SRC = "/video/hero-aerial.mp4";
 const HERO_POSTER_SRC = "/video/hero-aerial-poster.jpg";
@@ -17,10 +17,54 @@ const ctaSecondaryOnVideo =
 const ctaMortgageOnVideo =
   "inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center gap-2 rounded-full border-2 border-white/45 bg-black/25 px-7 py-4 text-base font-semibold text-white backdrop-blur-sm transition-colors hover:bg-black/35 active:scale-[0.98] sm:px-8 sm:text-lg touch-manipulation select-none focus-ring outline-none";
 
+function shouldLoadHeroVideo(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  // Mobile / narrow: poster only — keeps the MP4 off the LCP path.
+  if (window.matchMedia("(max-width: 768px)").matches) return false;
+  const conn = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }
+  ).connection;
+  if (conn?.saveData) return false;
+  if (conn?.effectiveType === "slow-2g" || conn?.effectiveType === "2g") return false;
+  return true;
+}
+
 function HeroVideoBackground() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [loadVideo, setLoadVideo] = useState(false);
 
   useEffect(() => {
+    if (!shouldLoadHeroVideo()) return;
+
+    let cancelled = false;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const enable = () => {
+      if (!cancelled) setLoadVideo(true);
+    };
+
+    // Defer past first paint so the poster can be LCP without competing for bandwidth.
+    if ("requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(enable, { timeout: 1800 });
+    } else {
+      timeoutId = setTimeout(enable, 900);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loadVideo) return;
     const video = videoRef.current;
     if (!video) return;
 
@@ -36,27 +80,29 @@ function HeroVideoBackground() {
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, []);
+  }, [loadVideo]);
 
   return (
     <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
-      {/* Poster / fallback while video buffers */}
+      {/* Poster is the LCP candidate; video only mounts on desktop after idle. */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-neutral-900"
         style={{ backgroundImage: `url(${HERO_POSTER_SRC})` }}
       />
-      <video
-        ref={videoRef}
-        className="absolute inset-0 h-full w-full object-cover"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        poster={HERO_POSTER_SRC}
-      >
-        <source src={HERO_VIDEO_SRC} type="video/mp4" />
-      </video>
+      {loadVideo ? (
+        <video
+          ref={videoRef}
+          className="absolute inset-0 h-full w-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          poster={HERO_POSTER_SRC}
+        >
+          <source src={HERO_VIDEO_SRC} type="video/mp4" />
+        </video>
+      ) : null}
       {/* Readability scrim — keeps headline/CTAs crisp over bright aerial frames */}
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/25" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/30" />
@@ -129,7 +175,7 @@ export function Hero() {
             href={siteConfig.mortgageApplicationUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={ctaMortgageOnVideo}
+            className={`${ctaMortgageOnVideo} hidden sm:inline-flex`}
           >
             Refinance
           </a>

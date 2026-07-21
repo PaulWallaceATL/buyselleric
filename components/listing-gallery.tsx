@@ -89,7 +89,7 @@ export function ListingGallery({ urls, variant = "default" }: ListingGalleryProp
           sizes="100vw"
           className="object-cover"
           priority
-          quality={95}
+          quality={80}
           unoptimized={listingImagePreferUnoptimized(main!)}
           onError={() => markFailed(main!)}
         />

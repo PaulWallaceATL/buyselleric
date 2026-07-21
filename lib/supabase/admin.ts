@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import type {
   BlogPostRow,
   FeaturedSlotRow,
+  ListingInquiryRow,
   ListingRow,
   SeoAgentActivityLevel,
   SeoAgentActivityRow,
@@ -44,6 +45,17 @@ export async function adminListSubmissions(client: NonNullable<ReturnType<typeof
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as SellSubmissionRow[];
+}
+
+export async function adminListListingInquiries(
+  client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+) {
+  const { data, error } = await client
+    .from("listing_inquiries")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ListingInquiryRow[];
 }
 
 export async function adminListBlogPosts(client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>) {

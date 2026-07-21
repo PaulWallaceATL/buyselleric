@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   adminListBlogPosts,
+  adminListListingInquiries,
   adminListListings,
   adminListSubmissions,
   createSupabaseAdminClient,
@@ -11,15 +12,18 @@ export default async function AdminDashboardPage(): Promise<ReactNode> {
   const client = createSupabaseAdminClient();
   let listingCount = 0;
   let newLeads = 0;
+  let newBuyerLeads = 0;
   let blogCount = 0;
   if (client) {
-    const [listings, subs, posts] = await Promise.all([
+    const [listings, subs, buyerLeads, posts] = await Promise.all([
       adminListListings(client),
       adminListSubmissions(client),
+      adminListListingInquiries(client).catch(() => []),
       adminListBlogPosts(client).catch(() => []),
     ]);
     listingCount = listings.length;
     newLeads = subs.filter((s) => s.admin_status === "new").length;
+    newBuyerLeads = buyerLeads.filter((s) => s.admin_status === "new").length;
     blogCount = posts.length;
   }
 
@@ -27,7 +31,7 @@ export default async function AdminDashboardPage(): Promise<ReactNode> {
     <div>
       <h1 className="text-2xl font-medium tracking-tight text-foreground">Dashboard</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Manage published homes and seller inquiries.
+        Manage published homes and inbound leads.
       </p>
 
       {!client ? (
@@ -48,7 +52,7 @@ export default async function AdminDashboardPage(): Promise<ReactNode> {
         </p>
       ) : null}
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
         <Link
           href="/admin/listings"
           className="rounded-2xl border border-border bg-muted/20 p-6 transition-colors hover:bg-muted/40"
@@ -71,6 +75,14 @@ export default async function AdminDashboardPage(): Promise<ReactNode> {
           <p className="text-sm text-muted-foreground">New seller leads</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{newLeads}</p>
           <p className="mt-2 text-sm font-medium text-foreground">View submissions →</p>
+        </Link>
+        <Link
+          href="/admin/buyer-inquiries"
+          className="rounded-2xl border border-border bg-muted/20 p-6 transition-colors hover:bg-muted/40"
+        >
+          <p className="text-sm text-muted-foreground">New buyer leads</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">{newBuyerLeads}</p>
+          <p className="mt-2 text-sm font-medium text-foreground">View showing requests →</p>
         </Link>
         <Link
           href="/admin/blog"

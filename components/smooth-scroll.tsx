@@ -74,6 +74,12 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
     ).matches;
     if (prefersReducedMotion) return;
 
+    // Skip Lenis on phones/tablets — native scroll is faster and cheaper for TBT.
+    const isCoarseOrNarrow =
+      window.matchMedia("(max-width: 768px)").matches ||
+      window.matchMedia("(pointer: coarse)").matches;
+    if (isCoarseOrNarrow) return;
+
     let cancelled = false;
 
     const timer = setTimeout(() => {

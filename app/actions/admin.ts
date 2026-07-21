@@ -286,6 +286,38 @@ export async function adminUpdateSubmissionStatus(
   return { ok: true };
 }
 
+export async function adminUpdateListingInquiryStatus(
+  id: string,
+  admin_status: SellSubmissionAdminStatus,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { ok: false, message: "Unauthorized" };
+  }
+
+  const client = createSupabaseAdminClient();
+  if (!client) {
+    return { ok: false, message: "Supabase admin is not configured." };
+  }
+
+  const allowed: SellSubmissionAdminStatus[] = ["new", "in_progress", "closed"];
+  const safe = allowed.includes(admin_status) ? admin_status : "new";
+
+  const { error } = await client
+    .from("listing_inquiries")
+    .update({ admin_status: safe })
+    .eq("id", id);
+  if (error) {
+    console.error("adminUpdateListingInquiryStatus", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/buyer-inquiries");
+  return { ok: true };
+}
+
 const MAX_LISTING_IMAGE_BYTES = 5 * 1024 * 1024;
 const LISTING_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
