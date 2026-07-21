@@ -780,21 +780,34 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
   const id = mlsId.trim();
   if (!id || !/^\d+$/.test(id)) return null;
 
-  const propSelect = RETS_ATTR_SELECT;
+  // Prefer no $Select first — ConnectMLS often 20201/errors if any selected system name is wrong.
   const prop =
-    (await retsSearchFirst("Property", "RESI", `(ListingId=${id})`, propSelect)) ||
-    (await retsSearchFirst("Property", "RESI", `(ListingID=${id})`, propSelect));
-  if (!prop) return null;
+    (await retsSearchFirst("Property", "RESI", `(ListingId=${id})`, "")) ||
+    (await retsSearchFirst("Property", "RESI", `(ListingID=${id})`, "")) ||
+    (await retsSearchFirst("Property", "RESI", `(ListingId=${id})`, RETS_ATTR_SELECT));
+  if (!prop) {
+    console.warn(`fetchRetsAttributionForMlsId: no Property row for ${id}`);
+    return null;
+  }
 
-  const agentCode = pickRetsField(prop, ["ListAgent", "ListAgentMlsId", "ListAgentKey"]);
-  const officeCode = pickRetsField(prop, ["ListOffice", "ListOfficeMlsId", "ListOfficeKey"]);
+  const agentCode = pickRetsField(prop, ["ListAgent", "ListAgentMlsId", "ListAgentKey", "ListAgentId"]);
+  const officeCode = pickRetsField(prop, [
+    "ListOffice",
+    "ListOfficeMlsId",
+    "ListOfficeKey",
+    "ListOfficeId",
+  ]);
 
   const fromPropName =
-    pickRetsField(prop, ["ListAgentFullName"]) ||
+    pickRetsField(prop, ["ListAgentFullName", "ListAgentName"]) ||
     [pickRetsField(prop, ["ListAgentFirstName"]), pickRetsField(prop, ["ListAgentLastName"])]
       .filter(Boolean)
       .join(" ");
-  const fromPropOffice = pickRetsField(prop, ["ListOfficeName"]);
+  const fromPropOffice = pickRetsField(prop, ["ListOfficeName", "ListOffice"]);
+  // If ListOffice is a short code (e.g. KWGC01), don't treat it as a display name.
+  const officeLooksLikeCode = /^[A-Z0-9]{3,24}$/.test(fromPropOffice) && !/\s/.test(fromPropOffice);
+  const propOfficeName = officeLooksLikeCode ? "" : fromPropOffice;
+
   const fromPropAgentPhone = pickRetsField(prop, [
     "ListAgentPreferredPhone",
     "ListAgentDirectPhone",
@@ -805,15 +818,18 @@ export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
 
   const resolved = await resolveRetsAgentOfficeCodes(
     fromPropName ? "" : agentCode,
-    fromPropOffice ? "" : officeCode,
+    propOfficeName ? "" : officeCode || (officeLooksLikeCode ? fromPropOffice : ""),
   );
 
   const listing_agent = fromPropName || resolved.listing_agent || agentCode;
-  const listing_office = fromPropOffice || resolved.listing_office || officeCode;
+  const listing_office = propOfficeName || resolved.listing_office || officeCode;
   const listing_agent_phone = fromPropAgentPhone || resolved.listing_agent_phone;
   const listing_office_phone = fromPropOfficePhone || resolved.listing_office_phone;
 
   if (!listing_agent && !listing_office && !listing_agent_phone && !listing_office_phone) {
+    console.warn(`fetchRetsAttributionForMlsId: Property ${id} has no agent/office fields`, {
+      keys: Object.keys(prop).slice(0, 40),
+    });
     return null;
   }
 

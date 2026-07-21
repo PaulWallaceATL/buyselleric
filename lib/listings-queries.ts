@@ -858,7 +858,7 @@ async function applyRetsAttribution(
   try {
     const attr = await Promise.race([
       fetchRetsAttributionForMlsId(id),
-      new Promise<null>((r) => setTimeout(() => r(null), 4_500)),
+      new Promise<null>((r) => setTimeout(() => r(null), 12_000)),
     ]);
     if (!attr) return null;
     return {
