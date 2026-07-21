@@ -614,3 +614,235 @@ export async function searchListingsSince(
 
   return { records, hasMore };
 }
+
+export function isRetsConfigured(): boolean {
+  return Boolean(
+    process.env.RETS_LOGIN_URL?.trim() &&
+      process.env.RETS_USERNAME?.trim() &&
+      process.env.RETS_PASSWORD?.trim(),
+  );
+}
+
+const RETS_ATTR_SELECT = [
+  "ListingId",
+  "ListAgent",
+  "ListAgentFullName",
+  "ListAgentFirstName",
+  "ListAgentLastName",
+  "ListAgentPreferredPhone",
+  "ListAgentDirectPhone",
+  "ListAgentCellPhone",
+  "ListAgentPhone",
+  "ListAgentEmail",
+  "ListOffice",
+  "ListOfficeName",
+  "ListOfficePhone",
+  "ListOfficeEmail",
+].join(",");
+
+function pickRetsField(record: Record<string, string>, keys: string[]): string {
+  for (const k of keys) {
+    const v = record[k]?.trim();
+    if (v) return v;
+  }
+  const lower = Object.fromEntries(Object.entries(record).map(([k, v]) => [k.toLowerCase(), v]));
+  for (const k of keys) {
+    const v = lower[k.toLowerCase()]?.trim();
+    if (v) return v;
+  }
+  return "";
+}
+
+async function retsSearchFirst(
+  resource: string,
+  classId: string,
+  query: string,
+  select: string,
+): Promise<Record<string, string> | null> {
+  try {
+    const body = await rawSearchAny(resource, classId, query, 1, select);
+    const rows = parseCompactData(body);
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve GAMLS ConnectMLS Agent / Office codes to display names + phones.
+ * Property rows often only store ListAgent=USERCODE / ListOffice=OFFICEID.
+ */
+export async function resolveRetsAgentOfficeCodes(
+  agentCode: string,
+  officeCode: string,
+): Promise<{
+  listing_agent: string;
+  listing_agent_phone: string;
+  listing_agent_email: string;
+  listing_office: string;
+  listing_office_phone: string;
+  listing_office_email: string;
+  raw: Record<string, unknown>;
+}> {
+  const raw: Record<string, unknown> = {};
+  let listing_agent = "";
+  let listing_agent_phone = "";
+  let listing_agent_email = "";
+  let listing_office = "";
+  let listing_office_phone = "";
+  let listing_office_email = "";
+
+  const agentId = agentCode.trim();
+  const officeId = officeCode.trim();
+
+  const agentSelect =
+    "AgentID,UserCode,MemberMlsId,FirstName,LastName,FullName,AgentFullName,PreferredPhone,DirectPhone,CellPhone,OfficePhone,Email,URL";
+  const officeSelect = "OfficeID,OfficeMlsId,OfficeName,Name,Phone,OfficePhone,Email,URL,Website";
+
+  const agentTries: Array<Promise<Record<string, string> | null>> = [];
+  if (agentId) {
+    for (const q of [
+      `(AgentID=${agentId})`,
+      `(UserCode=${agentId})`,
+      `(MemberMlsId=${agentId})`,
+    ]) {
+      for (const classId of ["Agent", "ActiveAgent"]) {
+        agentTries.push(retsSearchFirst("Agent", classId, q, agentSelect));
+      }
+    }
+  }
+
+  const officeTries: Array<Promise<Record<string, string> | null>> = [];
+  if (officeId) {
+    for (const q of [`(OfficeID=${officeId})`, `(OfficeMlsId=${officeId})`]) {
+      for (const classId of ["Office", "ActiveOffice"]) {
+        officeTries.push(retsSearchFirst("Office", classId, q, officeSelect));
+      }
+    }
+  }
+
+  const [agentRows, officeRows] = await Promise.all([
+    Promise.all(agentTries),
+    Promise.all(officeTries),
+  ]);
+
+  for (const row of agentRows) {
+    if (!row) continue;
+    raw.RetsAgent = row;
+    listing_agent =
+      pickRetsField(row, ["FullName", "AgentFullName", "MemberFullName"]) ||
+      [pickRetsField(row, ["FirstName"]), pickRetsField(row, ["LastName"])].filter(Boolean).join(" ");
+    listing_agent_phone = pickRetsField(row, [
+      "PreferredPhone",
+      "DirectPhone",
+      "CellPhone",
+      "OfficePhone",
+      "Phone",
+    ]);
+    listing_agent_email = pickRetsField(row, ["Email", "AgentEmail", "MemberEmail"]);
+    if (listing_agent) break;
+  }
+  if (agentId && !listing_agent) listing_agent = agentId;
+
+  for (const row of officeRows) {
+    if (!row) continue;
+    raw.RetsOffice = row;
+    listing_office = pickRetsField(row, ["OfficeName", "Name", "BrokerageName"]);
+    listing_office_phone = pickRetsField(row, ["Phone", "OfficePhone", "MainOfficePhone"]);
+    listing_office_email = pickRetsField(row, ["Email", "OfficeEmail"]);
+    if (listing_office) break;
+  }
+  if (officeId && !listing_office) listing_office = officeId;
+
+  return {
+    listing_agent,
+    listing_agent_phone,
+    listing_agent_email,
+    listing_office,
+    listing_office_phone,
+    listing_office_email,
+    raw,
+  };
+}
+
+/**
+ * Fetch listing-agent / broker attribution from ConnectMLS RETS for one MLS id.
+ * Used when Bridge IDX omits agent/office names (common on gamls2).
+ */
+export async function fetchRetsAttributionForMlsId(mlsId: string): Promise<{
+  listing_agent: string;
+  listing_agent_phone: string;
+  listing_office: string;
+  listing_office_phone: string;
+  raw_data: Record<string, unknown>;
+} | null> {
+  if (!isRetsConfigured()) return null;
+  const id = mlsId.trim();
+  if (!id || !/^\d+$/.test(id)) return null;
+
+  const propSelect = RETS_ATTR_SELECT;
+  const prop =
+    (await retsSearchFirst("Property", "RESI", `(ListingId=${id})`, propSelect)) ||
+    (await retsSearchFirst("Property", "RESI", `(ListingID=${id})`, propSelect));
+  if (!prop) return null;
+
+  const agentCode = pickRetsField(prop, ["ListAgent", "ListAgentMlsId", "ListAgentKey"]);
+  const officeCode = pickRetsField(prop, ["ListOffice", "ListOfficeMlsId", "ListOfficeKey"]);
+
+  const fromPropName =
+    pickRetsField(prop, ["ListAgentFullName"]) ||
+    [pickRetsField(prop, ["ListAgentFirstName"]), pickRetsField(prop, ["ListAgentLastName"])]
+      .filter(Boolean)
+      .join(" ");
+  const fromPropOffice = pickRetsField(prop, ["ListOfficeName"]);
+  const fromPropAgentPhone = pickRetsField(prop, [
+    "ListAgentPreferredPhone",
+    "ListAgentDirectPhone",
+    "ListAgentCellPhone",
+    "ListAgentPhone",
+  ]);
+  const fromPropOfficePhone = pickRetsField(prop, ["ListOfficePhone"]);
+
+  const resolved = await resolveRetsAgentOfficeCodes(
+    fromPropName ? "" : agentCode,
+    fromPropOffice ? "" : officeCode,
+  );
+
+  const listing_agent = fromPropName || resolved.listing_agent || agentCode;
+  const listing_office = fromPropOffice || resolved.listing_office || officeCode;
+  const listing_agent_phone = fromPropAgentPhone || resolved.listing_agent_phone;
+  const listing_office_phone = fromPropOfficePhone || resolved.listing_office_phone;
+
+  if (!listing_agent && !listing_office && !listing_agent_phone && !listing_office_phone) {
+    return null;
+  }
+
+  const raw_data: Record<string, unknown> = {
+    ...prop,
+    ...resolved.raw,
+    ...(listing_agent ? { ListAgentFullName: listing_agent } : {}),
+    ...(listing_office ? { ListOfficeName: listing_office } : {}),
+    ...(listing_agent_phone ? { ListAgentPreferredPhone: listing_agent_phone } : {}),
+    ...(listing_office_phone ? { ListOfficePhone: listing_office_phone } : {}),
+    ...(resolved.listing_agent_email || pickRetsField(prop, ["ListAgentEmail"])
+      ? {
+          ListAgentEmail:
+            resolved.listing_agent_email || pickRetsField(prop, ["ListAgentEmail"]),
+        }
+      : {}),
+    ...(resolved.listing_office_email || pickRetsField(prop, ["ListOfficeEmail"])
+      ? {
+          ListOfficeEmail:
+            resolved.listing_office_email || pickRetsField(prop, ["ListOfficeEmail"]),
+        }
+      : {}),
+  };
+
+  return {
+    listing_agent,
+    listing_agent_phone,
+    listing_office,
+    listing_office_phone,
+    raw_data,
+  };
+}

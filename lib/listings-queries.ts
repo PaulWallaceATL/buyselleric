@@ -26,6 +26,7 @@ import {
   mergeMlsListingRows,
   scoreMlsListingCompleteness,
 } from "@/lib/mls-attribution";
+import { fetchRetsAttributionForMlsId, isRetsConfigured } from "@/lib/rets-client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ListingRow, MlsListingRow } from "@/lib/types/db";
 
@@ -666,6 +667,18 @@ async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
     const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
     const client = createSupabaseAdminClient();
     if (!client || !row.mls_id) return;
+
+    // Never blank attribution that RETS (or a prior enrich) already stored when Bridge IDX omits it.
+    const existing = await getMlsListingFromSupabase(row.mls_id);
+    const listing_agent = (row.listing_agent || existing?.listing_agent || "").trim();
+    const listing_agent_phone = (row.listing_agent_phone || existing?.listing_agent_phone || "").trim();
+    const listing_office = (row.listing_office || existing?.listing_office || "").trim();
+    const listing_office_phone = (row.listing_office_phone || existing?.listing_office_phone || "").trim();
+    const raw_data = {
+      ...(existing?.raw_data ?? {}),
+      ...(row.raw_data ?? {}),
+    };
+
     const now = new Date().toISOString();
     await client.from("mls_listings").upsert(
       {
@@ -685,11 +698,11 @@ async function persistMlsListingCache(row: MlsListingRow): Promise<void> {
         property_type: row.property_type,
         status: row.status || "active",
         image_urls: row.image_urls ?? [],
-        listing_agent: row.listing_agent ?? "",
-        listing_agent_phone: row.listing_agent_phone ?? "",
-        listing_office: row.listing_office ?? "",
-        listing_office_phone: row.listing_office_phone ?? "",
-        raw_data: row.raw_data ?? {},
+        listing_agent,
+        listing_agent_phone,
+        listing_office,
+        listing_office_phone,
+        raw_data,
         synced_at: now,
         updated_at: now,
       },
@@ -810,21 +823,66 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
   if (merged && (isWarmMlsCache(merged) || hasMlsAttribution(merged) || isUsableMlsCache(merged))) {
     void persistMlsListingCache(merged);
   }
+
+  // Bridge IDX often blanks agent/broker; ConnectMLS RETS usually has codes (and Agent/Office names).
+  if (merged && attributionNeedsRetsResolve(merged) && isRetsConfigured()) {
+    const withRets = await applyRetsAttribution(id, merged);
+    if (withRets) {
+      merged = withRets;
+      void persistMlsListingCache(merged);
+    }
+  }
+
   if (merged && isDetailReady(merged)) {
     scheduleBackgroundMlsEnrich(id, merged);
   }
   return merged;
 });
 
+/** True when we lack usable agent/broker display names (empty or MLS user/office codes). */
+function attributionNeedsRetsResolve(row: MlsListingRow): boolean {
+  if (!hasMlsAttribution(row)) return true;
+  const agent = (row.listing_agent || "").trim();
+  const office = (row.listing_office || "").trim();
+  const looksLikeCode = (s: string) => /^[A-Z0-9]{3,24}$/.test(s) && !/\s/.test(s);
+  // Prefer RETS name resolution when we only have codes like TANNERREGAN / KWGC01.
+  if (agent && looksLikeCode(agent) && !office.includes(" ")) return true;
+  if (office && looksLikeCode(office) && (!agent || looksLikeCode(agent))) return true;
+  return false;
+}
+
+async function applyRetsAttribution(
+  id: string,
+  seed: MlsListingRow,
+): Promise<MlsListingRow | null> {
+  try {
+    const attr = await Promise.race([
+      fetchRetsAttributionForMlsId(id),
+      new Promise<null>((r) => setTimeout(() => r(null), 4_500)),
+    ]);
+    if (!attr) return null;
+    return {
+      ...seed,
+      listing_agent: attr.listing_agent || seed.listing_agent,
+      listing_agent_phone: attr.listing_agent_phone || seed.listing_agent_phone,
+      listing_office: attr.listing_office || seed.listing_office,
+      listing_office_phone: attr.listing_office_phone || seed.listing_office_phone,
+      raw_data: { ...seed.raw_data, ...attr.raw_data },
+    };
+  } catch (e) {
+    console.warn("applyRetsAttribution", e);
+    return null;
+  }
+}
+
 async function enrichMlsListingInBackground(id: string, seed: MlsListingRow): Promise<void> {
   try {
     const needsMedia = !isWarmMlsCache(seed);
-    const needsAttr = !hasMlsAttribution(seed);
+    const needsAttr = attributionNeedsRetsResolve(seed);
     if (!needsMedia && !needsAttr) return;
 
     const parts: MlsListingRow[] = [seed];
     if (isBridgeListingsEnabled()) {
-      // fullEnrich pulls Media-entity and/or attribution second pass when either is missing.
       const row = await bridgeGetMlsListingById(id, {
         fullEnrich: needsMedia || needsAttr,
       }).catch(() => null);
@@ -834,7 +892,11 @@ async function enrichMlsListingInBackground(id: string, seed: MlsListingRow): Pr
       const row = await sparkGetMlsListingById(id, { fullEnrich: needsMedia }).catch(() => null);
       if (row) parts.push(row);
     }
-    const merged = mergeMlsListingRows(parts);
+    let merged = mergeMlsListingRows(parts) ?? seed;
+    if (attributionNeedsRetsResolve(merged) && isRetsConfigured()) {
+      const withRets = await applyRetsAttribution(id, merged);
+      if (withRets) merged = withRets;
+    }
     if (merged && (isWarmMlsCache(merged) || hasMlsAttribution(merged))) {
       await persistMlsListingCache(merged);
     }
