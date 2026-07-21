@@ -1001,10 +1001,22 @@ export async function bridgeGetSearchSuggestions(raw: string): Promise<SearchSug
   return [...cities.slice(0, 6), ...zips.slice(0, 4), ...addrs.slice(0, 5)].slice(0, 12);
 }
 
-export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListingRow | null> {
+export type MlsDetailFetchOptions = {
+  /**
+   * When true, wait for Media-entity URLs + attribution OData.
+   * Default false: paint from Property + inline Media as soon as possible.
+   */
+  fullEnrich?: boolean;
+};
+
+export async function bridgeGetMlsListingById(
+  mlsId: string,
+  options?: MlsDetailFetchOptions,
+): Promise<MlsListingRow | null> {
   const cfg = getBridgeODataConfig();
   if (!cfg) return null;
   const client: BridgeODataConfig = cfg;
+  const fullEnrich = options?.fullEnrich === true;
 
   const id = mlsId.trim();
   if (!id) return null;
@@ -1028,8 +1040,17 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
   async function finalize(row: Record<string, unknown>, filter: string): Promise<MlsListingRow> {
     let enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
 
+    const listingKey = String(enriched.ListingKey ?? "").trim();
+    const listingId = String(enriched.ListingId ?? "").trim();
+    const inlinePhotos = extractMediaUrls(enriched.Media);
+
+    // Hot path: Property already has photos — return immediately (gallery bumps ConnectMLS width).
+    // Media-entity + attribution are for background enrich via fullEnrich.
+    if (!fullEnrich && inlinePhotos.length > 0) {
+      return rowToMlsListingRow(enriched);
+    }
+
     // Second pass for agent/broker fields (often omitted from sparse selects).
-    // Run in parallel with media so attribution does not add sequential latency.
     const attrPromise = (async (): Promise<Record<string, unknown> | null> => {
       try {
         const attrSelect = sanitizeBridgePropertySelect(
@@ -1047,13 +1068,8 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
       }
     })();
 
-    let mediaUrls: string[] = [];
-    // Prefer a fast paint: use inline Property.Media when present (ConnectMLS
-    // gallery bumps ?width= to 2400). Only wait briefly for the Media entity.
-    const listingKey = String(enriched.ListingKey ?? "").trim();
-    const listingId = String(enriched.ListingId ?? "").trim();
-    const inlinePhotos = extractMediaUrls(enriched.Media);
-    const mediaWaitMs = inlinePhotos.length > 0 ? 1_200 : 8_000;
+    // No inline photos (or fullEnrich): wait for Media entity. Cap wait so we don't hang forever.
+    const mediaWaitMs = inlinePhotos.length > 0 ? 2_500 : 6_000;
     const mediaPromise =
       listingKey || listingId
         ? Promise.race([
@@ -1073,9 +1089,8 @@ export async function bridgeGetMlsListingById(mlsId: string): Promise<MlsListing
 
     const [attrRow, media] = await Promise.all([attrPromise, mediaPromise]);
     if (attrRow) enriched = { ...enriched, ...attrRow };
-    mediaUrls = media;
+    const mediaUrls = media;
 
-    // Prefer Media-entity URLs; fall back to inline Property.Media if entity is empty/slow.
     if (mediaUrls.length > 0) {
       const { Media: _drop, ...rest } = enriched;
       return rowToMlsListingRow(rest, { supplementalImageUrls: mediaUrls });

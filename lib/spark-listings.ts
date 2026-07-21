@@ -844,10 +844,22 @@ async function enrichPropertyRowWithRemarksIfNeeded(
   return row;
 }
 
-export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingRow | null> {
+export type MlsDetailFetchOptions = {
+  /**
+   * When true, wait for Media-entity URLs.
+   * Default false: paint from Property + expanded Media as soon as possible.
+   */
+  fullEnrich?: boolean;
+};
+
+export async function sparkGetMlsListingById(
+  mlsId: string,
+  options?: MlsDetailFetchOptions,
+): Promise<MlsListingRow | null> {
   const cfg = getSparkODataConfig();
   if (!cfg) return null;
   const client: SparkODataConfig = cfg;
+  const fullEnrich = options?.fullEnrich === true;
 
   const id = mlsId.trim();
   if (!id) return null;
@@ -870,11 +882,17 @@ export async function sparkGetMlsListingById(mlsId: string): Promise<MlsListingR
 
   async function finalize(row: Record<string, unknown>, filter: string): Promise<MlsListingRow> {
     const enriched = await enrichPropertyRowWithRemarksIfNeeded(client, filter, row);
-    let mediaUrls: string[] = [];
     const listingKey = String(enriched.ListingKey ?? "").trim();
     const listingId = String(enriched.ListingId ?? "").trim();
     const inlinePhotos = extractMediaUrls(enriched.Media);
-    const mediaWaitMs = inlinePhotos.length > 0 ? 1_200 : 8_000;
+
+    // Hot path: $expand=Media already gave photos — return immediately.
+    if (!fullEnrich && inlinePhotos.length > 0) {
+      return rowToMlsListingRow(enriched);
+    }
+
+    let mediaUrls: string[] = [];
+    const mediaWaitMs = inlinePhotos.length > 0 ? 2_500 : 6_000;
     if (listingKey || listingId) {
       try {
         mediaUrls = await Promise.race([

@@ -2,13 +2,18 @@
 
 import { MapPin, Home, Hash } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { SearchSuggestion } from "@/lib/listing-search-suggest";
 
 function SuggestIcon({ type }: { type: SearchSuggestion["type"] }) {
   if (type === "city") return <MapPin className="h-4 w-4 shrink-0 text-ring" aria-hidden />;
   if (type === "zip") return <Hash className="h-4 w-4 shrink-0 text-ring" aria-hidden />;
   return <Home className="h-4 w-4 shrink-0 text-ring" aria-hidden />;
+}
+
+function mlsIdFromHref(href: string): string | null {
+  const m = href.match(/^\/listings\/mls\/([^/?#]+)/);
+  return m?.[1] ? decodeURIComponent(m[1]) : null;
 }
 
 export function SearchSuggestionsList({
@@ -26,17 +31,30 @@ export function SearchSuggestionsList({
 }) {
   const router = useRouter();
   const show = loading || items.length > 0;
+  const warmedRef = useRef<Set<string>>(new Set());
 
-  // Warm the Next.js RSC cache for address → MLS detail deep links so click feels instant.
+  // Warm RSC + Supabase cache for address → MLS detail so click hits a ready row.
   useEffect(() => {
+    let warmed = 0;
     for (const s of items) {
-      if (s.href?.startsWith("/listings/mls/") || s.href?.startsWith("/listings/")) {
+      if (!s.href) continue;
+      if (s.href.startsWith("/listings/mls/") || s.href.startsWith("/listings/")) {
         try {
           router.prefetch(s.href);
         } catch {
           /* ignore */
         }
       }
+      const mlsId = s.type === "address" ? mlsIdFromHref(s.href) : null;
+      if (!mlsId || warmed >= 3 || warmedRef.current.has(mlsId)) continue;
+      warmedRef.current.add(mlsId);
+      warmed += 1;
+      void fetch("/api/listings/warm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: mlsId }),
+        keepalive: true,
+      }).catch(() => undefined);
     }
   }, [items, router]);
 
@@ -72,6 +90,16 @@ export function SearchSuggestionsList({
                 } catch {
                   /* ignore */
                 }
+              }
+              const mlsId = s.href ? mlsIdFromHref(s.href) : null;
+              if (mlsId && !warmedRef.current.has(mlsId)) {
+                warmedRef.current.add(mlsId);
+                void fetch("/api/listings/warm", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: mlsId }),
+                  keepalive: true,
+                }).catch(() => undefined);
               }
             }}
             onMouseDown={(e) => {

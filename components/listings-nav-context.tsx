@@ -46,6 +46,7 @@ export function useListingsNav(): ListingsNavContextValue {
 export function ListingsNavShell({ children }: { children: ReactNode }): ReactNode {
   const [isPending, startTransition] = useTransition();
   const [pendingLabel, setPendingLabel] = useState("Loading homes…");
+  const isDetailPending = pendingLabel === "Loading this home…";
 
   const navigateWithPending = useCallback(
     (href: string, push: (href: string, opts?: { scroll?: boolean }) => void) => {
@@ -67,7 +68,7 @@ export function ListingsNavShell({ children }: { children: ReactNode }): ReactNo
 
   return (
     <ListingsNavContext.Provider value={value}>
-      {isPending ? (
+      {isPending && !isDetailPending ? (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 backdrop-blur-[2px]"
           aria-busy="true"
@@ -77,6 +78,16 @@ export function ListingsNavShell({ children }: { children: ReactNode }): ReactNo
             <ListingsSpinner />
             <p className="text-sm font-medium text-foreground">{pendingLabel}</p>
           </div>
+        </div>
+      ) : null}
+      {isPending && isDetailPending ? (
+        <div
+          className="pointer-events-none fixed left-0 right-0 top-0 z-[100] h-0.5 overflow-hidden bg-muted"
+          aria-busy="true"
+          aria-live="polite"
+          aria-label={pendingLabel}
+        >
+          <div className="h-full w-1/3 animate-[pulse_0.9s_ease-in-out_infinite] bg-foreground/50" />
         </div>
       ) : null}
       {children}
