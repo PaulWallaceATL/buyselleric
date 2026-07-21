@@ -792,6 +792,7 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
 
   let merged = mergeMlsListingRows(collected);
   if (merged && isDetailReady(merged)) {
+    merged = (await ensureListingFirmFromRets(id, merged)) ?? merged;
     void persistMlsListingCache(merged);
     scheduleBackgroundMlsEnrich(id, merged);
     return merged;
@@ -807,6 +808,7 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
       collected.push(sparkRow);
       merged = mergeMlsListingRows(collected);
       if (merged && isDetailReady(merged)) {
+        merged = (await ensureListingFirmFromRets(id, merged)) ?? merged;
         void persistMlsListingCache(merged);
         scheduleBackgroundMlsEnrich(id, merged);
         return merged;
@@ -838,32 +840,12 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
     }
   }
 
-  if (merged && (isWarmMlsCache(merged) || hasMlsAttribution(merged) || isUsableMlsCache(merged))) {
-    void persistMlsListingCache(merged);
+  if (merged) {
+    merged = (await ensureListingFirmFromRets(id, merged)) ?? merged;
   }
 
-  // Bridge IDX often blanks agent/broker; ConnectMLS RETS is the compliance source for firm name.
-  if (merged && (!hasListingFirmName(merged) || attributionNeedsRetsResolve(merged))) {
-    if (isRetsConfigured()) {
-      const withRets = await applyRetsAttribution(id, merged);
-      if (withRets) {
-        merged = withRets;
-        void persistMlsListingCache(merged);
-      }
-    } else {
-      merged = {
-        ...merged,
-        raw_data: {
-          ...merged.raw_data,
-          _retsAttribution: {
-            ok: false,
-            reason: "rets_not_configured",
-            at: new Date().toISOString(),
-          },
-        },
-      };
-      void persistMlsListingCache(merged);
-    }
+  if (merged && (isWarmMlsCache(merged) || hasMlsAttribution(merged) || isUsableMlsCache(merged))) {
+    void persistMlsListingCache(merged);
   }
 
   if (merged && isDetailReady(merged)) {
@@ -871,6 +853,29 @@ export const getMlsListingById = cache(async (mlsId: string): Promise<MlsListing
   }
   return merged;
 });
+
+/** Request-path RETS firm resolution when Bridge/Spark leave listing_office blank or coded. */
+async function ensureListingFirmFromRets(
+  id: string,
+  row: MlsListingRow,
+): Promise<MlsListingRow> {
+  if (hasListingFirmName(row) && !attributionNeedsRetsResolve(row)) return row;
+  if (isRetsConfigured()) {
+    const withRets = await applyRetsAttribution(id, row);
+    return withRets ?? row;
+  }
+  return {
+    ...row,
+    raw_data: {
+      ...row.raw_data,
+      _retsAttribution: {
+        ok: false,
+        reason: "rets_not_configured",
+        at: new Date().toISOString(),
+      },
+    },
+  };
+}
 
 /** True when we lack usable agent/broker display names (empty or MLS user/office codes). */
 function attributionNeedsRetsResolve(row: MlsListingRow): boolean {
