@@ -32,22 +32,43 @@ export function upgradeMlsPhotoUrlForDetail(src: string): string {
       h.endsWith(".connectmls.com") ||
       h.endsWith(".cdn-connectmls.com") ||
       h.includes("connectmls");
-    if (!isConnectMls) return raw;
+    const isBridgeCdn =
+      h.endsWith(".cloudfront.net") ||
+      h.endsWith(".bridgedataoutput.com") ||
+      h.endsWith(".amazonaws.com");
 
-    const DETAIL_WIDTH = 2400;
-    const existing = u.searchParams.get("width");
-    if (existing != null) {
-      const n = Number.parseInt(existing, 10);
-      if (Number.isFinite(n) && n > 0 && n < DETAIL_WIDTH) {
-        u.searchParams.set("width", String(DETAIL_WIDTH));
-        return u.toString();
+    const DETAIL_WIDTH = 3200;
+
+    if (isConnectMls) {
+      const existing = u.searchParams.get("width");
+      if (existing != null) {
+        const n = Number.parseInt(existing, 10);
+        if (Number.isFinite(n) && n > 0 && n < DETAIL_WIDTH) {
+          u.searchParams.set("width", String(DETAIL_WIDTH));
+          return u.toString();
+        }
+        return raw;
       }
-      return raw;
+      // Some ConnectMLS variants only expose a default midsize without width —
+      // requesting an explicit large width usually returns a sharper asset.
+      u.searchParams.set("width", String(DETAIL_WIDTH));
+      return u.toString();
     }
-    // Some ConnectMLS variants only expose a default midsize without width —
-    // requesting an explicit large width usually returns a sharper asset.
-    u.searchParams.set("width", String(DETAIL_WIDTH));
-    return u.toString();
+
+    if (isBridgeCdn) {
+      // Bridge / Media CDN sometimes ships soft sizes via w / width / maxwidth.
+      for (const key of ["width", "w", "maxwidth", "MaxWidth"]) {
+        const existing = u.searchParams.get(key);
+        if (existing == null) continue;
+        const n = Number.parseInt(existing, 10);
+        if (Number.isFinite(n) && n > 0 && n < DETAIL_WIDTH) {
+          u.searchParams.set(key, String(DETAIL_WIDTH));
+          return u.toString();
+        }
+      }
+    }
+
+    return raw;
   } catch {
     return raw;
   }

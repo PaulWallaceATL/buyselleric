@@ -14,16 +14,11 @@ import {
   mlsAttributionLinks,
 } from "@/lib/mls-attribution";
 import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
-import { siteContainer } from "@/lib/ui";
+import { siteContainer, listingHeroTopPadding } from "@/lib/ui";
 import type { Metadata } from "next";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export const revalidate = 60;
-
-/** Clear fixed header; gallery sits flush under it as the visual hero. */
-const listingPageTopPad = {
-  paddingTop: "max(clamp(5.5rem, 4rem + 4vmin, 8rem), calc(env(safe-area-inset-top, 0px) + 4.5rem))",
-} satisfies CSSProperties;
 
 type Props = Readonly<{ params: Promise<{ id: string }> }>;
 
@@ -83,7 +78,7 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
     <main
       id="main-content"
       className="relative z-10 w-full flex-1 bg-background pb-24 sm:pb-28"
-      style={listingPageTopPad}
+      style={listingHeroTopPadding}
     >
       <script
         type="application/ld+json"

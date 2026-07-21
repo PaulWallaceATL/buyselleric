@@ -69,7 +69,7 @@ export function ListingGallery({ urls, variant = "default" }: ListingGalleryProp
   }
 
   const navBtn =
-    "absolute top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/40 bg-white/80 text-foreground shadow-md backdrop-blur-sm transition-[background,transform] hover:bg-white active:scale-95 sm:size-12";
+    "absolute top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white text-neutral-900 shadow-lg ring-1 ring-black/15 transition-[background,transform,box-shadow] hover:bg-white hover:shadow-xl active:scale-95 sm:size-12 md:size-14";
 
   return (
     <div className={fullBleed ? "w-full space-y-2 sm:space-y-3" : "space-y-4"}>
@@ -89,7 +89,7 @@ export function ListingGallery({ urls, variant = "default" }: ListingGalleryProp
           sizes="100vw"
           className="object-cover"
           priority
-          quality={90}
+          quality={95}
           unoptimized={listingImagePreferUnoptimized(main!)}
           onError={() => markFailed(main!)}
         />
@@ -112,9 +112,13 @@ export function ListingGallery({ urls, variant = "default" }: ListingGalleryProp
                 }
               }}
               aria-label="Previous photo"
-              className={`${navBtn} left-2 sm:left-5`}
+              className={`${navBtn} left-2 sm:left-4 md:left-6`}
             >
-              <ChevronLeft className="size-6 sm:size-7" strokeWidth={2} aria-hidden />
+              <ChevronLeft
+                className="size-5 text-neutral-900 sm:size-6 md:size-7"
+                strokeWidth={2.5}
+                aria-hidden
+              />
             </button>
             <button
               type="button"
@@ -133,11 +137,15 @@ export function ListingGallery({ urls, variant = "default" }: ListingGalleryProp
                 }
               }}
               aria-label="Next photo"
-              className={`${navBtn} right-2 sm:right-5`}
+              className={`${navBtn} right-2 sm:right-4 md:right-6`}
             >
-              <ChevronRight className="size-6 sm:size-7" strokeWidth={2} aria-hidden />
+              <ChevronRight
+                className="size-5 text-neutral-900 sm:size-6 md:size-7"
+                strokeWidth={2.5}
+                aria-hidden
+              />
             </button>
-            <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-background/70 px-3 py-1 text-xs font-medium text-foreground backdrop-blur-sm sm:bottom-5 sm:text-sm">
+            <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-5 sm:px-3.5 sm:text-sm">
               {safeIndex + 1} / {n}
             </div>
           </>

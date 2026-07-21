@@ -27,6 +27,15 @@ export const innerPageMainTopPadding = {
   paddingTop: "max(clamp(15rem, 8rem + 14vmin, 28rem), calc(env(safe-area-inset-top, 0px) + 13rem))",
 } satisfies CSSProperties;
 
+/**
+ * Listing detail pages with a full-bleed photo hero under the fixed header.
+ * Clears logo + Search pills with a visible gap above the gallery.
+ */
+export const listingHeroTopPadding = {
+  paddingTop:
+    "max(clamp(9rem, 7.25rem + 8vmin, 12rem), calc(env(safe-area-inset-top, 0px) + 8.75rem))",
+} satisfies CSSProperties;
+
 /** Muted body under titles */
 export const lead =
   "max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg";

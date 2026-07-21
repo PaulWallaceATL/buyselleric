@@ -7,16 +7,12 @@ import { formatPriceUsd } from "@/lib/format";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getPublishedListingBySlug } from "@/lib/listings-queries";
 import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
-import { siteContainer } from "@/lib/ui";
+import { siteContainer, listingHeroTopPadding } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export const revalidate = 60;
-
-const listingPageTopPad = {
-  paddingTop: "max(clamp(5.5rem, 4rem + 4vmin, 8rem), calc(env(safe-area-inset-top, 0px) + 4.5rem))",
-} satisfies CSSProperties;
 
 type Props = Readonly<{
   params: Promise<{ slug: string }>;
@@ -66,7 +62,7 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
     <main
       id="main-content"
       className="relative z-10 w-full flex-1 bg-background pb-24 sm:pb-28"
-      style={listingPageTopPad}
+      style={listingHeroTopPadding}
     >
       <div className="w-full">
         <ListingGallery urls={listing.image_urls} variant="fullBleed" />
