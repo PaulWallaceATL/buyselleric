@@ -364,11 +364,9 @@ function orderByClause(sort: ListingFilters["sort"]): string {
 }
 
 function gridSelectForFilters(filters: ListingFilters): string {
-  if (filters.includeRemarksForMatch) {
-    return sanitizeBridgePropertySelect(
-      `${SELECT_GRID},PublicRemarks,ArchitecturalStyle,InteriorFeatures,ExteriorFeatures,PoolPrivateYN,GarageSpaces`,
-    );
-  }
+  // Remarks / amenity columns often 400 on gamls2 IDX grid $select.
+  // Dream ranking loads copy from Supabase instead — keep grid lean.
+  void filters.includeRemarksForMatch;
   return sanitizeBridgePropertySelect(SELECT_GRID);
 }
 

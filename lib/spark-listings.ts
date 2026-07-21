@@ -207,11 +207,10 @@ const SELECT_GRID = [
 const SPARK_EXPAND = "Media";
 
 /** Helper: returns the standard $select + $expand pair for any Spark Property query. */
-function sparkSelectExpand(filters?: ListingFilters): { $select: string; $expand: string } {
-  const select = filters?.includeRemarksForMatch
-    ? `${SELECT_GRID},PublicRemarks,ArchitecturalStyle,InteriorFeatures,ExteriorFeatures,PoolPrivateYN,GarageSpaces`
-    : SELECT_GRID;
-  return { $select: select, $expand: SPARK_EXPAND };
+function sparkSelectExpand(_filters?: ListingFilters): { $select: string; $expand: string } {
+  // Keep grid lean — remark/amenity columns on $select have caused 400s on some feeds.
+  // Dream ranking uses Supabase descriptions instead.
+  return { $select: SELECT_GRID, $expand: SPARK_EXPAND };
 }
 
 const SELECT_DETAIL = `${SELECT_GRID},PublicRemarks,SupplementalPublicRemarks,PrivateRemarks,InternetRemarks`;

@@ -532,9 +532,8 @@ function hardFiltersOnly(filters: ListingFilters): ListingFilters {
   if (filters.propertyType) out.propertyType = filters.propertyType;
   if (filters.sort) out.sort = filters.sort;
   if (filters.mapPolygon) out.mapPolygon = filters.mapPolygon;
-  if (filters.softPrefs && filters.softPrefs.length > 0) {
-    out.includeRemarksForMatch = true;
-  }
+  // Do NOT set includeRemarksForMatch here — Bridge/Spark IDX reject those
+  // fields on grid $select (400). Ranking uses Supabase descriptions instead.
   if (filters.hasPool) out.hasPool = true;
   if (filters.minGarageSpaces != null) out.minGarageSpaces = filters.minGarageSpaces;
   if (filters.hasFireplace) out.hasFireplace = true;
@@ -669,11 +668,26 @@ async function searchWithDreamKeywordRank(
     candidates = dedupeUnifiedListings([...bridgeRes.rows, ...sparkRes.rows]);
   } else {
     // Supabase-only inventory — reuse the non-dream path with a wide page.
-    const wide = await searchWithFilters(
+    const wide = await searchWithFiltersCore(
       { ...hard, softPrefs: undefined, page: 1, perPage: DREAM_CANDIDATE_CAP },
       options,
     );
     candidates = wide.listings;
+  }
+
+  // If live feeds failed (e.g. bad $select) or returned nothing, fall back to
+  // the normal paginated search path so soft-pref dream queries still show homes.
+  if (candidates.length === 0 && (bridgeOn || sparkOn)) {
+    const fallback = await searchWithFiltersCore(
+      {
+        ...stripAmenitiesFromFilters({ ...filters, softPrefs: undefined }),
+        page: 1,
+        perPage: DREAM_CANDIDATE_CAP,
+        includeRemarksForMatch: false,
+      },
+      options,
+    );
+    candidates = fallback.listings;
   }
 
   candidates = applyZipCentroidPinCoords(candidates, undefined);
