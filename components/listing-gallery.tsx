@@ -3,9 +3,20 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
-import { filterDisplayImageUrls, listingImagePreferUnoptimized, upgradeMlsPhotoUrlsForDetail } from "@/lib/listing-urls";
+import {
+  filterDisplayImageUrls,
+  listingImagePreferUnoptimized,
+  upgradeMlsPhotoUrlsForDetail,
+} from "@/lib/listing-urls";
 
-export function ListingGallery({ urls }: { urls: string[] }) {
+type ListingGalleryProps = {
+  urls: string[];
+  /** Edge-to-edge hero + thumbnail strip (property detail). */
+  variant?: "default" | "fullBleed";
+};
+
+export function ListingGallery({ urls, variant = "default" }: ListingGalleryProps) {
+  const fullBleed = variant === "fullBleed";
   const clean = useMemo(
     () => upgradeMlsPhotoUrlsForDetail(filterDisplayImageUrls(urls)),
     [urls],
@@ -45,16 +56,29 @@ export function ListingGallery({ urls }: { urls: string[] }) {
 
   if (n === 0) {
     return (
-      <div className="flex aspect-4/3 w-full items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 p-6 text-center text-base text-muted-foreground sm:rounded-3xl sm:text-lg">
+      <div
+        className={
+          fullBleed
+            ? "flex min-h-[40vh] w-full items-center justify-center border-b border-border bg-muted/30 p-6 text-center text-base text-muted-foreground sm:min-h-[50vh] sm:text-lg"
+            : "flex aspect-4/3 w-full items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 p-6 text-center text-base text-muted-foreground sm:rounded-3xl sm:text-lg"
+        }
+      >
         Photos coming soon
       </div>
     );
   }
 
+  const navBtn =
+    "absolute top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/40 bg-white/80 text-foreground shadow-md backdrop-blur-sm transition-[background,transform] hover:bg-white active:scale-95 sm:size-12";
+
   return (
-    <div className="space-y-4">
+    <div className={fullBleed ? "w-full space-y-2 sm:space-y-3" : "space-y-4"}>
       <div
-        className="relative aspect-4/3 w-full overflow-hidden rounded-2xl bg-muted shadow-md sm:aspect-21/9 sm:max-h-[min(70vh,720px)] sm:min-h-[280px] sm:rounded-3xl lg:min-h-[320px]"
+        className={
+          fullBleed
+            ? "relative aspect-[16/10] w-full overflow-hidden bg-muted sm:aspect-[21/9] sm:min-h-[min(58vh,640px)] sm:max-h-[min(72vh,780px)]"
+            : "relative aspect-4/3 w-full overflow-hidden rounded-2xl bg-muted shadow-md sm:aspect-21/9 sm:max-h-[min(70vh,720px)] sm:min-h-[280px] sm:rounded-3xl lg:min-h-[320px]"
+        }
         aria-label={multi ? "Photo gallery" : undefined}
       >
         <Image
@@ -62,7 +86,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
           src={main!}
           alt=""
           fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 90vw, 1100px"
+          sizes="100vw"
           className="object-cover"
           priority
           quality={90}
@@ -88,7 +112,7 @@ export function ListingGallery({ urls }: { urls: string[] }) {
                 }
               }}
               aria-label="Previous photo"
-              className="absolute left-2 top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 bg-background/85 text-foreground shadow-md backdrop-blur-sm transition-[background,transform] hover:bg-background active:scale-95 sm:left-4 sm:size-12"
+              className={`${navBtn} left-2 sm:left-5`}
             >
               <ChevronLeft className="size-6 sm:size-7" strokeWidth={2} aria-hidden />
             </button>
@@ -109,35 +133,50 @@ export function ListingGallery({ urls }: { urls: string[] }) {
                 }
               }}
               aria-label="Next photo"
-              className="absolute right-2 top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 bg-background/85 text-foreground shadow-md backdrop-blur-sm transition-[background,transform] hover:bg-background active:scale-95 sm:right-4 sm:size-12"
+              className={`${navBtn} right-2 sm:right-5`}
             >
               <ChevronRight className="size-6 sm:size-7" strokeWidth={2} aria-hidden />
             </button>
-            <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-background/70 px-3 py-1 text-xs font-medium text-foreground backdrop-blur-sm sm:bottom-4 sm:text-sm">
+            <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-background/70 px-3 py-1 text-xs font-medium text-foreground backdrop-blur-sm sm:bottom-5 sm:text-sm">
               {safeIndex + 1} / {n}
             </div>
           </>
         ) : null}
       </div>
       {n > 1 ? (
-        <div className="flex gap-3 overflow-x-auto pb-2 sm:gap-4">
+        <div
+          className={
+            fullBleed
+              ? "flex gap-2 overflow-x-auto px-0 pb-1 sm:gap-2.5"
+              : "flex gap-3 overflow-x-auto pb-2 sm:gap-4"
+          }
+        >
           {visible.map((url, i) => (
             <button
               key={`${url}-${i}`}
               type="button"
               onClick={() => setActive(i)}
               aria-label={`Show photo ${i + 1} of ${n}`}
-              className={`relative min-h-[52px] min-w-[4.5rem] shrink-0 overflow-hidden rounded-xl border-2 transition-all sm:min-h-20 sm:min-w-[7.5rem] ${
-                i === safeIndex
-                  ? "border-ring ring-2 ring-ring/30"
-                  : "border-border/60 opacity-90 hover:opacity-100"
-              }`}
+              aria-current={i === safeIndex ? "true" : undefined}
+              className={
+                fullBleed
+                  ? `relative aspect-[4/3] h-[4.25rem] shrink-0 overflow-hidden sm:h-24 ${
+                      i === safeIndex
+                        ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                        : "opacity-80 hover:opacity-100"
+                    }`
+                  : `relative min-h-[52px] min-w-[4.5rem] shrink-0 overflow-hidden rounded-xl border-2 transition-all sm:min-h-20 sm:min-w-[7.5rem] ${
+                      i === safeIndex
+                        ? "border-ring ring-2 ring-ring/30"
+                        : "border-border/60 opacity-90 hover:opacity-100"
+                    }`
+              }
             >
               <Image
                 src={url}
                 alt=""
                 fill
-                sizes="120px"
+                sizes="160px"
                 className="object-cover"
                 loading="lazy"
                 unoptimized={listingImagePreferUnoptimized(url)}

@@ -14,11 +14,16 @@ import {
   mlsAttributionLinks,
 } from "@/lib/mls-attribution";
 import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
-import { innerPageMainTopPadding, pageMain, siteContainer } from "@/lib/ui";
+import { siteContainer } from "@/lib/ui";
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export const revalidate = 60;
+
+/** Clear fixed header; gallery sits flush under it as the visual hero. */
+const listingPageTopPad = {
+  paddingTop: "max(clamp(5.5rem, 4rem + 4vmin, 8rem), calc(env(safe-area-inset-top, 0px) + 4.5rem))",
+} satisfies CSSProperties;
 
 type Props = Readonly<{ params: Promise<{ id: string }> }>;
 
@@ -75,12 +80,21 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
   }
 
   return (
-    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
+    <main
+      id="main-content"
+      className="relative z-10 w-full flex-1 bg-background pb-24 sm:pb-28"
+      style={listingPageTopPad}
+    >
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <div className={`${siteContainer} max-w-4xl`}>
+
+      <div className="w-full">
+        <ListingGallery urls={galleryUrls} variant="fullBleed" />
+      </div>
+
+      <div className={`${siteContainer} max-w-5xl pt-8 sm:pt-10`}>
         <Link
           href="/listings"
           className="relative z-20 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
@@ -88,64 +102,63 @@ export default async function MlsListingPage({ params }: Props): Promise<ReactNo
           ← Back to listings
         </Link>
 
-        <div className="mt-6 sm:mt-8">
-          <span className="rounded-full bg-ring/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white">
-            MLS #{listing.mls_id}
+        <div className="mt-8 sm:mt-10">
+          <span className="inline-block rounded-sm bg-ring/90 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-white">
+            For sale
           </span>
-          <h1 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            {title}
+          <h1 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-foreground uppercase sm:text-4xl lg:text-[2.75rem] lg:leading-tight">
+            {listing.address_line || title}
           </h1>
-          <p className="mt-2 text-lg text-muted-foreground">{location}</p>
-          <p className="mt-5 text-3xl font-bold tabular-nums text-foreground sm:text-4xl">
-            {formatPriceUsd(listing.price_cents)}
+          <p className="mt-2 text-sm uppercase tracking-wide text-muted-foreground sm:text-base">
+            {location}
           </p>
-        </div>
-
-        {galleryUrls.length > 0 && (
-          <div className="mt-8">
-            <ListingGallery urls={galleryUrls} />
-          </div>
-        )}
-
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-muted/20 p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{listing.bedrooms}</p>
-            <p className="mt-1 text-sm text-muted-foreground">Bedrooms</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-muted/20 p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{listing.bathrooms}</p>
-            <p className="mt-1 text-sm text-muted-foreground">Bathrooms</p>
-          </div>
-          {listing.square_feet && (
-            <div className="rounded-2xl border border-border bg-muted/20 p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{listing.square_feet.toLocaleString()}</p>
-              <p className="mt-1 text-sm text-muted-foreground">Sq ft</p>
-            </div>
-          )}
-        </div>
-
-        {listing.description && (
-          <div className="mt-10">
-            <h2 className="text-xl font-semibold text-foreground">Description</h2>
-            <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-muted-foreground">
-              {listing.description}
+          <div className="mt-6 border-t border-border pt-6">
+            <p className="text-3xl font-bold tabular-nums text-foreground sm:text-4xl">
+              {formatPriceUsd(listing.price_cents)}
             </p>
           </div>
-        )}
-
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {listing.property_type && (
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Property type</p>
-              <p className="mt-1 text-foreground">{listing.property_type}</p>
-            </div>
-          )}
         </div>
 
-        <div className="mt-10 rounded-2xl border border-border bg-muted/20 p-6 sm:rounded-3xl sm:p-8">
+        <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-14">
+          <div className="lg:col-span-7">
+            {listing.description ? (
+              <p className="whitespace-pre-line text-base leading-relaxed text-muted-foreground sm:text-lg">
+                {listing.description}
+              </p>
+            ) : null}
+            {listing.property_type ? (
+              <p className="mt-8 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Property type</span>
+                <span className="mt-1 block">{listing.property_type}</span>
+              </p>
+            ) : null}
+          </div>
+
+          <aside className="space-y-5 lg:col-span-5">
+            <ul className="space-y-4 text-sm font-medium uppercase tracking-wide text-foreground sm:text-base">
+              <li className="flex items-baseline justify-between gap-4 border-b border-border/70 pb-3">
+                <span className="text-muted-foreground">Beds</span>
+                <span className="tabular-nums">{listing.bedrooms}</span>
+              </li>
+              <li className="flex items-baseline justify-between gap-4 border-b border-border/70 pb-3">
+                <span className="text-muted-foreground">Baths</span>
+                <span className="tabular-nums">{listing.bathrooms}</span>
+              </li>
+              {listing.square_feet ? (
+                <li className="flex items-baseline justify-between gap-4 border-b border-border/70 pb-3">
+                  <span className="text-muted-foreground">Living area</span>
+                  <span className="tabular-nums">{listing.square_feet.toLocaleString()} sq ft</span>
+                </li>
+              ) : null}
+            </ul>
+          </aside>
+        </div>
+
+        <div className="mt-12 rounded-2xl border border-border bg-muted/20 p-6 sm:rounded-3xl sm:p-8">
           <h2 className="text-xl font-semibold text-foreground">Interested in this home?</h2>
           <p className="mt-2 text-base text-muted-foreground">
-            Contact {siteConfig.agentName} for a private showing or more information about this property.
+            Contact {siteConfig.agentName} for a private showing or more information about this
+            property.
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <a href={`mailto:${siteConfig.email}?subject=Inquiry about ${title}`} className={ctaPrimary}>

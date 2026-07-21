@@ -7,12 +7,16 @@ import { formatPriceUsd } from "@/lib/format";
 import { filterDisplayImageUrls } from "@/lib/listing-urls";
 import { getPublishedListingBySlug } from "@/lib/listings-queries";
 import { stripHtmlLoose, truncateMetaDescription } from "@/lib/seo";
-import { innerPageMainTopPadding, pageMain } from "@/lib/ui";
+import { siteContainer } from "@/lib/ui";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export const revalidate = 60;
+
+const listingPageTopPad = {
+  paddingTop: "max(clamp(5.5rem, 4rem + 4vmin, 8rem), calc(env(safe-area-inset-top, 0px) + 4.5rem))",
+} satisfies CSSProperties;
 
 type Props = Readonly<{
   params: Promise<{ slug: string }>;
@@ -59,8 +63,16 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
         : "For sale";
 
   return (
-    <main id="main-content" className={pageMain} style={innerPageMainTopPadding}>
-      <div className="mx-auto w-full max-w-6xl px-6 sm:px-12 lg:px-16">
+    <main
+      id="main-content"
+      className="relative z-10 w-full flex-1 bg-background pb-24 sm:pb-28"
+      style={listingPageTopPad}
+    >
+      <div className="w-full">
+        <ListingGallery urls={listing.image_urls} variant="fullBleed" />
+      </div>
+
+      <div className={`${siteContainer} max-w-5xl pt-8 sm:pt-10`}>
         <nav className="text-sm text-muted-foreground sm:text-base" aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
             <li>
@@ -85,7 +97,7 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
           </ol>
         </nav>
 
-        <div className="mt-8">
+        <div className="mt-8 sm:mt-10">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:text-sm">
             {statusLabel}
           </p>
@@ -95,17 +107,15 @@ export default async function ListingDetailPage({ params }: Props): Promise<Reac
           {location ? (
             <p className="mt-3 text-base leading-relaxed text-muted-foreground sm:text-lg">{location}</p>
           ) : null}
-          <p className="mt-5 text-3xl font-bold tabular-nums text-foreground sm:text-4xl lg:text-5xl">
-            {formatPriceUsd(listing.price_cents)}
-          </p>
-          <p className="mt-3 text-base text-muted-foreground sm:text-lg">
-            {listing.bedrooms} bed · {listing.bathrooms} bath
-            {listing.square_feet ? ` · ${listing.square_feet.toLocaleString()} sq ft` : ""}
-          </p>
-        </div>
-
-        <div className="mt-8">
-          <ListingGallery urls={listing.image_urls} />
+          <div className="mt-6 border-t border-border pt-6">
+            <p className="text-3xl font-bold tabular-nums text-foreground sm:text-4xl lg:text-5xl">
+              {formatPriceUsd(listing.price_cents)}
+            </p>
+            <p className="mt-3 text-base text-muted-foreground sm:text-lg">
+              {listing.bedrooms} bed · {listing.bathrooms} bath
+              {listing.square_feet ? ` · ${listing.square_feet.toLocaleString()} sq ft` : ""}
+            </p>
+          </div>
         </div>
 
         <div className="mt-8 grid gap-10 sm:mt-10 lg:grid-cols-12 lg:gap-14 lg:gap-y-12">
